@@ -34,6 +34,7 @@ export function Workspace() {
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
   const [originalOpen, setOriginalOpen] = useState(false);
+  const [selectedVersionPath, setSelectedVersionPath] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const promptRef = useRef<HTMLTextAreaElement>(null);
   async function load() {
@@ -59,18 +60,19 @@ export function Workspace() {
     const timer = window.setInterval(() => void load(), 2400);
     return () => window.clearInterval(timer);
   }, [project?.assets?.map((asset) => asset.status).join("|")]);
-  const generatingAsset = project?.assets?.find(
-    (item) => item.id === assetId && item.status === "generating",
+  const pendingAsset = project?.assets?.find(
+    (item) => item.id === assetId && isPending(item.status),
   );
   useEffect(() => {
-    if (!generatingAsset?.generation_started_at) return;
+    if (!pendingAsset?.generation_started_at) return;
     const updateNow = () => setNow(Date.now());
     updateNow();
     const timer = window.setInterval(updateNow, 1000);
     return () => window.clearInterval(timer);
-  }, [generatingAsset?.generation_started_at]);
+  }, [pendingAsset?.generation_started_at]);
   useEffect(() => {
     setOriginalOpen(false);
+    setSelectedVersionPath(null);
   }, [assetId]);
   useEffect(() => {
     if (!originalOpen) return;
@@ -91,8 +93,10 @@ export function Workspace() {
     );
   const currentProject = project;
   const asset = currentProject.assets?.find((item) => item.id === assetId);
+  const versions = asset?.versions ?? [];
+  const displayedPath = selectedVersionPath ?? asset?.file_path ?? null;
   const elapsedSeconds =
-    asset?.status === "generating" && asset.generation_started_at
+    asset && isPending(asset.status) && asset.generation_started_at
       ? Math.max(0, Math.floor(now / 1000 - asset.generation_started_at))
       : null;
   const remainingSeconds =
@@ -112,6 +116,7 @@ export function Workspace() {
   }
   async function generate(one = true) {
     try {
+      if (one) setSelectedVersionPath(null);
       if (one && asset) await client.generateAsset(asset.id);
       else await client.generatePack(currentProject.id);
       await load();
@@ -217,7 +222,7 @@ export function Workspace() {
                   <button
                     className="icon-button original-preview-button"
                     type="button"
-                    disabled={!asset.file_path}
+                    disabled={!displayedPath}
                     onClick={() => setOriginalOpen(true)}
                     aria-label="查看原图"
                     title="查看原图"
@@ -227,13 +232,13 @@ export function Workspace() {
                 </div>
               </header>
               <div
-                className={`artboard ${asset.file_path ? "with-image" : ""}`}
+                className={`artboard ${displayedPath ? "with-image" : ""}`}
               >
-                {asset.file_path ? (
-                  <img src={fileUrl(asset.file_path)} alt={asset.title} />
+                {displayedPath ? (
+                  <img src={fileUrl(displayedPath)} alt={asset.title} />
                 ) : (
                   <div className="artboard-empty">
-                    {asset.status === "generating" &&
+                    {isPending(asset.status) &&
                     elapsedSeconds !== null &&
                     remainingSeconds !== null ? (
                       <>
@@ -290,12 +295,24 @@ export function Workspace() {
               </div>
               <div className="variant-strip" aria-label="画面版本">
                 <span>版本</span>
-                {asset.file_path ? (
+                {versions.length ? (
                   <>
-                    <span className="variant active">
-                    <img src={fileUrl(asset.file_path)} alt="当前版本" />
-                    <b>当前</b>
-                    </span>
+                    {versions.map((version, index) => {
+                      const active = version.file_path === displayedPath;
+                      const current = version.file_path === asset.file_path;
+                      return (
+                        <button
+                          className={`variant ${active ? "active" : ""}`}
+                          type="button"
+                          onClick={() => setSelectedVersionPath(version.file_path)}
+                          key={version.id}
+                          aria-label={`查看${current ? "当前" : `历史 ${versions.length - index}`}版本`}
+                        >
+                          <img src={fileUrl(version.file_path)} alt="" />
+                          <b>{current ? "当前" : `v${versions.length - index}`}</b>
+                        </button>
+                      );
+                    })}
                     <button
                       className="add-variant"
                       type="button"
@@ -381,7 +398,7 @@ export function Workspace() {
           </>
         ) : null}
       </div>
-      {originalOpen && asset?.file_path && (
+      {originalOpen && asset && displayedPath && (
         <div
           className="original-preview-backdrop"
           role="presentation"
@@ -394,7 +411,7 @@ export function Workspace() {
             aria-label={`${asset.title} 原图预览`}
             onClick={(event) => event.stopPropagation()}
           >
-            <img src={fileUrl(asset.file_path)} alt={asset.title} />
+            <img src={fileUrl(displayedPath)} alt={asset.title} />
             <button
               className="icon-button original-preview-close"
               type="button"

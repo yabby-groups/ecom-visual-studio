@@ -65,7 +65,7 @@ def test_project_pack_and_custom_template_lifecycle():
     assert client.get(f"/api/projects/{project_id}").json()["assets"][0]["prompt"] == "Custom prompt"
 
 
-def test_generation_started_at_is_persisted_and_reset_when_requeued(monkeypatch):
+def test_generation_started_at_is_persisted_from_enqueue_to_completion(monkeypatch):
     client = authenticated_client()
     project_id = client.post("/api/projects", json={
         "name": "Countdown campaign",
@@ -96,9 +96,35 @@ def test_generation_started_at_is_persisted_and_reset_when_requeued(monkeypatch)
     generated = client.get(f"/api/projects/{project_id}").json()["assets"][0]
     assert generated["status"] == "ready"
     assert generated["generation_started_at"] == 1_700_000_000
+    assert len(generated["versions"]) == 1
+    assert generated["versions"][0]["file_path"] == generated["file_path"]
 
     monkeypatch.setattr(main, "generate_asset", lambda _: None)
     assert client.post(f"/api/assets/{asset_id}/generate").status_code == 200
     requeued = client.get(f"/api/projects/{project_id}").json()["assets"][0]
     assert requeued["status"] == "queued"
-    assert requeued["generation_started_at"] is None
+    assert requeued["generation_started_at"] == 1_700_000_000
+
+
+def test_existing_generated_images_are_backfilled_as_versions():
+    client = authenticated_client()
+    project_id = client.post("/api/projects", json={
+        "name": "Version campaign",
+        "product": "Version product",
+        "description": "",
+        "benefits": "",
+        "color": "#A16207",
+        "reference": "",
+    }).json()["id"]
+    assert client.post(f"/api/projects/{project_id}/pack", json={"kind": "custom", "scene_template_ids": []}).status_code == 200
+    asset_id = client.get(f"/api/projects/{project_id}").json()["assets"][0]["id"]
+    directory = main.GENERATED / project_id
+    directory.mkdir(parents=True, exist_ok=True)
+    filename = f"{asset_id}-legacy.png"
+    (directory / filename).write_bytes(b"legacy")
+
+    init_db()
+
+    versions = client.get(f"/api/projects/{project_id}").json()["assets"][0]["versions"]
+    assert len(versions) == 1
+    assert versions[0]["file_path"] == f"generated/{project_id}/{filename}"

@@ -118,14 +118,33 @@ def init_db() -> None:
       create table if not exists models (user_id text not null, id text not null, name text not null, primary key(user_id, id));
       create table if not exists projects (id text primary key, user_id text not null, name text not null, product text not null, description text, benefits text, color text, reference text, created_at integer not null);
       create table if not exists assets (id text primary key, project_id text not null, title text not null, template text not null, ratio text not null, prompt text not null, status text not null, file_path text, generation_started_at integer, created_at integer not null);
+      create table if not exists asset_versions (id text primary key, asset_id text not null, file_path text not null, created_at integer not null, unique(asset_id, file_path));
       create table if not exists custom_templates (id text primary key, user_id text not null, name text not null, ratio text not null, direction text not null, created_at integer not null);
     """)
     asset_columns = {row["name"] for row in connection.execute("pragma table_info(assets)")}
     if "generation_started_at" not in asset_columns:
         connection.execute("alter table assets add column generation_started_at integer")
+    backfill_asset_versions(connection)
     connection.execute("update assets set status='failed: 服务在生成期间重启，请重新发起任务' where status in ('queued', 'prompting', 'generating')")
     connection.commit()
     connection.close()
+
+
+def backfill_asset_versions(connection: sqlite3.Connection) -> None:
+    for asset in connection.execute("select id, project_id, file_path, created_at from assets"):
+        if asset["file_path"]:
+            connection.execute(
+                "insert or ignore into asset_versions values(?,?,?,?)",
+                (uuid.uuid4().hex, asset["id"], asset["file_path"], asset["created_at"]),
+            )
+        directory = GENERATED / asset["project_id"]
+        if not directory.exists():
+            continue
+        for image in directory.glob(f"{asset['id']}-*.png"):
+            connection.execute(
+                "insert or ignore into asset_versions values(?,?,?,?)",
+                (uuid.uuid4().hex, asset["id"], str(image.relative_to(DATA)), int(image.stat().st_mtime)),
+            )
 
 
 def password_hash(password: str, salt: Optional[bytes] = None) -> str:
@@ -196,6 +215,8 @@ def project_detail(project_id: str, user_id: str) -> dict[str, Any]:
         raise HTTPException(404, "项目不存在")
     payload = dict(project)
     payload["assets"] = [dict(row) for row in connection.execute("select * from assets where project_id=? order by created_at", (project_id,))]
+    for asset in payload["assets"]:
+        asset["versions"] = [dict(row) for row in connection.execute("select * from asset_versions where asset_id=? order by created_at desc", (asset["id"],))]
     connection.close()
     return payload
 
@@ -276,7 +297,7 @@ def generate_asset(asset_id: str) -> None:
     if not asset:
         connection.close()
         return
-    connection.execute("update assets set status='generating', generation_started_at=? where id=?", (int(time.time()), asset_id))
+    connection.execute("update assets set status='generating', generation_started_at=coalesce(generation_started_at, ?) where id=?", (int(time.time()), asset_id))
     connection.commit()
     try:
         config = user_config(asset["user_id"])
@@ -298,7 +319,9 @@ def generate_asset(asset_id: str) -> None:
                 shutil.copyfileobj(response, target.open("wb"))
         else:
             raise ValueError("图像服务没有返回图片")
-        connection.execute("update assets set status='ready', file_path=? where id=?", (str(target.relative_to(DATA)), asset_id))
+        file_path = str(target.relative_to(DATA))
+        connection.execute("insert into asset_versions values(?,?,?,?)", (uuid.uuid4().hex, asset_id, file_path, int(time.time())))
+        connection.execute("update assets set status='ready', file_path=? where id=?", (file_path, asset_id))
     except Exception as error:
         connection.execute("update assets set status=? where id=?", (f"failed: {str(error)[:180]}", asset_id))
     finally:
@@ -410,7 +433,7 @@ def get_project(project_id: str, session: Optional[str] = Cookie(default=None)) 
 @app.delete("/api/projects/{project_id}")
 def delete_project(project_id: str, session: Optional[str] = Cookie(default=None)) -> dict[str, bool]:
     user = require_user(session); project_detail(project_id, user["id"]); connection = db()
-    connection.execute("delete from assets where project_id=?", (project_id,)); connection.execute("delete from projects where id=? and user_id=?", (project_id, user["id"])); connection.commit(); connection.close(); shutil.rmtree(GENERATED / project_id, ignore_errors=True)
+    connection.execute("delete from asset_versions where asset_id in (select id from assets where project_id=?)", (project_id,)); connection.execute("delete from assets where project_id=?", (project_id,)); connection.execute("delete from projects where id=? and user_id=?", (project_id, user["id"])); connection.commit(); connection.close(); shutil.rmtree(GENERATED / project_id, ignore_errors=True)
     return {"ok": True}
 
 
@@ -419,10 +442,10 @@ def create_pack(project_id: str, body: PackInput, session: Optional[str] = Cooki
     user = require_user(session); project = project_detail(project_id, user["id"]); templates = {item["id"]: item for item in template_list(user["id"])}; assets = built_in_pack(body.kind)
     if body.kind == "amazon":
         assets += [(f"C{i}", templates[item]["name"], item, templates[item]["ratio"], templates[item]["direction"]) for i, item in enumerate(dict.fromkeys(body.scene_template_ids), 1) if item in templates and templates[item]["custom"]]
-    connection = db(); connection.execute("delete from assets where project_id=?", (project_id,))
+    connection = db(); connection.execute("delete from asset_versions where asset_id in (select id from assets where project_id=?)", (project_id,)); connection.execute("delete from assets where project_id=?", (project_id,))
     for code, title, template, ratio, direction in assets:
         connection.execute("insert into assets (id,project_id,title,template,ratio,prompt,status,file_path,created_at) values(?,?,?,?,?,?,?,?,?)", (uuid.uuid4().hex, project_id, f"{code} · {title}", template, ratio, make_prompt(project, title, direction), "draft", None, int(time.time())))
-    connection.commit(); connection.close()
+    connection.commit(); connection.close(); shutil.rmtree(GENERATED / project_id, ignore_errors=True)
     return {"ok": True}
 
 
@@ -452,15 +475,15 @@ def generate_one(asset_id: str, tasks: BackgroundTasks, session: Optional[str] =
     user = require_user(session); connection = db(); owned = connection.execute("select a.id from assets a join projects p on p.id=a.project_id where a.id=? and p.user_id=?", (asset_id, user["id"])).fetchone()
     if not owned:
         connection.close(); raise HTTPException(404, "画面不存在")
-    connection.execute("update assets set status='queued', generation_started_at=null where id=?", (asset_id,)); connection.commit(); connection.close(); tasks.add_task(generate_asset, asset_id)
+    connection.execute("update assets set status='queued', generation_started_at=? where id=?", (int(time.time()), asset_id)); connection.commit(); connection.close(); tasks.add_task(generate_asset, asset_id)
     return {"ok": True}
 
 
 @app.post("/api/projects/{project_id}/generate-pack")
 def generate_all(project_id: str, tasks: BackgroundTasks, session: Optional[str] = Cookie(default=None)) -> dict[str, bool]:
-    user = require_user(session); project_detail(project_id, user["id"]); connection = db(); rows = connection.execute("select id from assets where project_id=? and status!='ready'", (project_id,)).fetchall()
+    user = require_user(session); project_detail(project_id, user["id"]); connection = db(); rows = connection.execute("select id from assets where project_id=? and status!='ready'", (project_id,)).fetchall(); queued_at = int(time.time())
     for row in rows:
-        connection.execute("update assets set status='queued', generation_started_at=null where id=?", (row["id"],)); tasks.add_task(generate_asset, row["id"])
+        connection.execute("update assets set status='queued', generation_started_at=? where id=?", (queued_at, row["id"])); tasks.add_task(generate_asset, row["id"])
     connection.commit(); connection.close(); return {"ok": True}
 
 

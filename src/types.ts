@@ -1,6 +1,12 @@
 export type User = { id: string; username: string };
 export type AssetStatus =
   "draft" | "queued" | "prompting" | "generating" | "ready" | string;
+export type AssetVersion = {
+  id: string;
+  asset_id: string;
+  file_path: string;
+  created_at: number;
+};
 export type Asset = {
   id: string;
   project_id: string;
@@ -11,6 +17,7 @@ export type Asset = {
   status: AssetStatus;
   file_path: string | null;
   generation_started_at: number | null;
+  versions: AssetVersion[];
   created_at: number;
 };
 export type Project = {

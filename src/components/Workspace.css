@@ -251,6 +251,12 @@
   background: rgba(255, 255, 255, 0.1);
   color: #fff;
   font-size: 10px;
+  cursor: pointer;
+}
+.variant:hover,
+.variant.active {
+  border-color: #48d8ba;
+  background: rgba(72, 216, 186, 0.14);
 }
 .variant img {
   width: 28px;
