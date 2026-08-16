@@ -14,7 +14,7 @@ from backend.main import app, db, init_db
 def authenticated_client():
     init_db()
     connection = db()
-    connection.execute("insert or ignore into users values(?,?,?,?)", ("test-user", "test-user", "hash", 1))
+    connection.execute("insert or ignore into users(id,username,password_hash,created_at) values(?,?,?,?)", ("test-user", "test-user", "hash", 1))
     connection.execute("delete from sessions where id='test-session'")
     connection.execute("insert into sessions values(?,?,?)", ("test-session", "test-user", 4102444800))
     connection.commit()
@@ -41,6 +41,42 @@ def png_bytes(width: int, height: int) -> bytes:
 def test_auth_me_without_session():
     with TestClient(app) as client:
         assert client.get("/api/auth/me").json() == {"user": None}
+
+
+def test_login_and_auth_me_return_huabot_profile(monkeypatch):
+    username = "profile-test-user"
+    monkeypatch.setenv("APP_SECRET_KEY", "test-secret")
+    monkeypatch.setattr(
+        main,
+        "huabot_login",
+        lambda *_: (
+            [{"id": "profile-token", "name": "Profile Token", "key": "secret", "masked": "***", "status": 1, "today_cost": "0", "total_cost": "0"}],
+            [{"id": "gpt-image-2", "name": "GPT Image", "alias": "gpt-image-2"}],
+            {"nick_name": "测试昵称", "avatar_url": "https://example.test/avatar.png"},
+        ),
+    )
+    connection = db()
+    connection.execute("delete from users where username=?", (username,))
+    connection.commit()
+    connection.close()
+    with TestClient(app) as client:
+        logged_in = client.post("/api/auth/login", json={"name": username, "password": "secret"})
+        expected = {
+            "id": logged_in.json()["user"]["id"],
+            "username": username,
+            "profile": {"nick_name": "测试昵称", "avatar_url": "https://example.test/avatar.png"},
+        }
+        assert logged_in.status_code == 200
+        assert logged_in.json() == {"user": expected}
+        assert client.get("/api/auth/me").json() == {"user": expected}
+    connection = db()
+    connection.execute("delete from sessions where user_id in (select id from users where username=?)", (username,))
+    connection.execute("delete from settings where user_id in (select id from users where username=?)", (username,))
+    connection.execute("delete from tokens where user_id in (select id from users where username=?)", (username,))
+    connection.execute("delete from models where user_id in (select id from users where username=?)", (username,))
+    connection.execute("delete from users where username=?", (username,))
+    connection.commit()
+    connection.close()
 
 
 def test_settings_reject_a_non_gpt_image_model():
@@ -188,7 +224,7 @@ def test_latest_creation_returns_only_the_users_newest_version():
         )
         connection.execute("delete from assets where project_id in (?,?,?)", project_ids)
         connection.execute("delete from projects where id in (?,?,?)", project_ids)
-        connection.execute("insert or ignore into users values(?,?,?,?)", ("other-user", "other-user", "hash", 1))
+        connection.execute("insert or ignore into users(id,username,password_hash,created_at) values(?,?,?,?)", ("other-user", "other-user", "hash", 1))
         connection.execute("insert into projects values(?,?,?,?,?,?,?,?,?)", ("latest-project", "test-user", "Latest", "Product", "", "", "", "", 1))
         connection.execute("insert into projects values(?,?,?,?,?,?,?,?,?)", ("older-project", "test-user", "Older", "Product", "", "", "", "", 1))
         connection.execute("insert into projects values(?,?,?,?,?,?,?,?,?)", ("other-project", "other-user", "Other", "Product", "", "", "", "", 1))
@@ -415,7 +451,7 @@ def test_settings_use_model_aliases_for_all_huabot_requests(monkeypatch):
         connection.execute("delete from tokens where user_id=?", (user_id,))
         connection.execute("delete from models where user_id=?", (user_id,))
         connection.execute("delete from users where id=?", (user_id,))
-        connection.execute("insert into users values(?,?,?,?)", (user_id, user_id, "hash", 1))
+        connection.execute("insert into users(id,username,password_hash,created_at) values(?,?,?,?)", (user_id, user_id, "hash", 1))
         connection.execute("insert into sessions values(?,?,?)", (session_id, user_id, 4_102_444_800))
         connection.execute(
             "insert into tokens values(?,?,?,?,?,?,?,?)",

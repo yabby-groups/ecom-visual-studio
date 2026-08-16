@@ -2,27 +2,21 @@ import { useState } from "react";
 import {
   FolderOpen,
   LayoutGrid,
-  LogOut,
   Settings,
   Sparkles,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
-import { client } from "../api";
 import { useAppStore } from "../store";
 import { Chat } from "./Chat";
+import { LogoutButton } from "./LogoutButton";
 import { Nav } from "./Nav";
 import "./Shell.css";
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const user = useAppStore((state) => state.user)!;
-  const setUser = useAppStore((state) => state.setUser);
   const navigate = useNavigate();
   const [chatOpen, setChatOpen] = useState(false);
-  async function signOut() {
-    await client.logout();
-    setUser(null);
-    navigate("/");
-  }
+  const displayName = user.profile.nick_name || user.username;
   return (
     <div className="app-shell shell">
       <aside className="rail sidebar">
@@ -37,11 +31,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
         </nav>
         <div className="rail-bottom sidebar-bottom">
           <Nav to="/settings" icon={<Settings />} label="设置" />
-          <button className="account-button" onClick={signOut} title="退出登录">
-            <span>{user.username.slice(0, 1).toUpperCase()}</span>
-            <b>{user.username}</b>
-            <LogOut size={16} />
-          </button>
         </div>
       </aside>
       <main className="app-main">
@@ -60,9 +49,16 @@ export function Shell({ children }: { children: React.ReactNode }) {
         <Nav to="/settings" icon={<Settings />} label="设置" />
       </nav>
       <div className="shell-actions">
-        <button className="text-button" onClick={signOut}>
-          {user.username} · 退出
-        </button>
+        <LogoutButton className="text-button">
+          {user.profile.avatar_url ? (
+            <img className="logout-avatar" src={user.profile.avatar_url} alt="" />
+          ) : (
+            <span className="logout-avatar logout-avatar-fallback">
+              {displayName.slice(0, 1).toUpperCase()}
+            </span>
+          )}
+          <span>{displayName} · 退出</span>
+        </LogoutButton>
         <button
           className="chat-toggle"
           onClick={() => setChatOpen((open) => !open)}

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { LoaderCircle, Settings } from "lucide-react";
+import { LoaderCircle, LogOut, Settings } from "lucide-react";
 import { client } from "../api";
+import { LogoutButton } from "./LogoutButton";
 import { Notice } from "./Notice";
 import { Shell } from "./Shell";
 import "./SettingsPage.css";
@@ -120,6 +121,16 @@ export function SettingsPage() {
             保存配置
           </button>
         </form>
+        <section className="settings-logout">
+          <div>
+            <h2>账户</h2>
+            <p>退出后需要重新登录才能继续使用创作台。</p>
+          </div>
+          <LogoutButton className="settings-logout-button">
+            <LogOut size={17} />
+            退出登录
+          </LogoutButton>
+        </section>
       </div>
       {notice && <Notice text={notice} onClose={() => setNotice("")} />}
     </Shell>

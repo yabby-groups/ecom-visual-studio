@@ -1,4 +1,8 @@
-export type User = { id: string; username: string };
+export type User = {
+  id: string;
+  username: string;
+  profile: { nick_name: string; avatar_url: string };
+};
 export type AssetStatus =
   "draft" | "queued" | "prompting" | "generating" | "ready" | string;
 export type AssetVersion = {

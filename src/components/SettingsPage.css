@@ -74,3 +74,47 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
 }
+.settings-logout {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  .settings-logout {
+    display: grid;
+    gap: 14px;
+    margin-top: 24px;
+    padding: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.13);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .settings-logout h2 {
+    margin: 0 0 5px;
+    font-size: 16px;
+  }
+
+  .settings-logout p {
+    margin: 0;
+    color: #aebed0;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .settings-logout-button {
+    min-height: 42px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border: 1px solid rgba(210, 118, 105, 0.68);
+    border-radius: 11px;
+    background: rgba(166, 78, 69, 0.16);
+    color: #ffc7bf;
+    font-weight: 800;
+  }
+
+  .settings-logout-button:hover {
+    background: rgba(189, 91, 80, 0.28);
+  }
+}

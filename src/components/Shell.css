@@ -66,37 +66,6 @@
   gap: 8px;
   margin-top: auto;
 }
-.account-button {
-  width: 100%;
-  display: grid;
-  justify-items: center;
-  gap: 4px;
-  padding: 7px 0 0;
-  border: 0;
-  background: none;
-  color: #acbbb7;
-  font-size: 9px;
-  overflow: hidden;
-}
-.account-button span {
-  width: 26px;
-  height: 26px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  background: #2b3b3e;
-  color: #fff;
-  font-size: 11px;
-}
-.account-button b {
-  max-width: 54px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.account-button svg {
-  display: none;
-}
 .app-main {
   grid-column: 2;
   min-width: 0;
@@ -195,10 +164,27 @@
   gap: 12px;
 }
 .shell-actions .text-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   border: 0;
   background: none;
   color: #abd4c8;
   font-weight: 800;
+}
+.logout-avatar {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #2b3b3e;
+}
+.logout-avatar-fallback {
+  display: grid;
+  place-items: center;
+  color: #f4fffb;
+  font-size: 12px;
 }
 .chat-toggle {
   min-height: 42px;

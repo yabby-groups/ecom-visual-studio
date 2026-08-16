@@ -116,7 +116,7 @@ def init_db() -> None:
     GENERATED.mkdir(exist_ok=True)
     connection = db()
     connection.executescript("""
-      create table if not exists users (id text primary key, username text unique not null, password_hash text not null, created_at integer not null);
+      create table if not exists users (id text primary key, username text unique not null, password_hash text not null, created_at integer not null, nick_name text, avatar_url text);
       create table if not exists sessions (id text primary key, user_id text not null, expires_at integer not null);
       create table if not exists settings (user_id text primary key, token_id text, image_model text, text_model text, chat_model text);
       create table if not exists tokens (user_id text not null, id text not null, name text not null, secret text not null, masked text, status integer not null default 1, today_cost text, total_cost text, primary key(user_id, id));
@@ -132,6 +132,13 @@ def init_db() -> None:
     model_columns = {row["name"] for row in connection.execute("pragma table_info(models)")}
     if "alias" not in model_columns:
         connection.execute("alter table models add column alias text")
+    user_columns = {row["name"] for row in connection.execute("pragma table_info(users)")}
+    if "nick_name" not in user_columns:
+        connection.execute("alter table users add column nick_name text")
+    if "avatar_url" not in user_columns:
+        connection.execute("alter table users add column avatar_url text")
+        if "avatar" in user_columns:
+            connection.execute("update users set avatar_url=avatar where avatar_url is null")
     backfill_asset_versions(connection)
     connection.execute("update assets set status='failed: 服务在生成期间重启，请重新发起任务' where status in ('queued', 'prompting', 'generating')")
     connection.commit()
@@ -267,7 +274,7 @@ def huabot_models() -> list[dict[str, str]]:
     return models
 
 
-def huabot_login(name: str, password: str, totp_code: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+def huabot_login(name: str, password: str, totp_code: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, str]]:
     values = env()
     base = (values.get("HUABOT_BASE_URL") or values.get("IMG_BASE_URL") or "https://huabot.com").removesuffix("/v1").rstrip("/")
 
@@ -299,7 +306,8 @@ def huabot_login(name: str, password: str, totp_code: str) -> tuple[list[dict[st
     signin = {"name": name, "passwd": password}
     if totp_code:
         signin["totp_code"] = totp_code
-    bearer = call("/api/signin/", signin, form=True).get("token")
+    signin_result = call("/api/signin/", signin, form=True)
+    bearer = signin_result.get("token")
     if not bearer:
         raise ValueError("huabot 未返回会话令牌")
     raw_tokens = call("/api/token_base/token/my/list/", bearer=bearer).get("tokens") or []
@@ -315,7 +323,21 @@ def huabot_login(name: str, password: str, totp_code: str) -> tuple[list[dict[st
     models = huabot_models()
     if not tokens or not models:
         raise ValueError("huabot 没有返回可用 Token 或模型")
-    return tokens, models
+    account = signin_result.get("user") if isinstance(signin_result.get("user"), dict) else signin_result
+    profile = account.get("profile") if isinstance(account.get("profile"), dict) else {}
+    return tokens, models, {
+        "nick_name": str(profile.get("nick_name") or ""),
+        "avatar_url": str(profile.get("avatar_url") or ""),
+    }
+
+
+def user_payload(user: dict[str, Any]) -> dict[str, Any]:
+    nick_name = str(user.get("nick_name") or user["username"])
+    return {
+        "id": user["id"],
+        "username": user["username"],
+        "profile": {"nick_name": nick_name, "avatar_url": str(user.get("avatar_url") or "")},
+    }
 
 
 def user_config(user_id: str) -> dict[str, str]:
@@ -412,22 +434,23 @@ def startup() -> None:
 @app.get("/api/auth/me")
 def auth_me(session: Optional[str] = Cookie(default=None)) -> dict[str, Any]:
     user = current_user(session)
-    return {"user": {"id": user["id"], "username": user["username"]} if user else None}
+    return {"user": user_payload(user) if user else None}
 
 
 @app.post("/api/auth/login")
 def login(body: Credentials, response: Response) -> dict[str, Any]:
     try:
-        tokens, models = huabot_login(body.name, body.password, body.totp_code)
+        tokens, models, profile = huabot_login(body.name, body.password, body.totp_code)
     except ValueError as error:
         raise HTTPException(400, str(error)) from error
     connection = db()
     user = connection.execute("select * from users where username=?", (body.name,)).fetchone()
     if not user:
         user_id = uuid.uuid4().hex
-        connection.execute("insert into users values(?,?,?,?)", (user_id, body.name, password_hash(secrets.token_urlsafe(32)), int(time.time())))
+        connection.execute("insert into users(id,username,password_hash,created_at,nick_name,avatar_url) values(?,?,?,?,?,?)", (user_id, body.name, password_hash(secrets.token_urlsafe(32)), int(time.time()), profile["nick_name"], profile["avatar_url"]))
     else:
         user_id = user["id"]
+        connection.execute("update users set nick_name=?, avatar_url=? where id=?", (profile["nick_name"], profile["avatar_url"], user_id))
     previous_settings = connection.execute("select * from settings where user_id=?", (user_id,)).fetchone()
     connection.execute("delete from tokens where user_id=?", (user_id,))
     connection.execute("delete from models where user_id=?", (user_id,))
@@ -454,7 +477,7 @@ def login(body: Credentials, response: Response) -> dict[str, Any]:
     connection.commit()
     connection.close()
     response.set_cookie("session", session_id, max_age=SESSION_TTL, httponly=True, samesite="lax")
-    return {"user": {"id": user_id, "username": body.name}}
+    return {"user": user_payload({"id": user_id, "username": body.name, **profile})}
 
 
 @app.post("/api/auth/logout")
