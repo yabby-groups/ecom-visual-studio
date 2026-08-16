@@ -56,6 +56,7 @@ class ProjectInput(BaseModel):
 class PackInput(BaseModel):
     kind: str = "amazon"
     scene_template_ids: list[str] = Field(default_factory=list)
+    template_id: Optional[str] = Field(default=None, max_length=80)
 
 
 class AssetPatch(BaseModel):
@@ -455,8 +456,13 @@ def delete_project(project_id: str, session: Optional[str] = Cookie(default=None
 
 @app.post("/api/projects/{project_id}/pack")
 def create_pack(project_id: str, body: PackInput, session: Optional[str] = Cookie(default=None)) -> dict[str, bool]:
-    user = require_user(session); project = project_detail(project_id, user["id"]); templates = {item["id"]: item for item in template_list(user["id"])}; assets = built_in_pack(body.kind)
-    if body.kind == "amazon":
+    user = require_user(session); project = project_detail(project_id, user["id"]); templates = {item["id"]: item for item in template_list(user["id"])}
+    selected_template = templates.get(body.template_id) if body.template_id else None
+    if selected_template:
+        assets = [("T1", selected_template["name"], selected_template["id"], selected_template["ratio"], selected_template["direction"])]
+    else:
+        assets = built_in_pack(body.kind)
+    if not selected_template and body.kind == "amazon":
         assets += [(f"C{i}", templates[item]["name"], item, templates[item]["ratio"], templates[item]["direction"]) for i, item in enumerate(dict.fromkeys(body.scene_template_ids), 1) if item in templates and templates[item]["custom"]]
     connection = db(); connection.execute("delete from asset_versions where asset_id in (select id from assets where project_id=?)", (project_id,)); connection.execute("delete from assets where project_id=?", (project_id,))
     for code, title, template, ratio, direction in assets:

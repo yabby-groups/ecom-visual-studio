@@ -52,7 +52,11 @@ export const client = {
   ) => api<{ id: string }>("projects", { method: "POST", body }),
   createPack: (
     id: string,
-    body: { kind: string; scene_template_ids: string[] },
+    body: {
+      kind: string;
+      scene_template_ids: string[];
+      template_id?: string;
+    },
   ) => api(`projects/${id}/pack`, { method: "POST", body }),
   deleteProject: (id: string) => api(`projects/${id}`, { method: "DELETE" }),
   updateAsset: (id: string, body: Partial<Asset>) =>

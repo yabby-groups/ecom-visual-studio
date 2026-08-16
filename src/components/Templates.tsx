@@ -196,7 +196,9 @@ export function Templates() {
             return (
               <button
                 className="template-tile"
-                onClick={() => navigate("/new")}
+                onClick={() =>
+                  navigate(`/new?template=${encodeURIComponent(item.id)}`)
+                }
                 key={item.id}
                 ref={(tile) => {
                   if (tile) tileRefs.current.set(item.id, tile);

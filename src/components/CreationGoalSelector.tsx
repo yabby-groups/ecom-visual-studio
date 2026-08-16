@@ -4,6 +4,7 @@ import type { Template } from "../types";
 type CreationGoalSelectorProps = {
   kind: string;
   templates: Template[];
+  selectedTemplate?: Template;
   selectedTemplates: string[];
   onKindChange: (kind: string) => void;
   onTemplateToggle: (templateId: string) => void;
@@ -18,6 +19,7 @@ const goals = [
 export function CreationGoalSelector({
   kind,
   templates,
+  selectedTemplate,
   selectedTemplates,
   onKindChange,
   onTemplateToggle,
@@ -43,6 +45,20 @@ export function CreationGoalSelector({
             </button>
           ))}
         </div>
+        {kind === "custom" && selectedTemplate && (
+          <section className="pack-composer" aria-label="当前灵感方向">
+            <div className="pack-composer-head">
+              <div>
+                <p className="analysis-kicker">SELECTED INSPIRATION</p>
+                <h3>当前灵感方向：{selectedTemplate.name}</h3>
+                <small>
+                  {selectedTemplate.ratio} · {selectedTemplate.direction}
+                </small>
+              </div>
+              <strong>1 张</strong>
+            </div>
+          </section>
+        )}
         {kind === "amazon" && (
           <section
             className="pack-composer"

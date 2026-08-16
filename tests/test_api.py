@@ -102,6 +102,32 @@ def test_project_pack_and_custom_template_lifecycle():
     assert len(detail["assets"]) == 8
     assert detail["assets"][-1]["template"] == template_id
 
+    directed_builtin = client.post(
+        f"/api/projects/{project_id}/pack",
+        json={"kind": "custom", "scene_template_ids": [], "template_id": "lifestyle-scene"},
+    )
+    assert directed_builtin.status_code == 200
+    detail = client.get(f"/api/projects/{project_id}").json()
+    assert [(asset["template"], asset["ratio"]) for asset in detail["assets"]] == [("lifestyle-scene", "4:5")]
+    assert "真实使用环境" in detail["assets"][0]["prompt"]
+
+    directed_custom = client.post(
+        f"/api/projects/{project_id}/pack",
+        json={"kind": "custom", "scene_template_ids": [], "template_id": template_id},
+    )
+    assert directed_custom.status_code == 200
+    detail = client.get(f"/api/projects/{project_id}").json()
+    assert [(asset["template"], asset["ratio"]) for asset in detail["assets"]] == [(template_id, "4:5")]
+    assert "Natural afternoon light." in detail["assets"][0]["prompt"]
+
+    invalid_template = client.post(
+        f"/api/projects/{project_id}/pack",
+        json={"kind": "social", "scene_template_ids": [], "template_id": "missing-template"},
+    )
+    assert invalid_template.status_code == 200
+    detail = client.get(f"/api/projects/{project_id}").json()
+    assert len(detail["assets"]) == 3
+
     asset_id = detail["assets"][0]["id"]
     updated = client.patch(f"/api/assets/{asset_id}", json={"ratio": "16:9", "prompt": "Custom prompt"})
     assert updated.status_code == 200

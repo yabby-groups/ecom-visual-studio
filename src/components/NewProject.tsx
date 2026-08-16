@@ -1,6 +1,6 @@
 import { type FormEvent, useRef, useState } from "react";
 import { ArrowLeft, LoaderCircle } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { client } from "../api";
 import {
   AiProductAnalysis,
@@ -17,7 +17,11 @@ export function NewProject() {
   const templates = useAppStore((state) => state.templates);
   const refreshProjects = useAppStore((state) => state.refreshProjects);
   const navigate = useNavigate();
-  const [kind, setKind] = useState("amazon");
+  const [searchParams] = useSearchParams();
+  const selectedTemplate = templates.find(
+    (template) => template.id === searchParams.get("template"),
+  );
+  const [kind, setKind] = useState(selectedTemplate ? "custom" : "amazon");
   const [reference, setReference] = useState("");
   const [preview, setPreview] = useState("");
   const [selectedTemplates, setSelectedTemplates] = useState<string[]>([]);
@@ -117,6 +121,7 @@ export function NewProject() {
       await client.createPack(project.id, {
         kind,
         scene_template_ids: selectedTemplates,
+        template_id: kind === "custom" ? selectedTemplate?.id : undefined,
       });
       await refreshProjects();
       navigate(`/projects/${project.id}`);
@@ -139,7 +144,9 @@ export function NewProject() {
         : "将生成 7 张可单独编辑的商品视觉"
       : kind === "social"
         ? "将生成 3 张社媒内容图"
-        : "将生成 1 张商品主图";
+        : selectedTemplate
+          ? `将生成 1 张${selectedTemplate.name}`
+          : "将生成 1 张商品主图";
   return (
     <Shell>
       <header className="topbar">
@@ -202,6 +209,7 @@ export function NewProject() {
           <CreationGoalSelector
             kind={kind}
             templates={templates}
+            selectedTemplate={selectedTemplate}
             selectedTemplates={selectedTemplates}
             onKindChange={setKind}
             onTemplateToggle={(templateId) =>
