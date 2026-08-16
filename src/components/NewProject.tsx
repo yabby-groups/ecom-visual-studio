@@ -1,5 +1,5 @@
 import { type FormEvent, useRef, useState } from "react";
-import { ArrowLeft, LoaderCircle, Plus } from "lucide-react";
+import { ArrowLeft, LoaderCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { client } from "../api";
 import {
@@ -144,11 +144,6 @@ export function NewProject() {
     <Shell>
       <header className="topbar">
         <strong>新建创作</strong>
-        <div>
-          <button className="icon-button" aria-label="查看通知">
-            <Plus size={17} />
-          </button>
-        </div>
       </header>
       <div className="page create-page">
         <div className="create-intro">

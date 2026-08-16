@@ -320,13 +320,13 @@
   margin-bottom: 42px;
 }
 .create-page .create-intro h1 {
-  margin: 14px 0 0;
+  margin: 12px 0 0;
   color: #fff;
   font-size: 52px;
   line-height: 1.1;
 }
 .create-page .create-intro > p {
-  margin: 17px 0 0;
+  margin: 18px 0 0;
   color: #d0d8e9;
   font-size: 15px;
   line-height: 1.8;
@@ -335,7 +335,7 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  margin: 0 0 32px;
+  margin: 0 0 24px;
   border: 0;
   background: transparent;
   color: #c8d1e5;
@@ -369,19 +369,19 @@
   max-width: 680px;
 }
 .creation-form .step-body h2 {
-  margin: 0 0 6px;
+  margin: 0 0 8px;
   color: #fff;
   font-size: 19px;
 }
 .creation-form .step-body > p {
-  margin: 0 0 20px;
+  margin: 0 0 22px;
   color: #c8d1e4;
   font-size: 12px;
   line-height: 1.7;
 }
 .creation-form label {
   display: grid;
-  gap: 7px;
+  gap: 8px;
   color: #eff2fb;
   font-size: 12px;
   font-weight: 700;
@@ -391,10 +391,11 @@
   width: 100%;
   border: 1px solid rgba(255, 255, 255, 0.25);
   border-radius: 14px;
-  padding: 12px;
+  padding: 12px 14px;
   background: rgba(4, 8, 24, 0.28);
   color: #fff;
   font: inherit;
+  line-height: 1.5;
 }
 .creation-form input::placeholder,
 .creation-form textarea::placeholder {
@@ -407,6 +408,10 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 13px;
+  margin-top: 16px;
+}
+.creation-form .two-col + label {
+  margin-top: 20px;
 }
 .creation-form .product-name-field {
   max-width: 334px;
@@ -415,7 +420,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1.08fr) minmax(250px, 0.92fr);
   gap: 0;
-  margin: 16px 0 30px;
+  margin: 20px 0 28px;
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 18px;
@@ -483,7 +488,7 @@
 }
 .creation-form .reference-panel-heading {
   display: grid;
-  gap: 4px;
+  gap: 6px;
 }
 .creation-form .reference-panel-heading > span {
   color: #fff;
@@ -611,7 +616,9 @@
   box-shadow: 0 0 0 4px rgba(68, 221, 183, 0.09);
 }
 .creation-form .goal span {
+  margin-top: 8px;
   color: #c5cde0;
+  line-height: 1.5;
 }
 .creation-form .goal i {
   color: #aaf7df;
@@ -632,9 +639,9 @@
 }
 .creation-form .ai-analysis {
   display: grid;
-  gap: 14px;
-  margin-top: 20px;
-  padding: 18px;
+  gap: 12px;
+  margin-top: 18px;
+  padding: 16px 18px;
   border: 1px solid rgba(147, 133, 255, 0.42);
   border-radius: 20px;
   background: rgba(147, 133, 255, 0.1);
@@ -642,7 +649,7 @@
 }
 .creation-form .analysis-kicker {
   display: block;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
   color: #c3bbff;
   font-size: 10px;
   font-weight: 800;
@@ -654,7 +661,7 @@
   font-size: 16px;
 }
 .creation-form .ai-analysis p {
-  margin: 7px 0 0;
+  margin: 8px 0 0;
   color: #c9d1e5;
   font-size: 12px;
   line-height: 1.55;
@@ -662,14 +669,14 @@
 .creation-form .analysis-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 12px;
 }
 .creation-form .analysis-button {
   display: grid;
   grid-template-columns: 35px minmax(0, 1fr);
   column-gap: 10px;
   align-content: center;
-  min-height: 74px;
+  min-height: 68px;
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 15px;
   padding: 11px;
@@ -696,7 +703,7 @@
 .creation-form .analysis-button small {
   display: block;
   min-width: 0;
-  margin-top: 4px;
+  margin-top: 5px;
   color: #bdc7dc;
   font-size: 10px;
   line-height: 1.35;
@@ -717,6 +724,12 @@
   min-height: 18px;
   margin: 0;
   color: #b4ffe9;
+}
+.creation-form .analysis-status:empty {
+  display: none;
+}
+.creation-form .ai-analysis + label {
+  margin-top: 22px;
 }
 .creation-form .analysis-status:not(:empty)::before {
   display: inline-block;

@@ -3,7 +3,6 @@ import {
   FolderOpen,
   LayoutGrid,
   LogOut,
-  Plus,
   Settings,
   Sparkles,
 } from "lucide-react";
@@ -70,9 +69,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
           aria-label="打开 AI 聊天"
         >
           AI 对话
-        </button>
-        <button className="icon-button" aria-label="查看通知">
-          <Plus size={18} />
         </button>
         <button className="create-button" onClick={() => navigate("/new")}>
           新建创作
