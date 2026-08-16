@@ -258,11 +258,11 @@ export function Workspace() {
                       )}
                     >
                       <i style={{ transform: `scaleX(${cycleProgress})` }} />
+                      <span>确认右侧的创作方向后，开始生成第一版。</span>
                     </div>
                     <p className="generation-timing">
                       生成中 · 预计剩余 {formatDuration(remainingSeconds)} · 已用时 {elapsedSeconds} 秒
                     </p>
-                    <p>确认右侧的创作方向后，开始生成第一版。</p>
                   </div>
                 ) : !displayedPath ? (
                   <div className="artboard-empty">
