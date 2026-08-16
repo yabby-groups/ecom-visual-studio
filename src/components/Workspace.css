@@ -214,10 +214,8 @@
 }
 .generation-progress {
   position: relative;
-  display: grid;
-  place-items: center;
   width: min(100%, 580px);
-  min-height: 38px;
+  height: 12px;
   overflow: hidden;
   border-radius: 999px;
   background: #4d5675;
@@ -229,15 +227,6 @@
   border-radius: inherit;
   background: #4bd8bb;
   transition: transform 0.4s linear;
-}
-.generation-progress span {
-  position: relative;
-  z-index: 1;
-  padding: 8px 14px;
-  color: #fff;
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1.35;
 }
 .artboard-empty .generation-timing {
   max-width: none;
