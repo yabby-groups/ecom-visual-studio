@@ -54,6 +54,12 @@ export function Shell({ children }: { children: React.ReactNode }) {
         </header>
         {children}
       </main>
+      <nav className="mobile-nav" aria-label="主导航">
+        <Nav to="/" icon={<LayoutGrid />} label="创作台" />
+        <Nav to="/library" icon={<FolderOpen />} label="作品库" />
+        <Nav to="/templates" icon={<Sparkles />} label="模板" />
+        <Nav to="/settings" icon={<Settings />} label="设置" />
+      </nav>
       <div className="shell-actions">
         <button className="text-button" onClick={signOut}>
           {user.username} · 退出

@@ -236,3 +236,73 @@
   color: #08251f;
   font-size: 24px;
 }
+
+@media (min-width: 1440px) {
+  .studio-hero,
+  .shortcut-section,
+  .gallery-section {
+    max-width: 1320px;
+    margin-right: auto;
+    margin-left: auto;
+  }
+}
+
+@media (max-width: 720px) {
+  .studio-hero {
+    min-height: 0;
+    grid-template-columns: 1fr;
+    gap: 24px;
+    padding: 36px 18px 30px;
+  }
+  .studio-hero h1 {
+    font-size: 38px;
+    line-height: 1.12;
+  }
+  .hero-copy {
+    font-size: 14px;
+  }
+  .hero-actions {
+    flex-wrap: wrap;
+    gap: 14px;
+  }
+  .hero-visual {
+    height: 220px;
+    border-radius: 20px;
+  }
+  .visual-empty {
+    padding: 20px;
+  }
+  .visual-empty b {
+    font-size: 22px;
+  }
+  .shortcut-section,
+  .gallery-section {
+    margin: 0 18px;
+    padding: 28px 0;
+  }
+  .section-header {
+    align-items: flex-end;
+  }
+  .section-heading h2,
+  .section-header h2 {
+    font-size: 22px;
+  }
+  .shortcut-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .shortcut-card {
+    min-height: 164px;
+    padding: 15px;
+    border-radius: 17px;
+  }
+  .shortcut-card strong {
+    font-size: 14px;
+  }
+  .shortcut-card small {
+    margin: 6px 0 12px;
+  }
+  .project-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
