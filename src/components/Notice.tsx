@@ -5,14 +5,17 @@ import "./Notice.css";
 export function Notice({
   text,
   onClose,
+  autoCloseMs = 3500,
 }: {
   text: string;
   onClose: () => void;
+  autoCloseMs?: number | null;
 }) {
   useEffect(() => {
-    const timer = window.setTimeout(onClose, 3500);
+    if (autoCloseMs === null) return;
+    const timer = window.setTimeout(onClose, autoCloseMs);
     return () => window.clearTimeout(timer);
-  }, [onClose]);
+  }, [autoCloseMs, onClose]);
   return (
     <div className="notice" role="status">
       <span>{text}</span>

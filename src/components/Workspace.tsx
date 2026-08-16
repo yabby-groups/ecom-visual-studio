@@ -31,12 +31,19 @@ export function Workspace() {
   const templates = useAppStore((state) => state.templates);
   const [project, setProject] = useState<Project | null>(null);
   const [assetId, setAssetId] = useState("");
-  const [notice, setNotice] = useState("");
+  const [notice, setNotice] = useState<{
+    text: string;
+    autoCloseMs?: number | null;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
   const [originalOpen, setOriginalOpen] = useState(false);
   const [selectedVersionPath, setSelectedVersionPath] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const promptRef = useRef<HTMLTextAreaElement>(null);
+  const shownFailureRef = useRef("");
+  function showNotice(text: string, autoCloseMs?: number | null) {
+    setNotice({ text, autoCloseMs });
+  }
   async function load() {
     try {
       const next = await client.project(id);
@@ -60,6 +67,20 @@ export function Workspace() {
     const timer = window.setInterval(() => void load(), 2400);
     return () => window.clearInterval(timer);
   }, [project?.assets?.map((asset) => asset.status).join("|")]);
+  useEffect(() => {
+    const failures = project?.assets?.filter((item) =>
+      item.status.startsWith("failed"),
+    );
+    const failureKey = failures?.map((item) => `${item.id}:${item.status}`).join("|") ?? "";
+    if (!failureKey) {
+      shownFailureRef.current = "";
+      return;
+    }
+    if (failureKey === shownFailureRef.current) return;
+    shownFailureRef.current = failureKey;
+    const message = failures?.[0]?.status.replace(/^failed:\s*/, "") || "未知错误";
+    showNotice(`图片生成失败：${message}`, null);
+  }, [project?.assets?.map((asset) => `${asset.id}:${asset.status}`).join("|")]);
   const pendingAsset = project?.assets?.find(
     (item) => item.id === assetId && isPending(item.status),
   );
@@ -124,9 +145,9 @@ export function Workspace() {
       if (one && asset) await client.generateAsset(asset.id);
       else await client.generatePack(currentProject.id);
       await load();
-      setNotice(one ? "已加入生成队列" : "全部画面已加入生成队列");
+      showNotice(one ? "已加入生成队列" : "全部画面已加入生成队列", 2000);
     } catch (reason) {
-      setNotice(reason instanceof Error ? reason.message : "生成失败");
+      showNotice(reason instanceof Error ? reason.message : "生成失败", null);
     }
   }
   async function rebuildPrompt() {
@@ -134,9 +155,9 @@ export function Workspace() {
     try {
       const result = await client.resetPrompt(asset.id);
       await updateAsset({ prompt: result.prompt });
-      setNotice("已生成提示词");
+      showNotice("已生成提示词");
     } catch (reason) {
-      setNotice(reason instanceof Error ? reason.message : "生成提示词失败");
+      showNotice(reason instanceof Error ? reason.message : "生成提示词失败", null);
     }
   }
   return (
@@ -204,7 +225,7 @@ export function Workspace() {
                   <button
                     className="button secondary"
                     onClick={() =>
-                      setNotice(
+                      showNotice(
                         asset.prompt.trim().length >= 20
                           ? "Prompt 检查完成"
                           : "Prompt 内容过短，请先生成提示词",
@@ -382,7 +403,7 @@ export function Workspace() {
                 className="button secondary"
                 onClick={() => {
                   void updateAsset({ prompt: promptRef.current?.value ?? asset.prompt });
-                  setNotice("创作控制已保存");
+                  showNotice("创作控制已保存");
                 }}
               >
                 <Copy size={16} />
@@ -418,7 +439,13 @@ export function Workspace() {
           </section>
         </div>
       )}
-      {notice && <Notice text={notice} onClose={() => setNotice("")} />}
+      {notice && (
+        <Notice
+          text={notice.text}
+          autoCloseMs={notice.autoCloseMs}
+          onClose={() => setNotice(null)}
+        />
+      )}
     </Shell>
   );
 }
