@@ -2,10 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   Copy,
+  Eye,
   ImagePlus,
   LoaderCircle,
   Sparkles,
   WandSparkles,
+  X,
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { client } from "../api";
@@ -24,6 +26,7 @@ export function Workspace() {
   const [assetId, setAssetId] = useState("");
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
+  const [originalOpen, setOriginalOpen] = useState(false);
   const promptRef = useRef<HTMLTextAreaElement>(null);
   async function load() {
     try {
@@ -48,6 +51,17 @@ export function Workspace() {
     const timer = window.setInterval(() => void load(), 2400);
     return () => window.clearInterval(timer);
   }, [project?.assets?.map((asset) => asset.status).join("|")]);
+  useEffect(() => {
+    setOriginalOpen(false);
+  }, [assetId]);
+  useEffect(() => {
+    if (!originalOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOriginalOpen(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [originalOpen]);
   if (loading || !project)
     return (
       <Shell>
@@ -167,6 +181,16 @@ export function Workspace() {
                       <LoaderCircle className="spin" size={16} />
                     )}
                     {asset.status === "ready" ? "创建新版本" : "生成画面"}
+                  </button>
+                  <button
+                    className="icon-button original-preview-button"
+                    type="button"
+                    disabled={!asset.file_path}
+                    onClick={() => setOriginalOpen(true)}
+                    aria-label="查看原图"
+                    title="查看原图"
+                  >
+                    <Eye size={17} />
                   </button>
                 </div>
               </header>
@@ -296,6 +320,32 @@ export function Workspace() {
           </>
         ) : null}
       </div>
+      {originalOpen && asset?.file_path && (
+        <div
+          className="original-preview-backdrop"
+          role="presentation"
+          onClick={() => setOriginalOpen(false)}
+        >
+          <section
+            className="original-preview"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`${asset.title} 原图预览`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <img src={fileUrl(asset.file_path)} alt={asset.title} />
+            <button
+              className="icon-button original-preview-close"
+              type="button"
+              onClick={() => setOriginalOpen(false)}
+              aria-label="关闭原图预览"
+              title="关闭"
+            >
+              <X size={20} />
+            </button>
+          </section>
+        </div>
+      )}
       {notice && <Notice text={notice} onClose={() => setNotice("")} />}
     </Shell>
   );

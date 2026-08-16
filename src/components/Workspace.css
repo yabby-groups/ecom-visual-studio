@@ -16,8 +16,8 @@
   margin-bottom: 4px;
 }
 .workspace {
-  height: calc(100vh - 150px);
-  min-height: 650px;
+  height: calc(100dvh - 188px);
+  min-height: 0;
   display: grid;
   grid-template-columns: 230px minmax(400px, 1fr) 284px;
   margin: 0 72px 44px;
@@ -30,6 +30,7 @@
   overflow: hidden;
 }
 .sequence {
+  min-height: 0;
   overflow: auto;
   border-right: 1px solid rgba(255, 255, 255, 0.17);
   padding: 13px;
@@ -87,9 +88,10 @@
   object-fit: cover;
 }
 .stage {
+  min-height: 0;
   min-width: 0;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
   background: rgba(4, 8, 24, 0.18);
 }
 .stage header {
@@ -119,15 +121,28 @@
   min-height: 34px;
   font-size: 11px;
 }
-.workspace .button.secondary {
-  border-color: rgba(255, 255, 255, 0.17);
+.stage .original-preview-button {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  border-color: #4f5c74;
   border-radius: 13px;
-  background: rgba(255, 255, 255, 0.1);
-  color: #e8ecf8;
+  background: #30394b;
+  color: #dbe8ed;
+}
+.stage .original-preview-button:hover:not(:disabled) {
+  border-color: #478f7f;
+  background: #39495a;
+}
+.workspace .button.secondary {
+  border-color: #4f5c74;
+  border-radius: 13px;
+  background: #30394b;
+  color: #dbe8ed;
 }
 .workspace .button.secondary:hover {
-  border-color: #66708a;
-  background: #3a4256;
+  border-color: #478f7f;
+  background: #39495a;
 }
 .workspace .button:disabled {
   border-color: #535a70;
@@ -136,11 +151,13 @@
   opacity: 0.58;
 }
 .workspace .button.primary:disabled {
-  border-color: #1d8f7b;
-  background: #1d8f7b;
-  color: #fff;
+  border-color: #276d61;
+  background: #276d61;
+  color: #d6ebe5;
 }
 .artboard {
+  position: relative;
+  min-width: 0;
   min-height: 0;
   display: grid;
   place-items: center;
@@ -154,8 +171,11 @@
   background: #121a33;
 }
 .artboard > img {
-  max-width: 100%;
-  max-height: 100%;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: inherit;
   object-fit: contain;
   box-shadow: 0 12px 32px #1722292b;
 }
@@ -226,7 +246,41 @@
   font-size: 20px;
   line-height: 1;
 }
+.original-preview-backdrop {
+  position: fixed;
+  z-index: 40;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  background: rgba(3, 5, 16, 0.86);
+  backdrop-filter: blur(8px);
+}
+.original-preview {
+  position: relative;
+  display: grid;
+  width: min(1200px, 100%);
+  height: min(860px, 100%);
+  place-items: center;
+}
+.original-preview img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+}
+.original-preview-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  border-color: rgba(255, 255, 255, 0.35);
+  background: rgba(12, 16, 33, 0.78);
+  color: #fff;
+}
 .controls {
+  min-height: 0;
   display: grid;
   align-content: start;
   gap: 18px;
@@ -282,9 +336,9 @@
 }
 .ratio-row button.active,
 .ratio-row button:hover {
-  border-color: #44ddb7;
-  background: rgba(68, 221, 183, 0.16);
-  color: #b5ffe9;
+  border-color: #2fa58d;
+  background: rgba(37, 143, 123, 0.23);
+  color: #d4f8ed;
 }
 .style-lock {
   display: flex;
@@ -312,10 +366,7 @@
   font-size: 10px;
 }
 
-/* The project canvas owns its chrome, matching the reference studio. */
-.shell:has(.workspace) .shell-actions {
-  display: none;
-}
+/* Keep the workspace title clear of the fixed global navigation. */
 .shell:has(.workspace) .workspace-header {
   margin-top: 62px;
 }
@@ -407,6 +458,13 @@
   }
   .stage header .button {
     flex: 1 1 auto;
+  }
+  .original-preview-backdrop {
+    padding: 18px;
+  }
+  .original-preview {
+    width: 100%;
+    height: 100%;
   }
   .artboard {
     aspect-ratio: 1 / 1;

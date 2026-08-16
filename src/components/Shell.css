@@ -197,20 +197,20 @@
 .shell-actions .text-button {
   border: 0;
   background: none;
-  color: #8ff3d4;
+  color: #abd4c8;
   font-weight: 800;
 }
 .chat-toggle {
   min-height: 42px;
-  border: 1px solid rgba(147, 133, 255, 0.65);
+  border: 1px solid rgba(78, 159, 141, 0.68);
   border-radius: 15px;
   padding: 0 14px;
-  background: rgba(147, 133, 255, 0.18);
-  color: #f2efff;
+  background: rgba(37, 143, 123, 0.18);
+  color: #d9f5ec;
   font-weight: 800;
 }
 .chat-toggle:hover {
-  background: rgba(147, 133, 255, 0.34);
+  background: rgba(37, 143, 123, 0.32);
 }
 .shell-actions .icon-button {
   width: 42px;
@@ -219,6 +219,16 @@
   border-radius: 15px;
   background: rgba(255, 255, 255, 0.1);
   color: #fff;
+}
+.shell-actions .create-button {
+  border: 1px solid #258f7b;
+  background: #258f7b;
+  color: #f4fffb;
+  box-shadow: 0 10px 24px rgba(15, 93, 79, 0.28);
+}
+.shell-actions .create-button:hover {
+  background: #2ca58f;
+  box-shadow: 0 12px 28px rgba(15, 93, 79, 0.34);
 }
 
 @media (max-width: 720px) {
