@@ -1,0 +1,45 @@
+.project-card {
+  position: relative;
+  display: grid;
+  color: var(--ink);
+  text-decoration: none;
+}
+.project-preview {
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 5px;
+  background: var(--canvas);
+  color: var(--accent);
+}
+.project-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.project-card > div:last-of-type {
+  padding: 8px 2px;
+}
+.project-card span {
+  color: var(--muted);
+  font-size: 10px;
+}
+.project-card h3 {
+  margin: 5px 0 3px;
+  font-size: 13px;
+}
+.project-card p {
+  margin: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.project-card > svg {
+  position: absolute;
+  right: 3px;
+  bottom: 18px;
+  color: var(--muted);
+}

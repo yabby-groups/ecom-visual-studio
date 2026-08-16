@@ -1,0 +1,76 @@
+.settings-form {
+  max-width: 720px;
+  display: grid;
+  gap: 18px;
+  margin: 0 34px 44px;
+}
+.settings-form section {
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+}
+.settings-form h2 {
+  margin: 0 0 6px;
+  font-size: 24px;
+}
+.settings-form section > p {
+  margin: 0 0 18px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.settings-page {
+  max-width: 760px;
+  padding-top: 42px;
+}
+.settings-page > h1 {
+  margin: 0 0 28px;
+  color: #fff;
+  font-size: 52px;
+  line-height: 1.1;
+}
+.settings-form {
+  max-width: none;
+  gap: 18px;
+  margin: 0;
+}
+.settings-form section {
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.08);
+}
+.settings-form h2 {
+  margin: 0 0 6px;
+  color: #fff;
+  font-size: 19px;
+}
+.settings-form section > p {
+  margin: 0 0 18px;
+  color: #c5cde0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.settings-form label {
+  display: grid;
+  gap: 8px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+}
+.settings-form select {
+  min-height: 42px;
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 10px;
+  padding: 10px;
+  background: #171d38;
+  color: #fff;
+}
+.settings-form .form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}

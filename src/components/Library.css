@@ -1,0 +1,78 @@
+.library-grid {
+  margin: 0 34px 44px;
+}
+.library-item {
+  position: relative;
+}
+.library-item > .icon-button {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  opacity: 0;
+}
+.library-item:hover > .icon-button {
+  opacity: 1;
+}
+.library-heading {
+  max-width: 760px;
+  margin-bottom: 27px;
+}
+.library-heading h1 {
+  margin: 0;
+  color: #fff;
+  font-size: 52px;
+  line-height: 1.1;
+}
+.library-heading p:last-child {
+  color: #cbd4e7;
+  font-size: 15px;
+  line-height: 1.75;
+}
+.filter-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 22px;
+}
+.filter {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #d5ddef;
+  font-size: 12px;
+}
+.filter.active {
+  border-color: var(--accent);
+  background: rgba(68, 221, 183, 0.15);
+  color: #c2ffeb;
+}
+.library-art-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+.library-empty {
+  min-height: 236px;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  border: 1px dashed rgba(255, 255, 255, 0.3);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.07);
+  color: #d1d8e7;
+  text-align: center;
+}
+.library-empty b {
+  color: #fff;
+  font-size: 15px;
+}
+.library-empty > div {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: var(--accent);
+  color: #08251f;
+  font-size: 24px;
+}

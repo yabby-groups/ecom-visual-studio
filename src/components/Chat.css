@@ -1,0 +1,120 @@
+.chat-fab {
+  position: fixed;
+  z-index: 8;
+  right: 28px;
+  bottom: 28px;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--accent);
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 6px 18px #137a6540;
+}
+.chat-panel {
+  position: fixed;
+  z-index: 15;
+  right: 20px;
+  bottom: 20px;
+  width: min(390px, calc(100vw - 30px));
+  height: min(610px, calc(100vh - 40px));
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  border: 1px solid var(--line);
+  background: #fff;
+  box-shadow: 0 20px 40px #1722292b;
+}
+.chat-panel header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  border-bottom: 1px solid var(--line);
+}
+.chat-panel h3 {
+  margin: 0;
+  font-size: 25px;
+}
+.chat-panel .eyebrow {
+  margin: 0 0 3px;
+  font-size: 8px;
+}
+.chat-log {
+  min-height: 0;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  overflow: auto;
+  padding: 16px;
+}
+.chat-log > p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+.chat-message {
+  width: fit-content;
+  max-width: 90%;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+.chat-message.user {
+  justify-self: end;
+  background: var(--ink);
+  color: #fff;
+}
+.chat-message.assistant {
+  background: var(--canvas);
+}
+.chat-panel form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  padding: 12px;
+  border-top: 1px solid var(--line);
+}
+.chat-panel textarea {
+  font-size: 11px;
+}
+.chat-panel .button {
+  min-height: auto;
+  align-self: end;
+}
+.chat-fab {
+  display: none;
+}
+.chat-panel {
+  top: 94px;
+  right: 28px;
+  bottom: auto;
+  width: min(390px, calc(100vw - 40px));
+  height: min(610px, calc(100vh - 122px));
+  border-color: rgba(255, 255, 255, 0.24);
+  border-radius: 24px;
+  background: rgba(13, 17, 37, 0.94);
+  color: #fff;
+  box-shadow:
+    0 22px 60px rgba(0, 0, 0, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(20px);
+}
+.chat-panel header,
+.chat-panel form {
+  border-color: var(--line);
+}
+.chat-panel textarea {
+  border-color: rgba(255, 255, 255, 0.24);
+  background: rgba(5, 8, 24, 0.35);
+  color: #fff;
+}
+.chat-message.assistant {
+  background: rgba(255, 255, 255, 0.1);
+}
+.chat-message.user {
+  border: 1px solid rgba(68, 221, 183, 0.38);
+  background: rgba(68, 221, 183, 0.14);
+}

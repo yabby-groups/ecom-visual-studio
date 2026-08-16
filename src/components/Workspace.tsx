@@ -1,0 +1,255 @@
+import { useEffect, useState } from "react";
+import {
+  ArrowLeft,
+  Copy,
+  ImagePlus,
+  LoaderCircle,
+  Sparkles,
+  WandSparkles,
+} from "lucide-react";
+import { useNavigate, useParams } from "react-router-dom";
+import { client } from "../api";
+import { Notice } from "./Notice";
+import { Shell } from "./Shell";
+import { useAppStore } from "../store";
+import type { Asset, Project } from "../types";
+import { fileUrl, isPending, statusText } from "../utils/assets";
+import "./Workspace.css";
+
+export function Workspace() {
+  const { id = "" } = useParams();
+  const navigate = useNavigate();
+  const templates = useAppStore((state) => state.templates);
+  const [project, setProject] = useState<Project | null>(null);
+  const [assetId, setAssetId] = useState("");
+  const [notice, setNotice] = useState("");
+  const [loading, setLoading] = useState(true);
+  async function load() {
+    try {
+      const next = await client.project(id);
+      setProject(next);
+      setAssetId((current) =>
+        next.assets?.some((asset) => asset.id === current)
+          ? current
+          : next.assets?.[0]?.id || "",
+      );
+    } catch {
+      navigate("/");
+    } finally {
+      setLoading(false);
+    }
+  }
+  useEffect(() => {
+    void load();
+  }, [id]);
+  useEffect(() => {
+    if (!project?.assets?.some((asset) => isPending(asset.status))) return;
+    const timer = window.setInterval(() => void load(), 2400);
+    return () => window.clearInterval(timer);
+  }, [project?.assets?.map((asset) => asset.status).join("|")]);
+  if (loading || !project)
+    return (
+      <Shell>
+        <div className="loading-page">
+          <LoaderCircle className="spin" size={28} />
+          加载项目...
+        </div>
+      </Shell>
+    );
+  const currentProject = project;
+  const asset = currentProject.assets?.find((item) => item.id === assetId);
+  async function updateAsset(patch: Partial<Asset>) {
+    if (!asset) return;
+    await client.updateAsset(asset.id, patch);
+    await load();
+  }
+  async function generate(one = true) {
+    try {
+      if (one && asset) await client.generateAsset(asset.id);
+      else await client.generatePack(currentProject.id);
+      await load();
+      setNotice(one ? "已加入生成队列" : "全部画面已加入生成队列");
+    } catch (reason) {
+      setNotice(reason instanceof Error ? reason.message : "生成失败");
+    }
+  }
+  return (
+    <Shell>
+      <div className="workspace-header">
+        <button className="back-link" onClick={() => navigate("/")}>
+          <ArrowLeft size={17} />
+          创作台
+        </button>
+        <div>
+          <span className="eyebrow">PRODUCT VISUAL SERIES</span>
+          <h1>{project.name}</h1>
+        </div>
+        <button
+          className="button primary"
+          disabled={project.assets?.some((item) => isPending(item.status))}
+          onClick={() => void generate(false)}
+        >
+          <Sparkles size={18} />
+          生成全部
+        </button>
+      </div>
+      <div className="workspace">
+        <aside className="sequence">
+          <div className="sequence-head">
+            <span>画面序列</span>
+            <small>{project.assets?.length || 0} 张</small>
+          </div>
+          {project.assets?.map((item, index) => (
+            <button
+              className={`sequence-item ${item.id === assetId ? "active" : ""}`}
+              onClick={() => setAssetId(item.id)}
+              key={item.id}
+            >
+              <b>{String(index + 1).padStart(2, "0")}</b>
+              <span>
+                <strong>{item.title.replace(/^\w+\s·\s/, "")}</strong>
+                <small>
+                  {item.ratio} · {statusText(item.status)}
+                </small>
+              </span>
+              {item.file_path ? (
+                <img src={fileUrl(item.file_path)} alt="" />
+              ) : (
+                <i />
+              )}
+            </button>
+          ))}
+        </aside>
+        {asset ? (
+          <>
+            <section className="stage">
+              <header>
+                <div>
+                  <span className="eyebrow">{asset.template}</span>
+                  <h2>{asset.title}</h2>
+                </div>
+                <div>
+                  <button
+                    className="button secondary"
+                    onClick={async () => {
+                      const result = await client.resetPrompt(asset.id);
+                      await updateAsset({ prompt: result.prompt });
+                      setNotice("已按模板重建 Prompt");
+                    }}
+                  >
+                    <WandSparkles size={16} />
+                    重建 Prompt
+                  </button>
+                  <button
+                    className="button primary"
+                    disabled={isPending(asset.status)}
+                    onClick={() => void generate()}
+                  >
+                    {isPending(asset.status) && (
+                      <LoaderCircle className="spin" size={16} />
+                    )}
+                    {asset.status === "ready" ? "创建新版本" : "生成画面"}
+                  </button>
+                </div>
+              </header>
+              <div
+                className={`artboard ${asset.file_path ? "with-image" : ""}`}
+              >
+                {asset.file_path ? (
+                  <img src={fileUrl(asset.file_path)} alt={asset.title} />
+                ) : (
+                  <div className="artboard-empty">
+                    {isPending(asset.status) ? (
+                      <LoaderCircle className="spin" size={36} />
+                    ) : (
+                      <ImagePlus size={38} />
+                    )}
+                    <h3>
+                      {isPending(asset.status)
+                        ? statusText(asset.status)
+                        : "这个画面还未生成"}
+                    </h3>
+                    <p>
+                      {asset.status.startsWith("failed")
+                        ? asset.status
+                        : "确认右侧的创作方向后，开始生成第一版。"}
+                    </p>
+                    {!isPending(asset.status) && (
+                      <button
+                        className="button primary"
+                        onClick={() => void generate()}
+                      >
+                        生成第一版
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </section>
+            <aside className="controls">
+              <div className="controls-head">
+                <b>创作控制</b>
+                <span>自动保存</span>
+              </div>
+              <label>
+                场景模板
+                <select
+                  value={asset.template}
+                  onChange={(event) =>
+                    void updateAsset({ template: event.target.value })
+                  }
+                >
+                  {templates.map((item) => (
+                    <option value={item.id} key={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <fieldset>
+                <legend>画面比例</legend>
+                <div className="ratio-row">
+                  {["1:1", "4:5", "2:3", "16:9"].map((ratio) => (
+                    <button
+                      key={ratio}
+                      className={asset.ratio === ratio ? "active" : ""}
+                      onClick={() => void updateAsset({ ratio })}
+                    >
+                      {ratio}
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
+              <div className="style-lock">
+                <i style={{ background: project.color }} />
+                <div>
+                  <b>品牌风格已锁定</b>
+                  <span>商业光线 · 干净留白</span>
+                </div>
+              </div>
+              <label>
+                高级 Prompt
+                <textarea
+                  defaultValue={asset.prompt}
+                  key={asset.id}
+                  onBlur={(event) =>
+                    void updateAsset({ prompt: event.target.value })
+                  }
+                  rows={10}
+                />
+              </label>
+              <button
+                className="button secondary"
+                onClick={() => void navigator.clipboard.writeText(asset.prompt)}
+              >
+                <Copy size={16} />
+                复制 Prompt
+              </button>
+            </aside>
+          </>
+        ) : null}
+      </div>
+      {notice && <Notice text={notice} onClose={() => setNotice("")} />}
+    </Shell>
+  );
+}

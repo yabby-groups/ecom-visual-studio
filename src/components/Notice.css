@@ -1,0 +1,27 @@
+.notice {
+  position: fixed;
+  z-index: 30;
+  bottom: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 260px;
+  max-width: calc(100vw - 30px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid #2b3b3e;
+  border-radius: 5px;
+  background: var(--ink);
+  color: #fff;
+  box-shadow: 0 12px 28px #17222940;
+  font-size: 12px;
+}
+.notice button {
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: none;
+  color: #fff;
+}

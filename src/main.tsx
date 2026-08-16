@@ -1,9 +1,9 @@
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
+import "./styles.css";
 import { App } from "./App";
 import { useAppStore } from "./store";
-import "./styles.css";
 
 function Bootstrap() {
   const initialize = useAppStore((state) => state.initialize);
