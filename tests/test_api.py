@@ -23,6 +23,19 @@ def test_auth_me_without_session():
 
 def test_project_pack_and_custom_template_lifecycle():
     client = authenticated_client()
+    templates = client.get("/api/templates")
+    assert templates.status_code == 200
+    assert [
+        (item["id"], item["name"], item["group"], item["ratio"], item["direction"])
+        for item in templates.json()
+        if not item["custom"]
+    ] == [
+        ("hero-image", "商品主图", "商品展示", "1:1", "干净背景、完整展示商品轮廓、视觉焦点明确。"),
+        ("lifestyle-scene", "生活场景", "场景展示", "4:5", "将商品置于真实使用环境，体现尺度、氛围和使用价值。"),
+        ("detail-macro", "核心细节", "细节展示", "4:5", "特写呈现材质、结构、纹理和标志性细节。"),
+        ("poster-banner", "卖点海报", "营销展示", "4:5", "突出商品，留出信息排版空间，适用于促销和传播。"),
+    ]
+
     created = client.post("/api/projects", json={
         "name": "Test campaign",
         "product": "Test product",
@@ -37,6 +50,7 @@ def test_project_pack_and_custom_template_lifecycle():
     template = client.post("/api/templates", json={"name": "Custom scene", "ratio": "4:5", "direction": "Natural afternoon light."})
     assert template.status_code == 200
     template_id = template.json()["id"]
+    assert any(item["id"] == template_id and item["custom"] for item in client.get("/api/templates").json())
 
     packed = client.post(f"/api/projects/{project_id}/pack", json={"kind": "amazon", "scene_template_ids": [template_id]})
     assert packed.status_code == 200

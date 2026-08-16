@@ -1,4 +1,4 @@
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useLayoutEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { client } from "../api";
 import { Shell } from "./Shell";
@@ -10,6 +10,12 @@ export function Templates() {
   const refresh = useAppStore((state) => state.refreshTemplates);
   const navigate = useNavigate();
   const [error, setError] = useState("");
+  const wallRef = useRef<HTMLDivElement>(null);
+  const tileRefs = useRef(new Map<string, HTMLButtonElement>());
+  const [masonry, setMasonry] = useState({
+    height: 0,
+    positions: {} as Record<string, { left: number; top: number }>,
+  });
   const guide: Record<string, [string, string, string]> = {
     "hero-image": [
       "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?auto=format&fit=crop&w=900&q=80",
@@ -88,6 +94,62 @@ export function Templates() {
       setError(reason instanceof Error ? reason.message : "保存失败");
     }
   }
+  useLayoutEffect(() => {
+    const wall = wallRef.current;
+    if (!wall) return;
+
+    let frame = 0;
+    const arrange = () => {
+      const columns = window.matchMedia("(max-width: 640px)").matches ? 1 : 3;
+      const gap = 16;
+      const heights = Array.from({ length: columns }, () => 0);
+      const positions: Record<string, { left: number; top: number }> = {};
+      const columnWidth = (wall.clientWidth - gap * (columns - 1)) / columns;
+
+      for (const item of templates) {
+        const tile = tileRefs.current.get(item.id);
+        if (!tile) continue;
+        const column = heights.reduce(
+          (shortest, height, index) =>
+            height < heights[shortest] ? index : shortest,
+          0,
+        );
+        positions[item.id] = {
+          left: column * (columnWidth + gap),
+          top: heights[column],
+        };
+        heights[column] += tile.offsetHeight + gap;
+      }
+
+      const height = Math.max(0, ...heights) - (templates.length ? gap : 0);
+      setMasonry((current) => {
+        const unchanged =
+          current.height === height &&
+          templates.every(
+            (item) =>
+              current.positions[item.id]?.left === positions[item.id]?.left &&
+              current.positions[item.id]?.top === positions[item.id]?.top,
+          );
+        return unchanged ? current : { height, positions };
+      });
+    };
+    const schedule = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(arrange);
+    };
+    const observer = new ResizeObserver(schedule);
+    observer.observe(wall);
+    tileRefs.current.forEach((tile) => observer.observe(tile));
+    window.addEventListener("resize", schedule);
+    schedule();
+
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+      window.removeEventListener("resize", schedule);
+    };
+  }, [templates]);
+
   return (
     <Shell>
       <div className="topbar">
@@ -127,14 +189,20 @@ export function Templates() {
           <button className="create-button">保存模板</button>
         </form>
         {error && <p className="form-error">{error}</p>}
-        <div className="template-wall">
+        <div className="template-wall" ref={wallRef} style={{ height: masonry.height }}>
           {templates.map((item) => {
             const direction = guide[item.id] || guide["hero-image"];
+            const position = masonry.positions[item.id];
             return (
               <button
                 className="template-tile"
                 onClick={() => navigate("/new")}
                 key={item.id}
+                ref={(tile) => {
+                  if (tile) tileRefs.current.set(item.id, tile);
+                  else tileRefs.current.delete(item.id);
+                }}
+                style={position ? { left: position.left, top: position.top } : undefined}
               >
                 <img
                   className="template-photo"
