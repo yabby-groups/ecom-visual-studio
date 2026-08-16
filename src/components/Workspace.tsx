@@ -109,6 +109,10 @@ export function Workspace() {
       ? 0
       : (elapsedSeconds % GENERATION_ESTIMATE_SECONDS) /
         GENERATION_ESTIMATE_SECONDS;
+  const showGenerationProgress =
+    isPending(asset?.status ?? "") &&
+    elapsedSeconds !== null &&
+    remainingSeconds !== null;
   async function updateAsset(patch: Partial<Asset>) {
     if (!asset) return;
     await client.updateAsset(asset.id, patch);
@@ -234,64 +238,59 @@ export function Workspace() {
               <div
                 className={`artboard ${displayedPath ? "with-image" : ""}`}
               >
-                {displayedPath ? (
+                {displayedPath && (
                   <img src={fileUrl(displayedPath)} alt={asset.title} />
-                ) : (
+                )}
+                {showGenerationProgress ? (
+                  <div
+                    className={`artboard-empty ${displayedPath ? "generation-overlay" : ""}`}
+                  >
+                    <Sparkles className="generation-sparkle" size={38} />
+                    <h3>正在构建画面</h3>
+                    <div
+                      className="generation-progress"
+                      role="progressbar"
+                      aria-label="生成预计进度"
+                      aria-valuemin={0}
+                      aria-valuemax={GENERATION_ESTIMATE_SECONDS}
+                      aria-valuenow={Math.floor(
+                        cycleProgress * GENERATION_ESTIMATE_SECONDS,
+                      )}
+                    >
+                      <i style={{ transform: `scaleX(${cycleProgress})` }} />
+                    </div>
+                    <p className="generation-timing">
+                      生成中 · 预计剩余 {formatDuration(remainingSeconds)} · 已用时 {elapsedSeconds} 秒
+                    </p>
+                    <p>确认右侧的创作方向后，开始生成第一版。</p>
+                  </div>
+                ) : !displayedPath ? (
                   <div className="artboard-empty">
-                    {isPending(asset.status) &&
-                    elapsedSeconds !== null &&
-                    remainingSeconds !== null ? (
-                      <>
-                        <Sparkles className="generation-sparkle" size={38} />
-                        <h3>正在构建画面</h3>
-                        <div
-                          className="generation-progress"
-                          role="progressbar"
-                          aria-label="生成预计进度"
-                          aria-valuemin={0}
-                          aria-valuemax={GENERATION_ESTIMATE_SECONDS}
-                          aria-valuenow={Math.floor(
-                            cycleProgress * GENERATION_ESTIMATE_SECONDS,
-                          )}
-                        >
-                          <i
-                            style={{ transform: `scaleX(${cycleProgress})` }}
-                          />
-                        </div>
-                        <p className="generation-timing">
-                          生成中 · 预计剩余 {formatDuration(remainingSeconds)} · 已用时 {elapsedSeconds} 秒
-                        </p>
-                        <p>确认右侧的创作方向后，开始生成第一版。</p>
-                      </>
+                    {isPending(asset.status) ? (
+                      <LoaderCircle className="spin" size={36} />
                     ) : (
-                      <>
-                        {isPending(asset.status) ? (
-                          <LoaderCircle className="spin" size={36} />
-                        ) : (
-                          <ImagePlus size={38} />
-                        )}
-                        <h3>
-                          {isPending(asset.status)
-                            ? statusText(asset.status)
-                            : "这个画面还未生成"}
-                        </h3>
-                        <p>
-                          {asset.status.startsWith("failed")
-                            ? asset.status
-                            : "确认右侧的创作方向后，开始生成第一版。"}
-                        </p>
-                        {!isPending(asset.status) && (
-                          <button
-                            className="button primary"
-                            onClick={() => void generate()}
-                          >
-                            生成第一版
-                          </button>
-                        )}
-                      </>
+                      <ImagePlus size={38} />
+                    )}
+                    <h3>
+                      {isPending(asset.status)
+                        ? statusText(asset.status)
+                        : "这个画面还未生成"}
+                    </h3>
+                    <p>
+                      {asset.status.startsWith("failed")
+                        ? asset.status
+                        : "确认右侧的创作方向后，开始生成第一版。"}
+                    </p>
+                    {!isPending(asset.status) && (
+                      <button
+                        className="button primary"
+                        onClick={() => void generate()}
+                      >
+                        生成第一版
+                      </button>
                     )}
                   </div>
-                )}
+                ) : null}
               </div>
               <div className="variant-strip" aria-label="画面版本">
                 <span>版本</span>
