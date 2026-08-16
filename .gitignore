@@ -5,3 +5,5 @@ dist/
 storage/
 __pycache__/
 .pytest_cache/
+.devenv/
+devenv.local.nix
