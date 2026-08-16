@@ -371,13 +371,13 @@ def generate_asset(asset_id: str) -> None:
         expected_width, expected_height = image_size_for_ratio(asset["ratio"])
         payload = json.dumps({"model": config["image_model"], "prompt": asset["prompt"], "size": f"{expected_width}x{expected_height}", "n": 1}).encode()
         request = Request(f"{config['base']}/images/generations", data=payload, headers={"Authorization": f"Bearer {config['key']}", "Content-Type": "application/json"}, method="POST")
-        with urlopen(request, timeout=180) as response:
+        with urlopen(request, timeout=300) as response:
             result = json.loads(response.read().decode())
         image = (result.get("data") or [{}])[0]
         if image.get("b64_json"):
             image_bytes = base64.b64decode(image["b64_json"], validate=True)
         elif image.get("url"):
-            with urlopen(Request(image["url"], headers={"User-Agent": "EcomVisualStudio/1.0"}), timeout=90) as response:
+            with urlopen(Request(image["url"], headers={"User-Agent": "EcomVisualStudio/1.0"}), timeout=300) as response:
                 image_bytes = response.read()
         else:
             raise ValueError("图像服务没有返回图片")

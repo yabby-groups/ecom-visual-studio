@@ -18,7 +18,7 @@ import type { Asset, Project } from "../types";
 import { fileUrl, isPending, statusText } from "../utils/assets";
 import "./Workspace.css";
 
-const GENERATION_ESTIMATE_SECONDS = 60;
+const GENERATION_ESTIMATE_SECONDS = 300;
 
 function formatDuration(seconds: number) {
   const minutes = Math.floor(seconds / 60);
