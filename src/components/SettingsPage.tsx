@@ -11,9 +11,13 @@ export function SettingsPage() {
   > | null>(null);
   const [models, setModels] = useState<{ id: string; name: string }[]>([]);
   const [notice, setNotice] = useState("");
+  const imageModels = models.filter((model) =>
+    model.id.startsWith("gpt-image-"),
+  );
   useEffect(() => {
-    void Promise.all([client.tokenSettings(), client.models()])
-      .then(([next, items]) => {
+    void client.models()
+      .then(async (items) => {
+        const next = await client.tokenSettings();
         setSettings(next);
         setModels(items.models);
       })
@@ -30,6 +34,7 @@ export function SettingsPage() {
         </div>
       </Shell>
     );
+  const modelsReady = models.length > 0;
   return (
     <Shell>
       <div className="topbar">
@@ -89,8 +94,18 @@ export function SettingsPage() {
               ].map(([name, label, value]) => (
                 <label key={name}>
                   {label}
-                  <select name={name} defaultValue={value}>
-                    {models.map((model) => (
+                  <select
+                    name={name}
+                    defaultValue={
+                      name === "image_model" &&
+                      !imageModels.some((model) => model.id === value)
+                        ? imageModels[0]?.id || ""
+                        : value
+                    }
+                    disabled={!modelsReady}
+                  >
+                    {!modelsReady && <option value="">暂无可用模型</option>}
+                    {(name === "image_model" ? imageModels : models).map((model) => (
                       <option value={model.id} key={model.id}>
                         {model.name}
                       </option>
@@ -100,7 +115,7 @@ export function SettingsPage() {
               ))}
             </div>
           </section>
-          <button className="create-button">
+          <button className="create-button" disabled={!modelsReady}>
             <Settings size={18} />
             保存配置
           </button>

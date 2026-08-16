@@ -9,6 +9,7 @@ import os
 import secrets
 import shutil
 import sqlite3
+import struct
 import time
 import uuid
 from pathlib import Path
@@ -29,6 +30,9 @@ GENERATED = DATA / "generated"
 DB = DATA / "workspace.db"
 SESSION_TTL = 60 * 60 * 24 * 14
 MAX_UPLOAD = 15 * 1024 * 1024
+TARGET_SHORT_EDGE = 1024
+MAX_LONG_EDGE = 1536
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
 TEMPLATES = [
     ("hero-image", "商品主图", "商品展示", "1:1", "干净背景、完整展示商品轮廓、视觉焦点明确。"),
@@ -116,7 +120,7 @@ def init_db() -> None:
       create table if not exists sessions (id text primary key, user_id text not null, expires_at integer not null);
       create table if not exists settings (user_id text primary key, token_id text, image_model text, text_model text, chat_model text);
       create table if not exists tokens (user_id text not null, id text not null, name text not null, secret text not null, masked text, status integer not null default 1, today_cost text, total_cost text, primary key(user_id, id));
-      create table if not exists models (user_id text not null, id text not null, name text not null, primary key(user_id, id));
+      create table if not exists models (user_id text not null, id text not null, name text not null, alias text, primary key(user_id, id));
       create table if not exists projects (id text primary key, user_id text not null, name text not null, product text not null, description text, benefits text, color text, reference text, created_at integer not null);
       create table if not exists assets (id text primary key, project_id text not null, title text not null, template text not null, ratio text not null, prompt text not null, status text not null, file_path text, generation_started_at integer, created_at integer not null);
       create table if not exists asset_versions (id text primary key, asset_id text not null, file_path text not null, created_at integer not null, unique(asset_id, file_path));
@@ -125,6 +129,9 @@ def init_db() -> None:
     asset_columns = {row["name"] for row in connection.execute("pragma table_info(assets)")}
     if "generation_started_at" not in asset_columns:
         connection.execute("alter table assets add column generation_started_at integer")
+    model_columns = {row["name"] for row in connection.execute("pragma table_info(models)")}
+    if "alias" not in model_columns:
+        connection.execute("alter table models add column alias text")
     backfill_asset_versions(connection)
     connection.execute("update assets set status='failed: 服务在生成期间重启，请重新发起任务' where status in ('queued', 'prompting', 'generating')")
     connection.commit()
@@ -235,10 +242,34 @@ def make_prompt(project: dict[str, Any], title: str, direction: str) -> str:
     return f"E-commerce commercial image. Purpose: {title}. Art direction: {direction}. Product: {project['product']}. Description: {project['description']}. Benefits: {project['benefits']}. Campaign Style Lock: brand accent {project['color']}, premium commercial lighting, clean composition and conversion focus. Preserve exact product identity from the supplied reference. Leave intentional whitespace. No watermark, unrelated products, fake logo or unreadable extra text."
 
 
+def parse_huabot_models(raw_models: dict[str, Any]) -> list[dict[str, str]]:
+    items = raw_models.get("models") or raw_models.get("data") or []
+    return [
+        {
+            "id": str(item.get("id") or item.get("uuid") or item["alias"]),
+            "name": str(item.get("title") or item["alias"]),
+            "alias": str(item["alias"]),
+        }
+        for item in items
+        if isinstance(item, dict) and item.get("alias")
+    ]
+
+
+def huabot_models() -> list[dict[str, str]]:
+    web_base = env().get("HUABOT_WEB_BASE_URL", "https://www.huabot.com").rstrip("/")
+    try:
+        with urlopen(Request(f"{web_base}/api/token_base/model/list/?size=500&offset=0&enabled=1"), timeout=30) as response:
+            models = parse_huabot_models(json.loads(response.read().decode()))
+    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as error:
+        raise ValueError(f"无法读取 huabot 模型列表：{error}") from error
+    if not models:
+        raise ValueError("huabot 没有返回可用模型")
+    return models
+
+
 def huabot_login(name: str, password: str, totp_code: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     values = env()
     base = (values.get("HUABOT_BASE_URL") or values.get("IMG_BASE_URL") or "https://huabot.com").removesuffix("/v1").rstrip("/")
-    web_base = values.get("HUABOT_WEB_BASE_URL", "https://www.huabot.com").rstrip("/")
 
     def call(path: str, data: Optional[dict[str, str]] = None, bearer: str = "", form: bool = False) -> dict[str, Any]:
         from urllib.parse import urlencode
@@ -273,10 +304,7 @@ def huabot_login(name: str, password: str, totp_code: str) -> tuple[list[dict[st
         key = next((str(token.get(field)) for field in ("token_key", "token", "key", "api_key", "secret") if token.get(field)), "")
         if key:
             tokens.append({"id": str(token.get("id") or token.get("uuid") or index), "name": str(token.get("token_name") or token.get("name") or f"Token {index + 1}"), "key": key, "masked": str(token.get("token_key_masked") or ""), "status": int(token.get("status", 1)), "today_cost": str(token.get("today_used_cost") or "0"), "total_cost": str(token.get("total_used_cost") or "0")})
-    with urlopen(Request(f"{web_base}/api/token_base/model/list/?size=500&offset=0&enabled=1", headers={"Authorization": f"Bearer {bearer}"}), timeout=30) as response:
-        raw_models = json.loads(response.read().decode())
-    items = raw_models.get("models") or raw_models.get("data") or []
-    models = [{"id": str(item.get("model") or item.get("model_name") or item.get("id")), "name": str(item.get("model_name") or item.get("model") or item.get("name") or item.get("id"))} for item in items if isinstance(item, dict) and (item.get("model") or item.get("model_name") or item.get("id"))]
+    models = huabot_models()
     if not tokens or not models:
         raise ValueError("huabot 没有返回可用 Token 或模型")
     return tokens, models
@@ -292,6 +320,32 @@ def user_config(user_id: str) -> dict[str, str]:
     return {"base": (values.get("HUABOT_BASE_URL") or values.get("IMG_BASE_URL") or "").rstrip("/"), "key": decrypt(row["secret"]), "image_model": row["image_model"] or "gpt-image-2", "text_model": row["text_model"] or "gpt-5.6-luna", "chat_model": row["chat_model"] or "gpt-5.6-luna"}
 
 
+def image_size_for_ratio(ratio: str) -> tuple[int, int]:
+    try:
+        width_text, height_text = ratio.split(":", 1)
+        ratio_width, ratio_height = int(width_text), int(height_text)
+    except ValueError as error:
+        raise ValueError(f"不支持的画面比例: {ratio}") from error
+    if ratio_width < 1 or ratio_height < 1:
+        raise ValueError(f"不支持的画面比例: {ratio}")
+    scale = min(
+        TARGET_SHORT_EDGE // min(ratio_width, ratio_height),
+        MAX_LONG_EDGE // max(ratio_width, ratio_height),
+    )
+    if scale < 1:
+        raise ValueError(f"不支持的画面比例: {ratio}")
+    return ratio_width * scale, ratio_height * scale
+
+
+def png_dimensions(image_bytes: bytes) -> tuple[int, int]:
+    if image_bytes[:8] != PNG_SIGNATURE or image_bytes[12:16] != b"IHDR":
+        raise ValueError("图像服务没有返回 PNG 图片")
+    width, height = struct.unpack(">II", image_bytes[16:24])
+    if width < 1 or height < 1:
+        raise ValueError("图像服务返回的 PNG 尺寸无效")
+    return width, height
+
+
 def generate_asset(asset_id: str) -> None:
     connection = db()
     asset = connection.execute("select a.*, p.user_id, p.product, p.description, p.benefits, p.color, p.reference from assets a join projects p on p.id=a.project_id where a.id=?", (asset_id,)).fetchone()
@@ -304,22 +358,28 @@ def generate_asset(asset_id: str) -> None:
         config = user_config(asset["user_id"])
         if not config["base"]:
             raise ValueError("请设置 HUABOT_BASE_URL 或 IMG_BASE_URL")
-        size = {"1:1": "1024x1024", "4:5": "1024x1536", "2:3": "1024x1536", "16:9": "1536x1024"}.get(asset["ratio"], "1024x1024")
-        payload = json.dumps({"model": config["image_model"], "prompt": asset["prompt"], "size": size, "n": 1}).encode()
+        if not config["image_model"].startswith("gpt-image-"):
+            raise ValueError("图像生成模型必须是 GPT Image 模型")
+        expected_width, expected_height = image_size_for_ratio(asset["ratio"])
+        payload = json.dumps({"model": config["image_model"], "prompt": asset["prompt"], "size": f"{expected_width}x{expected_height}", "n": 1}).encode()
         request = Request(f"{config['base']}/images/generations", data=payload, headers={"Authorization": f"Bearer {config['key']}", "Content-Type": "application/json"}, method="POST")
         with urlopen(request, timeout=180) as response:
             result = json.loads(response.read().decode())
         image = (result.get("data") or [{}])[0]
+        if image.get("b64_json"):
+            image_bytes = base64.b64decode(image["b64_json"], validate=True)
+        elif image.get("url"):
+            with urlopen(Request(image["url"], headers={"User-Agent": "EcomVisualStudio/1.0"}), timeout=90) as response:
+                image_bytes = response.read()
+        else:
+            raise ValueError("图像服务没有返回图片")
+        actual_width, actual_height = png_dimensions(image_bytes)
+        if actual_width * expected_height != actual_height * expected_width:
+            raise ValueError(f"图像服务返回比例 {actual_width}:{actual_height}，但请求的是 {asset['ratio']}")
         target_dir = GENERATED / asset["project_id"]
         target_dir.mkdir(parents=True, exist_ok=True)
         target = target_dir / f"{asset_id}-{uuid.uuid4().hex[:8]}.png"
-        if image.get("b64_json"):
-            target.write_bytes(base64.b64decode(image["b64_json"]))
-        elif image.get("url"):
-            with urlopen(Request(image["url"], headers={"User-Agent": "EcomVisualStudio/1.0"}), timeout=90) as response:
-                shutil.copyfileobj(response, target.open("wb"))
-        else:
-            raise ValueError("图像服务没有返回图片")
+        target.write_bytes(image_bytes)
         file_path = str(target.relative_to(DATA))
         connection.execute("insert into asset_versions values(?,?,?,?)", (uuid.uuid4().hex, asset_id, file_path, int(time.time())))
         connection.execute("update assets set status='ready', file_path=? where id=?", (file_path, asset_id))
@@ -360,6 +420,7 @@ def login(body: Credentials, response: Response) -> dict[str, Any]:
         connection.execute("insert into users values(?,?,?,?)", (user_id, body.name, password_hash(secrets.token_urlsafe(32)), int(time.time())))
     else:
         user_id = user["id"]
+    previous_settings = connection.execute("select * from settings where user_id=?", (user_id,)).fetchone()
     connection.execute("delete from tokens where user_id=?", (user_id,))
     connection.execute("delete from models where user_id=?", (user_id,))
     try:
@@ -369,9 +430,17 @@ def login(body: Credentials, response: Response) -> dict[str, Any]:
         connection.close()
         raise HTTPException(400, str(error)) from error
     for model in models:
-        connection.execute("insert into models values(?,?,?)", (user_id, model["id"], model["name"]))
+        connection.execute("insert into models(user_id,id,name,alias) values(?,?,?,?)", (user_id, model["id"], model["name"], model["alias"]))
     active = tokens[0]
-    connection.execute("insert into settings(user_id,token_id,image_model,text_model,chat_model) values(?,?,?,?,?) on conflict(user_id) do update set token_id=excluded.token_id", (user_id, active["id"], "gpt-image-2", "gpt-5.6-luna", "gpt-5.6-luna"))
+    def selected_alias(field: str, fallback: str) -> str:
+        value = previous_settings[field] if previous_settings else fallback
+        match = next((model for model in models if value in {model["id"], model["name"], model["alias"]}), None)
+        return match["alias"] if match else models[0]["alias"]
+    connection.execute(
+        "insert into settings(user_id,token_id,image_model,text_model,chat_model) values(?,?,?,?,?) "
+        "on conflict(user_id) do update set token_id=excluded.token_id,image_model=excluded.image_model,text_model=excluded.text_model,chat_model=excluded.chat_model",
+        (user_id, active["id"], selected_alias("image_model", "gpt-image-2"), selected_alias("text_model", "gpt-5.6-luna"), selected_alias("chat_model", "gpt-5.6-luna")),
+    )
     session_id = uuid.uuid4().hex
     connection.execute("insert into sessions values(?,?,?)", (session_id, user_id, int(time.time()) + SESSION_TTL))
     connection.commit()
@@ -398,8 +467,29 @@ def tokens(session: Optional[str] = Cookie(default=None)) -> dict[str, Any]:
 
 @app.get("/api/huabot/models")
 def models(session: Optional[str] = Cookie(default=None)) -> dict[str, Any]:
-    user = require_user(session); connection = db(); rows = connection.execute("select id,name from models where user_id=? order by name", (user["id"],)).fetchall(); connection.close()
-    return {"models": [dict(row) for row in rows]}
+    user = require_user(session); connection = db()
+    try:
+        refreshed_models = huabot_models()
+    except ValueError as error:
+        connection.close()
+        raise HTTPException(502, str(error)) from error
+    refreshed_models.sort(key=lambda model: model["name"])
+    previous_settings = connection.execute("select * from settings where user_id=?", (user["id"],)).fetchone()
+    connection.execute("delete from models where user_id=?", (user["id"],))
+    for model in refreshed_models:
+        connection.execute("insert into models(user_id,id,name,alias) values(?,?,?,?)", (user["id"], model["id"], model["name"], model["alias"]))
+    if previous_settings:
+        def selected_alias(field: str, fallback: str) -> str:
+            value = previous_settings[field] or fallback
+            match = next((model for model in refreshed_models if value in {model["id"], model["name"], model["alias"]}), None)
+            return match["alias"] if match else refreshed_models[0]["alias"]
+        connection.execute(
+            "update settings set image_model=?,text_model=?,chat_model=? where user_id=?",
+            (selected_alias("image_model", "gpt-image-2"), selected_alias("text_model", "gpt-5.6-luna"), selected_alias("chat_model", "gpt-5.6-luna"), user["id"]),
+        )
+    connection.commit()
+    connection.close()
+    return {"models": [{"id": model["alias"], "name": model["name"]} for model in refreshed_models]}
 
 
 @app.post("/api/settings")
@@ -408,6 +498,17 @@ def update_settings(body: SettingsInput, session: Optional[str] = Cookie(default
     exists = connection.execute("select 1 from tokens where user_id=? and id=? and status=1", (user["id"], body.token_id)).fetchone()
     if not exists:
         connection.close(); raise HTTPException(400, "请选择可用 Token")
+    available_models = {
+        row["alias"]
+        for row in connection.execute(
+            "select alias from models where user_id=? and alias is not null and alias != ''",
+            (user["id"],),
+        )
+    }
+    if not all(model in available_models for model in (body.image_model, body.text_model, body.chat_model)):
+        connection.close(); raise HTTPException(400, "请选择当前账号可用的模型")
+    if not body.image_model.startswith("gpt-image-"):
+        connection.close(); raise HTTPException(400, "图像生成模型必须是 GPT Image 模型")
     connection.execute("insert into settings values(?,?,?,?,?) on conflict(user_id) do update set token_id=excluded.token_id,image_model=excluded.image_model,text_model=excluded.text_model,chat_model=excluded.chat_model", (user["id"], body.token_id, body.image_model, body.text_model, body.chat_model)); connection.commit(); connection.close()
     return {"ok": True}
 
