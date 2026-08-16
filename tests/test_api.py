@@ -22,6 +22,49 @@ def test_auth_me_without_session():
         assert client.get("/api/auth/me").json() == {"user": None}
 
 
+def test_latest_creation_returns_only_the_users_newest_version():
+    client = authenticated_client()
+    connection = db()
+    project_ids = ("latest-project", "older-project", "other-project")
+    try:
+        connection.execute(
+            "delete from asset_versions where asset_id in (select id from assets where project_id in (?,?,?))",
+            project_ids,
+        )
+        connection.execute("delete from assets where project_id in (?,?,?)", project_ids)
+        connection.execute("delete from projects where id in (?,?,?)", project_ids)
+        connection.execute("insert or ignore into users values(?,?,?,?)", ("other-user", "other-user", "hash", 1))
+        connection.execute("insert into projects values(?,?,?,?,?,?,?,?,?)", ("latest-project", "test-user", "Latest", "Product", "", "", "", "", 1))
+        connection.execute("insert into projects values(?,?,?,?,?,?,?,?,?)", ("older-project", "test-user", "Older", "Product", "", "", "", "", 1))
+        connection.execute("insert into projects values(?,?,?,?,?,?,?,?,?)", ("other-project", "other-user", "Other", "Product", "", "", "", "", 1))
+        connection.execute("insert into assets (id,project_id,title,template,ratio,prompt,status,file_path,created_at) values(?,?,?,?,?,?,?,?,?)", ("latest-asset", "latest-project", "Latest image", "hero-image", "1:1", "", "ready", "generated/latest.png", 1))
+        connection.execute("insert into assets (id,project_id,title,template,ratio,prompt,status,file_path,created_at) values(?,?,?,?,?,?,?,?,?)", ("older-asset", "older-project", "Older image", "hero-image", "1:1", "", "ready", "generated/older.png", 1))
+        connection.execute("insert into assets (id,project_id,title,template,ratio,prompt,status,file_path,created_at) values(?,?,?,?,?,?,?,?,?)", ("other-asset", "other-project", "Other image", "hero-image", "1:1", "", "ready", "generated/other.png", 1))
+        connection.execute("insert into asset_versions values(?,?,?,?)", ("latest-version", "latest-asset", "generated/latest.png", 4_100_000_000))
+        connection.execute("insert into asset_versions values(?,?,?,?)", ("older-version", "older-asset", "generated/older.png", 4_000_000_000))
+        connection.execute("insert into asset_versions values(?,?,?,?)", ("other-version", "other-asset", "generated/other.png", 4_200_000_000))
+        connection.commit()
+
+        response = client.get("/api/creations/latest")
+
+        assert response.status_code == 200
+        assert response.json() == {"creation": {"project_id": "latest-project", "title": "Latest image", "file_path": "generated/latest.png", "created_at": 4_100_000_000}}
+    finally:
+        connection.execute(
+            "delete from asset_versions where asset_id in (select id from assets where project_id in (?,?,?))",
+            project_ids,
+        )
+        connection.execute("delete from assets where project_id in (?,?,?)", project_ids)
+        connection.execute("delete from projects where id in (?,?,?)", project_ids)
+        connection.commit()
+        connection.close()
+
+
+def test_latest_creation_requires_authentication():
+    with TestClient(app) as client:
+        assert client.get("/api/creations/latest").status_code == 401
+
+
 def test_project_pack_and_custom_template_lifecycle():
     client = authenticated_client()
     templates = client.get("/api/templates")

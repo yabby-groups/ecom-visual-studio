@@ -1,5 +1,9 @@
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { client } from "../api";
 import { useAppStore } from "../store";
+import type { LatestCreation } from "../types";
+import { fileUrl } from "../utils/assets";
 import { ProjectCard } from "./ProjectCard";
 import { Shell } from "./Shell";
 import "./Home.css";
@@ -7,6 +11,21 @@ import "./Home.css";
 export function Home() {
   const projects = useAppStore((state) => state.projects);
   const navigate = useNavigate();
+  const [latestCreation, setLatestCreation] = useState<LatestCreation | null>(null);
+  useEffect(() => {
+    let active = true;
+    void client
+      .latestCreation()
+      .then(({ creation }) => {
+        if (active) setLatestCreation(creation);
+      })
+      .catch(() => {
+        if (active) setLatestCreation(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
   const shortcuts = [
     ["商品主图", "干净陈列，立即适配商城"],
     ["品牌海报", "围绕活动主题建立视觉"],
@@ -43,10 +62,21 @@ export function Home() {
             </div>
           </div>
           <div className="hero-visual">
-            <div className="visual-empty">
-              <span>商品视觉</span>
-              <b>从一张参考图开始</b>
-            </div>
+            {latestCreation ? (
+              <button
+                className="hero-art"
+                type="button"
+                onClick={() => navigate(`/projects/${latestCreation.project_id}`)}
+                aria-label={`继续编辑 ${latestCreation.title}`}
+              >
+                <img src={fileUrl(latestCreation.file_path)} alt={latestCreation.title} />
+              </button>
+            ) : (
+              <div className="visual-empty">
+                <span>商品视觉</span>
+                <b>从一张参考图开始</b>
+              </div>
+            )}
           </div>
         </section>
         <section className="shortcut-section">

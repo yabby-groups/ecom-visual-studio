@@ -1,6 +1,7 @@
 import type {
   Asset,
   Model,
+  LatestCreation,
   Project,
   Template,
   TokenSettings,
@@ -43,6 +44,8 @@ export const client = {
     api<{ user: User }>("auth/login", { method: "POST", body }),
   logout: () => api("auth/logout", { method: "POST" }),
   projects: () => api<Project[]>("projects"),
+  latestCreation: () =>
+    api<{ creation: LatestCreation | null }>("creations/latest"),
   project: (id: string) => api<Project>(`projects/${id}`),
   createProject: (
     body: Omit<Project, "id" | "user_id" | "created_at" | "assets">,

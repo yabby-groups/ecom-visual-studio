@@ -7,6 +7,12 @@ export type AssetVersion = {
   file_path: string;
   created_at: number;
 };
+export type LatestCreation = {
+  project_id: string;
+  title: string;
+  file_path: string;
+  created_at: number;
+};
 export type Asset = {
   id: string;
   project_id: string;

@@ -418,6 +418,22 @@ def projects(session: Optional[str] = Cookie(default=None)) -> list[dict[str, An
     return [dict(row) for row in rows]
 
 
+@app.get("/api/creations/latest")
+def latest_creation(session: Optional[str] = Cookie(default=None)) -> dict[str, Any]:
+    user = require_user(session); connection = db()
+    row = connection.execute(
+        "select av.file_path, av.created_at, a.title, p.id as project_id "
+        "from asset_versions av "
+        "join assets a on a.id=av.asset_id "
+        "join projects p on p.id=a.project_id "
+        "where p.user_id=? "
+        "order by av.created_at desc, av.id desc limit 1",
+        (user["id"],),
+    ).fetchone()
+    connection.close()
+    return {"creation": dict(row) if row else None}
+
+
 @app.post("/api/projects")
 def create_project(body: ProjectInput, session: Optional[str] = Cookie(default=None)) -> dict[str, str]:
     user = require_user(session); project_id = uuid.uuid4().hex; connection = db()
