@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   Copy,
@@ -24,6 +24,7 @@ export function Workspace() {
   const [assetId, setAssetId] = useState("");
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
+  const promptRef = useRef<HTMLTextAreaElement>(null);
   async function load() {
     try {
       const next = await client.project(id);
@@ -73,6 +74,16 @@ export function Workspace() {
       setNotice(reason instanceof Error ? reason.message : "生成失败");
     }
   }
+  async function rebuildPrompt() {
+    if (!asset) return;
+    try {
+      const result = await client.resetPrompt(asset.id);
+      await updateAsset({ prompt: result.prompt });
+      setNotice("已生成提示词");
+    } catch (reason) {
+      setNotice(reason instanceof Error ? reason.message : "生成提示词失败");
+    }
+  }
   return (
     <Shell>
       <div className="workspace-header">
@@ -81,7 +92,7 @@ export function Workspace() {
           创作台
         </button>
         <div>
-          <span className="eyebrow">PRODUCT VISUAL SERIES</span>
+          <span className="eyebrow">E-commerce visuals</span>
           <h1>{project.name}</h1>
         </div>
         <button
@@ -125,20 +136,27 @@ export function Workspace() {
             <section className="stage">
               <header>
                 <div>
-                  <span className="eyebrow">{asset.template}</span>
                   <h2>{asset.title}</h2>
                 </div>
                 <div>
                   <button
                     className="button secondary"
-                    onClick={async () => {
-                      const result = await client.resetPrompt(asset.id);
-                      await updateAsset({ prompt: result.prompt });
-                      setNotice("已按模板重建 Prompt");
-                    }}
+                    onClick={() => void rebuildPrompt()}
                   >
                     <WandSparkles size={16} />
-                    重建 Prompt
+                    生成提示词
+                  </button>
+                  <button
+                    className="button secondary"
+                    onClick={() =>
+                      setNotice(
+                        asset.prompt.trim().length >= 20
+                          ? "Prompt 检查完成"
+                          : "Prompt 内容过短，请先生成提示词",
+                      )
+                    }
+                  >
+                    Prompt 检查
                   </button>
                   <button
                     className="button primary"
@@ -185,6 +203,31 @@ export function Workspace() {
                   </div>
                 )}
               </div>
+              <div className="variant-strip" aria-label="画面版本">
+                <span>版本</span>
+                {asset.file_path ? (
+                  <>
+                    <span className="variant active">
+                    <img src={fileUrl(asset.file_path)} alt="当前版本" />
+                    <b>当前</b>
+                    </span>
+                    <button
+                      className="add-variant"
+                      type="button"
+                      onClick={() => void generate()}
+                      aria-label="创建新版本"
+                    >
+                      +
+                    </button>
+                  </>
+                ) : (
+                  <span className="variant empty">
+                    {isPending(asset.status)
+                      ? statusText(asset.status)
+                      : "等待第一版"}
+                  </span>
+                )}
+              </div>
             </section>
             <aside className="controls">
               <div className="controls-head">
@@ -224,7 +267,7 @@ export function Workspace() {
                 <i style={{ background: project.color }} />
                 <div>
                   <b>品牌风格已锁定</b>
-                  <span>商业光线 · 干净留白</span>
+                  <span>柔和棚拍光 · 干净留白</span>
                 </div>
               </div>
               <label>
@@ -232,6 +275,7 @@ export function Workspace() {
                 <textarea
                   defaultValue={asset.prompt}
                   key={asset.id}
+                  ref={promptRef}
                   onBlur={(event) =>
                     void updateAsset({ prompt: event.target.value })
                   }
@@ -240,10 +284,13 @@ export function Workspace() {
               </label>
               <button
                 className="button secondary"
-                onClick={() => void navigator.clipboard.writeText(asset.prompt)}
+                onClick={() => {
+                  void updateAsset({ prompt: promptRef.current?.value ?? asset.prompt });
+                  setNotice("创作控制已保存");
+                }}
               >
                 <Copy size={16} />
-                复制 Prompt
+                保存创作控制
               </button>
             </aside>
           </>

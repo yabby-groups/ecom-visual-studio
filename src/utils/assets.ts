@@ -1,6 +1,6 @@
 export const statusText = (status: string) =>
   ({
-    draft: "未生成",
+    draft: "draft",
     queued: "等待队列",
     prompting: "生成提示词",
     generating: "正在生成",
