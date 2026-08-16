@@ -413,17 +413,19 @@
 }
 .creation-form .reference-picker {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 16px;
+  grid-template-columns: minmax(0, 1.08fr) minmax(250px, 0.92fr);
+  gap: 0;
   margin: 16px 0 30px;
-  border: 0;
-}
-.creation-form .reference-preview {
-  position: relative;
-  height: 252px;
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 18px;
+  background: rgba(4, 8, 24, 0.2);
+}
+.creation-form .reference-preview {
+  position: relative;
+  min-height: 258px;
+  overflow: hidden;
+  border-right: 1px solid var(--line);
   background: #0b1024;
 }
 .creation-form .reference-preview img {
@@ -436,44 +438,108 @@
   display: grid;
   height: 100%;
   place-content: center;
-  gap: 8px;
-  padding: 24px;
+  justify-items: center;
+  gap: 9px;
+  padding: 26px;
   color: #c9d2e8;
   text-align: center;
 }
+.creation-form .reference-empty-icon {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  border: 1px solid rgba(159, 240, 217, 0.38);
+  border-radius: 14px;
+  background: rgba(68, 221, 183, 0.1);
+  color: #9ff0d9;
+}
 .creation-form .reference-empty b {
   color: #fff;
-  font-size: 14px;
+  font-size: 15px;
 }
 .creation-form .reference-empty span {
   color: #c4cde0;
   font-size: 12px;
   line-height: 1.55;
 }
-.creation-form .reference-options {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 16px;
+.creation-form .reference-ready {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  padding: 5px 9px;
+  border: 1px solid rgba(159, 240, 217, 0.4);
+  border-radius: 999px;
+  background: rgba(4, 8, 24, 0.7);
+  color: #b4ffe9;
+  font-size: 11px;
+  font-weight: 700;
 }
-.creation-form .upload-choice,
-.creation-form .url-choice {
+.creation-form .reference-input-panel {
   display: grid;
   align-content: center;
-  min-height: 152px;
-  padding: 20px;
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  background: rgba(4, 8, 24, 0.2);
+  gap: 14px;
+  padding: 22px;
 }
-.creation-form .upload-choice {
+.creation-form .reference-panel-heading {
+  display: grid;
+  gap: 4px;
+}
+.creation-form .reference-panel-heading > span {
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+}
+.creation-form .reference-panel-heading small,
+.creation-form .reference-url-form > small {
+  color: #aebad3;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.creation-form .reference-source-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  padding: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 12px;
+  background: rgba(4, 8, 24, 0.42);
+}
+.creation-form .reference-source-tabs button {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #b7c2d9;
+  font-size: 11px;
+  font-weight: 700;
+}
+.creation-form .reference-source-tabs button.active {
+  background: rgba(68, 221, 183, 0.16);
+  color: #b4ffe9;
+}
+.creation-form .reference-upload-zone {
   position: relative;
+  display: grid;
+  min-height: 108px;
+  place-content: center;
+  justify-items: center;
+  gap: 6px;
+  padding: 16px;
+  border: 1px dashed rgba(159, 240, 217, 0.55);
+  border-radius: 14px;
+  background: rgba(68, 221, 183, 0.07);
+  color: #9ff0d9;
   cursor: pointer;
 }
-.creation-form .upload-choice:hover {
+.creation-form .reference-upload-zone:hover {
   border-color: var(--accent);
-  background: rgba(68, 221, 183, 0.1);
+  background: rgba(68, 221, 183, 0.13);
 }
-.creation-form .upload-choice input {
+.creation-form .reference-upload-zone input {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -482,48 +548,51 @@
   clip-path: inset(50%);
   white-space: nowrap;
 }
-.creation-form .upload-choice b,
-.creation-form .url-choice b {
+.creation-form .reference-upload-zone b {
   color: #fff;
-  font-size: 17px;
-  line-height: 1.35;
-}
-.creation-form .upload-choice small,
-.creation-form .url-choice small {
-  margin-top: 5px;
-  color: #c4cde0;
   font-size: 13px;
-  line-height: 1.5;
 }
-.creation-form .url-choice > div {
+.creation-form .reference-upload-zone small {
+  color: #bbcae0;
+  font-size: 11px;
+}
+.creation-form .reference-url-form {
+  display: grid;
+  gap: 7px;
+}
+.creation-form .reference-url-form > label {
+  color: #dce4f3;
+  font-size: 12px;
+}
+.creation-form .reference-url-form > div {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 0;
-  min-width: 0;
-  min-height: 42px;
-  margin-top: 8px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.25);
   border-radius: 12px;
   background: rgba(5, 8, 24, 0.35);
 }
-.creation-form .url-choice input {
+.creation-form .reference-url-form input {
   min-width: 0;
   height: 42px;
   border: 0;
   border-radius: 11px 0 0 11px;
   background: transparent;
 }
-.creation-form .url-choice button {
+.creation-form .reference-url-form button {
+  display: grid;
   min-width: 64px;
-  height: 42px;
+  place-items: center;
   border: 0;
   border-left: 1px solid rgba(8, 37, 31, 0.2);
   border-radius: 0 11px 11px 0;
   background: var(--accent);
   color: #08251f;
-  box-shadow: none;
   font-weight: 800;
+}
+.creation-form .reference-url-form button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 .creation-form .goal-grid {
   gap: 12px;
@@ -707,12 +776,15 @@
     max-width: none;
   }
   .creation-form .reference-preview {
-    height: 220px;
+    min-height: 220px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
   }
-  .creation-form .upload-choice,
-  .creation-form .url-choice {
-    min-height: 122px;
-    padding: 16px;
+  .creation-form .reference-picker {
+    grid-template-columns: 1fr;
+  }
+  .creation-form .reference-input-panel {
+    padding: 18px;
   }
   .creation-form .two-col,
   .creation-form .analysis-actions,

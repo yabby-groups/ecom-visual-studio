@@ -7,6 +7,7 @@ import {
   type ProductAnalysisMode,
 } from "./AiProductAnalysis";
 import { CreationGoalSelector } from "./CreationGoalSelector";
+import { ImageReferencePicker } from "./ImageReferencePicker";
 import { Shell } from "./Shell";
 import { useAppStore } from "../store";
 import { fileUrl } from "../utils/assets";
@@ -21,6 +22,7 @@ export function NewProject() {
   const [preview, setPreview] = useState("");
   const [selectedTemplates, setSelectedTemplates] = useState<string[]>([]);
   const [error, setError] = useState("");
+  const [referenceBusy, setReferenceBusy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisStatus, setAnalysisStatus] = useState("");
@@ -30,22 +32,29 @@ export function NewProject() {
   const formRef = useRef<HTMLFormElement>(null);
 
   async function upload(file: File) {
+    setReferenceBusy(true);
+    setError("");
     try {
       const result = await client.upload(file);
       setReference(result.path);
       setPreview(fileUrl(result.path));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "上传失败");
+    } finally {
+      setReferenceBusy(false);
     }
   }
-  async function importUrl() {
-    const input = document.getElementById("reference-url") as HTMLInputElement;
+  async function importUrl(url: string) {
+    setReferenceBusy(true);
+    setError("");
     try {
-      const result = await client.importUrl(input.value);
+      const result = await client.importUrl(url);
       setReference(result.path);
       setPreview(fileUrl(result.path));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "导入失败");
+    } finally {
+      setReferenceBusy(false);
     }
   }
   async function analyze(mode: "name" | "image") {
@@ -173,46 +182,12 @@ export function NewProject() {
                   placeholder="例如：实木双抽书桌"
                 />
               </label>
-              <div className="reference-picker">
-                <div className="reference-preview">
-                  {preview ? (
-                    <img src={preview} alt="参考商品" />
-                  ) : (
-                    <div className="reference-empty">
-                      <b>等待商品图片</b>
-                      <span>上传本地图片或导入网络图片后在此预览</span>
-                    </div>
-                  )}
-                </div>
-                <div className="reference-options">
-                  <label className="upload-choice">
-                    <input
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp"
-                      onChange={(event) =>
-                        event.target.files?.[0] &&
-                        void upload(event.target.files[0])
-                      }
-                    />
-                    <b>上传本地图片</b>
-                    <small>JPG、PNG 或 WebP，最大 15MB</small>
-                  </label>
-                  <div className="url-choice">
-                    <b>使用网络图片</b>
-                    <small>粘贴公开可访问的图片 URL</small>
-                    <div>
-                      <input
-                        id="reference-url"
-                        type="url"
-                        placeholder="https://example.com/product.jpg"
-                      />
-                      <button type="button" onClick={() => void importUrl()}>
-                        导入
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <ImageReferencePicker
+                preview={preview}
+                loading={referenceBusy}
+                onUpload={(file) => void upload(file)}
+                onImport={(url) => void importUrl(url)}
+              />
               <AiProductAnalysis
                 analyzing={analyzing}
                 mode={analysisMode}
