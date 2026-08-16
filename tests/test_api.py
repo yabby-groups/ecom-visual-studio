@@ -1,5 +1,6 @@
 from fastapi.testclient import TestClient
 
+from backend import main
 from backend.main import app, db, init_db
 
 
@@ -62,3 +63,42 @@ def test_project_pack_and_custom_template_lifecycle():
     updated = client.patch(f"/api/assets/{asset_id}", json={"ratio": "16:9", "prompt": "Custom prompt"})
     assert updated.status_code == 200
     assert client.get(f"/api/projects/{project_id}").json()["assets"][0]["prompt"] == "Custom prompt"
+
+
+def test_generation_started_at_is_persisted_and_reset_when_requeued(monkeypatch):
+    client = authenticated_client()
+    project_id = client.post("/api/projects", json={
+        "name": "Countdown campaign",
+        "product": "Countdown product",
+        "description": "",
+        "benefits": "",
+        "color": "#A16207",
+        "reference": "",
+    }).json()["id"]
+    assert client.post(f"/api/projects/{project_id}/pack", json={"kind": "amazon", "scene_template_ids": []}).status_code == 200
+    asset_id = client.get(f"/api/projects/{project_id}").json()["assets"][0]["id"]
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+        def read(self):
+            return b'{"data":[{"b64_json":"aW1hZ2U="}]}'
+
+    monkeypatch.setattr(main, "user_config", lambda _: {"base": "https://images.example", "key": "test", "image_model": "test-model"})
+    monkeypatch.setattr(main, "urlopen", lambda *_args, **_kwargs: FakeResponse())
+    monkeypatch.setattr(main.time, "time", lambda: 1_700_000_000)
+
+    main.generate_asset(asset_id)
+    generated = client.get(f"/api/projects/{project_id}").json()["assets"][0]
+    assert generated["status"] == "ready"
+    assert generated["generation_started_at"] == 1_700_000_000
+
+    monkeypatch.setattr(main, "generate_asset", lambda _: None)
+    assert client.post(f"/api/assets/{asset_id}/generate").status_code == 200
+    requeued = client.get(f"/api/projects/{project_id}").json()["assets"][0]
+    assert requeued["status"] == "queued"
+    assert requeued["generation_started_at"] is None

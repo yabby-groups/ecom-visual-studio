@@ -10,6 +10,7 @@ export type Asset = {
   prompt: string;
   status: AssetStatus;
   file_path: string | null;
+  generation_started_at: number | null;
   created_at: number;
 };
 export type Project = {

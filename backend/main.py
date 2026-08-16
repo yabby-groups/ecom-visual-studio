@@ -117,9 +117,12 @@ def init_db() -> None:
       create table if not exists tokens (user_id text not null, id text not null, name text not null, secret text not null, masked text, status integer not null default 1, today_cost text, total_cost text, primary key(user_id, id));
       create table if not exists models (user_id text not null, id text not null, name text not null, primary key(user_id, id));
       create table if not exists projects (id text primary key, user_id text not null, name text not null, product text not null, description text, benefits text, color text, reference text, created_at integer not null);
-      create table if not exists assets (id text primary key, project_id text not null, title text not null, template text not null, ratio text not null, prompt text not null, status text not null, file_path text, created_at integer not null);
+      create table if not exists assets (id text primary key, project_id text not null, title text not null, template text not null, ratio text not null, prompt text not null, status text not null, file_path text, generation_started_at integer, created_at integer not null);
       create table if not exists custom_templates (id text primary key, user_id text not null, name text not null, ratio text not null, direction text not null, created_at integer not null);
     """)
+    asset_columns = {row["name"] for row in connection.execute("pragma table_info(assets)")}
+    if "generation_started_at" not in asset_columns:
+        connection.execute("alter table assets add column generation_started_at integer")
     connection.execute("update assets set status='failed: 服务在生成期间重启，请重新发起任务' where status in ('queued', 'prompting', 'generating')")
     connection.commit()
     connection.close()
@@ -273,7 +276,7 @@ def generate_asset(asset_id: str) -> None:
     if not asset:
         connection.close()
         return
-    connection.execute("update assets set status='generating' where id=?", (asset_id,))
+    connection.execute("update assets set status='generating', generation_started_at=? where id=?", (int(time.time()), asset_id))
     connection.commit()
     try:
         config = user_config(asset["user_id"])
@@ -418,7 +421,7 @@ def create_pack(project_id: str, body: PackInput, session: Optional[str] = Cooki
         assets += [(f"C{i}", templates[item]["name"], item, templates[item]["ratio"], templates[item]["direction"]) for i, item in enumerate(dict.fromkeys(body.scene_template_ids), 1) if item in templates and templates[item]["custom"]]
     connection = db(); connection.execute("delete from assets where project_id=?", (project_id,))
     for code, title, template, ratio, direction in assets:
-        connection.execute("insert into assets values(?,?,?,?,?,?,?,?,?)", (uuid.uuid4().hex, project_id, f"{code} · {title}", template, ratio, make_prompt(project, title, direction), "draft", None, int(time.time())))
+        connection.execute("insert into assets (id,project_id,title,template,ratio,prompt,status,file_path,created_at) values(?,?,?,?,?,?,?,?,?)", (uuid.uuid4().hex, project_id, f"{code} · {title}", template, ratio, make_prompt(project, title, direction), "draft", None, int(time.time())))
     connection.commit(); connection.close()
     return {"ok": True}
 
@@ -449,7 +452,7 @@ def generate_one(asset_id: str, tasks: BackgroundTasks, session: Optional[str] =
     user = require_user(session); connection = db(); owned = connection.execute("select a.id from assets a join projects p on p.id=a.project_id where a.id=? and p.user_id=?", (asset_id, user["id"])).fetchone()
     if not owned:
         connection.close(); raise HTTPException(404, "画面不存在")
-    connection.execute("update assets set status='queued' where id=?", (asset_id,)); connection.commit(); connection.close(); tasks.add_task(generate_asset, asset_id)
+    connection.execute("update assets set status='queued', generation_started_at=null where id=?", (asset_id,)); connection.commit(); connection.close(); tasks.add_task(generate_asset, asset_id)
     return {"ok": True}
 
 
@@ -457,7 +460,7 @@ def generate_one(asset_id: str, tasks: BackgroundTasks, session: Optional[str] =
 def generate_all(project_id: str, tasks: BackgroundTasks, session: Optional[str] = Cookie(default=None)) -> dict[str, bool]:
     user = require_user(session); project_detail(project_id, user["id"]); connection = db(); rows = connection.execute("select id from assets where project_id=? and status!='ready'", (project_id,)).fetchall()
     for row in rows:
-        connection.execute("update assets set status='queued' where id=?", (row["id"],)); tasks.add_task(generate_asset, row["id"])
+        connection.execute("update assets set status='queued', generation_started_at=null where id=?", (row["id"],)); tasks.add_task(generate_asset, row["id"])
     connection.commit(); connection.close(); return {"ok": True}
 
 

@@ -18,6 +18,13 @@ import type { Asset, Project } from "../types";
 import { fileUrl, isPending, statusText } from "../utils/assets";
 import "./Workspace.css";
 
+const GENERATION_ESTIMATE_SECONDS = 60;
+
+function formatDuration(seconds: number) {
+  const minutes = Math.floor(seconds / 60);
+  return `${String(minutes).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
 export function Workspace() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
@@ -27,6 +34,7 @@ export function Workspace() {
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
   const [originalOpen, setOriginalOpen] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
   const promptRef = useRef<HTMLTextAreaElement>(null);
   async function load() {
     try {
@@ -51,6 +59,16 @@ export function Workspace() {
     const timer = window.setInterval(() => void load(), 2400);
     return () => window.clearInterval(timer);
   }, [project?.assets?.map((asset) => asset.status).join("|")]);
+  const generatingAsset = project?.assets?.find(
+    (item) => item.id === assetId && item.status === "generating",
+  );
+  useEffect(() => {
+    if (!generatingAsset?.generation_started_at) return;
+    const updateNow = () => setNow(Date.now());
+    updateNow();
+    const timer = window.setInterval(updateNow, 1000);
+    return () => window.clearInterval(timer);
+  }, [generatingAsset?.generation_started_at]);
   useEffect(() => {
     setOriginalOpen(false);
   }, [assetId]);
@@ -73,6 +91,20 @@ export function Workspace() {
     );
   const currentProject = project;
   const asset = currentProject.assets?.find((item) => item.id === assetId);
+  const elapsedSeconds =
+    asset?.status === "generating" && asset.generation_started_at
+      ? Math.max(0, Math.floor(now / 1000 - asset.generation_started_at))
+      : null;
+  const remainingSeconds =
+    elapsedSeconds === null
+      ? null
+      : GENERATION_ESTIMATE_SECONDS -
+        (elapsedSeconds % GENERATION_ESTIMATE_SECONDS);
+  const cycleProgress =
+    elapsedSeconds === null
+      ? 0
+      : (elapsedSeconds % GENERATION_ESTIMATE_SECONDS) /
+        GENERATION_ESTIMATE_SECONDS;
   async function updateAsset(patch: Partial<Asset>) {
     if (!asset) return;
     await client.updateAsset(asset.id, patch);
@@ -201,28 +233,57 @@ export function Workspace() {
                   <img src={fileUrl(asset.file_path)} alt={asset.title} />
                 ) : (
                   <div className="artboard-empty">
-                    {isPending(asset.status) ? (
-                      <LoaderCircle className="spin" size={36} />
+                    {asset.status === "generating" &&
+                    elapsedSeconds !== null &&
+                    remainingSeconds !== null ? (
+                      <>
+                        <Sparkles className="generation-sparkle" size={38} />
+                        <h3>正在构建画面</h3>
+                        <div
+                          className="generation-progress"
+                          role="progressbar"
+                          aria-label="生成预计进度"
+                          aria-valuemin={0}
+                          aria-valuemax={GENERATION_ESTIMATE_SECONDS}
+                          aria-valuenow={Math.floor(
+                            cycleProgress * GENERATION_ESTIMATE_SECONDS,
+                          )}
+                        >
+                          <i
+                            style={{ transform: `scaleX(${cycleProgress})` }}
+                          />
+                        </div>
+                        <p className="generation-timing">
+                          生成中 · 预计剩余 {formatDuration(remainingSeconds)} · 已用时 {elapsedSeconds} 秒
+                        </p>
+                        <p>确认右侧的创作方向后，开始生成第一版。</p>
+                      </>
                     ) : (
-                      <ImagePlus size={38} />
-                    )}
-                    <h3>
-                      {isPending(asset.status)
-                        ? statusText(asset.status)
-                        : "这个画面还未生成"}
-                    </h3>
-                    <p>
-                      {asset.status.startsWith("failed")
-                        ? asset.status
-                        : "确认右侧的创作方向后，开始生成第一版。"}
-                    </p>
-                    {!isPending(asset.status) && (
-                      <button
-                        className="button primary"
-                        onClick={() => void generate()}
-                      >
-                        生成第一版
-                      </button>
+                      <>
+                        {isPending(asset.status) ? (
+                          <LoaderCircle className="spin" size={36} />
+                        ) : (
+                          <ImagePlus size={38} />
+                        )}
+                        <h3>
+                          {isPending(asset.status)
+                            ? statusText(asset.status)
+                            : "这个画面还未生成"}
+                        </h3>
+                        <p>
+                          {asset.status.startsWith("failed")
+                            ? asset.status
+                            : "确认右侧的创作方向后，开始生成第一版。"}
+                        </p>
+                        {!isPending(asset.status) && (
+                          <button
+                            className="button primary"
+                            onClick={() => void generate()}
+                          >
+                            生成第一版
+                          </button>
+                        )}
+                      </>
                     )}
                   </div>
                 )}
