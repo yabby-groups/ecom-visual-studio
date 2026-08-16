@@ -8,6 +8,7 @@ export function Login() {
   const setUser = useAppStore((state) => state.setUser);
   const initialize = useAppStore((state) => state.initialize);
   const [error, setError] = useState("");
+  const [totpRequired, setTotpRequired] = useState(false);
   const [loading, setLoading] = useState(false);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -23,7 +24,16 @@ export function Login() {
       setUser(user);
       await initialize();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "无法完成登录");
+      const message = reason instanceof Error ? reason.message : "无法完成登录";
+      if (message === "totp required") {
+        setTotpRequired(true);
+        setError("请输入身份验证器中的 6 位验证码");
+      } else if (message === "totp invalid") {
+        setTotpRequired(true);
+        setError("身份验证器验证码错误");
+      } else {
+        setError(message);
+      }
     } finally {
       setLoading(false);
     }
@@ -51,14 +61,18 @@ export function Login() {
               required
             />
           </label>
-          <label>
-            动态验证码（已开启两步验证时填写）
-            <input
-              name="totp_code"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-            />
-          </label>
+          {totpRequired && (
+            <label>
+              动态验证码
+              <input
+                name="totp_code"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                placeholder="输入 6 位验证码"
+                required
+              />
+            </label>
+          )}
           {error && <p className="form-error">{error}</p>}
           <button className="button primary" disabled={loading}>
             {loading && <LoaderCircle className="spin" size={18} />}

@@ -281,6 +281,14 @@ def huabot_login(name: str, password: str, totp_code: str) -> tuple[list[dict[st
             with urlopen(Request(base + path, data=body, headers=headers, method="POST" if body else "GET"), timeout=30) as response:
                 result = json.loads(response.read().decode())
         except HTTPError as error:
+            try:
+                error_result = json.loads(error.read().decode())
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                error_result = None
+            if isinstance(error_result, dict):
+                message = error_result.get("err") or error_result.get("detail") or error_result.get("error")
+                if message:
+                    raise ValueError(str(message)) from error
             raise ValueError(f"huabot 登录失败：HTTP {error.code}") from error
         except (URLError, TimeoutError, json.JSONDecodeError) as error:
             raise ValueError(f"无法连接 huabot：{error}") from error

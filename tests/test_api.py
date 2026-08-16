@@ -1,7 +1,9 @@
 import base64
+import io
 import json
 import struct
 import zlib
+from urllib.error import HTTPError
 
 from fastapi.testclient import TestClient
 
@@ -92,6 +94,87 @@ def test_huabot_models_use_the_public_alias_endpoint(monkeypatch):
     assert main.huabot_models() == [{"id": "7", "name": "GPT Image", "alias": "gpt-image-2"}]
     assert captured[0].full_url == "https://models.example/api/token_base/model/list/?size=500&offset=0&enabled=1"
     assert captured[0].get_header("Authorization") is None
+
+
+def test_huabot_login_only_sends_totp_after_the_challenge(monkeypatch):
+    requests = []
+
+    class FakeResponse:
+        def __init__(self, payload):
+            self.payload = payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+        def read(self):
+            return json.dumps(self.payload).encode()
+
+    def fake_urlopen(request, **_kwargs):
+        requests.append(request)
+        if request.full_url.endswith("/api/signin/"):
+            raise HTTPError(
+                request.full_url,
+                400,
+                "Bad Request",
+                None,
+                io.BytesIO(b'{"err":"totp required"}'),
+            )
+        raise AssertionError(f"unexpected request: {request.full_url}")
+
+    monkeypatch.setenv("HUABOT_BASE_URL", "https://huabot.example")
+    monkeypatch.setattr(main, "urlopen", fake_urlopen)
+
+    try:
+        main.huabot_login("alice", "secret", "")
+    except ValueError as error:
+        assert str(error) == "totp required"
+    else:
+        raise AssertionError("TOTP challenge should fail the first login attempt")
+
+    assert requests[0].data == b"name=alice&passwd=secret"
+    with TestClient(app) as client:
+        response = client.post("/api/auth/login", json={"name": "alice", "password": "secret"})
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "totp required"}
+
+
+def test_huabot_login_sends_the_totp_code_after_a_challenge(monkeypatch):
+    requests = []
+
+    class FakeResponse:
+        def __init__(self, payload):
+            self.payload = payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+        def read(self):
+            return json.dumps(self.payload).encode()
+
+    def fake_urlopen(request, **_kwargs):
+        requests.append(request)
+        if request.full_url.endswith("/api/signin/"):
+            return FakeResponse({"err": "totp invalid"})
+        raise AssertionError(f"unexpected request: {request.full_url}")
+
+    monkeypatch.setenv("HUABOT_BASE_URL", "https://huabot.example")
+    monkeypatch.setattr(main, "urlopen", fake_urlopen)
+
+    try:
+        main.huabot_login("alice", "secret", "123456")
+    except ValueError as error:
+        assert str(error) == "totp invalid"
+    else:
+        raise AssertionError("An invalid TOTP code should fail login")
+
+    assert requests[0].data == b"name=alice&passwd=secret&totp_code=123456"
 
 
 def test_latest_creation_returns_only_the_users_newest_version():
