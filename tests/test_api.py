@@ -1,14 +1,18 @@
 import base64
 import io
 import json
+import shutil
 import struct
 import zlib
 from urllib.error import HTTPError
 
 from fastapi.testclient import TestClient
 
-from backend import main
-from backend.main import app, db, init_db
+from backend import assistant, auth_routes, generation, huabot, projects, settings
+from backend.auth import crypt
+from backend.config import GENERATED
+from backend.db import db, init_db
+from backend.main import app
 
 
 def authenticated_client():
@@ -22,6 +26,18 @@ def authenticated_client():
     client = TestClient(app)
     client.cookies.set("session", "test-session")
     return client
+
+
+def test_database_initialization_enables_fk_and_expected_indexes():
+    init_db()
+    connection = db()
+    try:
+        assert connection.execute("pragma foreign_keys").fetchone()[0] == 1
+        assert {row[1] for row in connection.execute("pragma index_list(projects)")} >= {"projects_user_created_idx"}
+        assert {row[1] for row in connection.execute("pragma index_list(assets)")} >= {"assets_project_created_idx"}
+        assert {row[1] for row in connection.execute("pragma index_list(asset_versions)")} >= {"asset_versions_asset_created_idx"}
+    finally:
+        connection.close()
 
 
 def png_bytes(width: int, height: int) -> bytes:
@@ -47,7 +63,7 @@ def test_login_and_auth_me_return_huabot_profile(monkeypatch):
     username = "profile-test-user"
     monkeypatch.setenv("APP_SECRET_KEY", "test-secret")
     monkeypatch.setattr(
-        main,
+        auth_routes,
         "huabot_login",
         lambda *_: (
             [{"id": "profile-token", "name": "Profile Token", "key": "secret", "masked": "***", "status": 1, "today_cost": "0", "total_cost": "0"}],
@@ -125,9 +141,9 @@ def test_huabot_models_use_the_public_alias_endpoint(monkeypatch):
         return FakeResponse()
 
     monkeypatch.setenv("HUABOT_WEB_BASE_URL", "https://models.example")
-    monkeypatch.setattr(main, "urlopen", fake_urlopen)
+    monkeypatch.setattr(huabot, "urlopen", fake_urlopen)
 
-    assert main.huabot_models() == [{"id": "7", "name": "GPT Image", "alias": "gpt-image-2"}]
+    assert huabot.huabot_models() == [{"id": "7", "name": "GPT Image", "alias": "gpt-image-2"}]
     assert captured[0].full_url == "https://models.example/api/token_base/model/list/?size=500&offset=0&enabled=1"
     assert captured[0].get_header("Authorization") is None
 
@@ -161,10 +177,10 @@ def test_huabot_login_only_sends_totp_after_the_challenge(monkeypatch):
         raise AssertionError(f"unexpected request: {request.full_url}")
 
     monkeypatch.setenv("HUABOT_BASE_URL", "https://huabot.example")
-    monkeypatch.setattr(main, "urlopen", fake_urlopen)
+    monkeypatch.setattr(huabot, "urlopen", fake_urlopen)
 
     try:
-        main.huabot_login("alice", "secret", "")
+        huabot.huabot_login("alice", "secret", "")
     except ValueError as error:
         assert str(error) == "totp required"
     else:
@@ -201,10 +217,10 @@ def test_huabot_login_sends_the_totp_code_after_a_challenge(monkeypatch):
         raise AssertionError(f"unexpected request: {request.full_url}")
 
     monkeypatch.setenv("HUABOT_BASE_URL", "https://huabot.example")
-    monkeypatch.setattr(main, "urlopen", fake_urlopen)
+    monkeypatch.setattr(huabot, "urlopen", fake_urlopen)
 
     try:
-        main.huabot_login("alice", "secret", "123456")
+        huabot.huabot_login("alice", "secret", "123456")
     except ValueError as error:
         assert str(error) == "totp invalid"
     else:
@@ -355,11 +371,11 @@ def test_generation_started_at_is_persisted_from_enqueue_to_completion(monkeypat
         return FakeResponse()
 
     assert client.patch(f"/api/assets/{asset_id}", json={"ratio": "2:3"}).status_code == 200
-    monkeypatch.setattr(main, "user_config", lambda _: {"base": "https://images.example", "key": "test", "image_model": "gpt-image-2"})
-    monkeypatch.setattr(main, "urlopen", fake_urlopen)
-    monkeypatch.setattr(main.time, "time", lambda: 1_700_000_000)
+    monkeypatch.setattr(generation, "user_config", lambda _: {"base": "https://images.example", "key": "test", "image_model": "gpt-image-2"})
+    monkeypatch.setattr(generation, "urlopen", fake_urlopen)
+    monkeypatch.setattr(generation.time, "time", lambda: 1_700_000_000)
 
-    main.generate_asset(asset_id)
+    generation.generate_asset(asset_id)
     generated = client.get(f"/api/projects/{project_id}").json()["assets"][0]
     assert generated["status"] == "ready"
     assert generated["generation_started_at"] == 1_700_000_000
@@ -367,7 +383,7 @@ def test_generation_started_at_is_persisted_from_enqueue_to_completion(monkeypat
     assert generated["versions"][0]["file_path"] == generated["file_path"]
     assert payloads == [{"model": "gpt-image-2", "prompt": generated["prompt"], "size": "1024x1536", "n": 1}]
 
-    monkeypatch.setattr(main, "generate_asset", lambda _: None)
+    monkeypatch.setattr(projects, "generate_asset", lambda _: None)
     assert client.post(f"/api/assets/{asset_id}/generate").status_code == 200
     requeued = client.get(f"/api/projects/{project_id}").json()["assets"][0]
     assert requeued["status"] == "queued"
@@ -399,10 +415,10 @@ def test_generation_rejects_a_mismatched_image_ratio(monkeypatch):
             return json.dumps({"data": [{"b64_json": image}]}).encode()
 
     assert client.patch(f"/api/assets/{asset_id}", json={"ratio": "2:3"}).status_code == 200
-    monkeypatch.setattr(main, "user_config", lambda _: {"base": "https://images.example", "key": "test", "image_model": "gpt-image-2"})
-    monkeypatch.setattr(main, "urlopen", lambda *_args, **_kwargs: FakeResponse())
+    monkeypatch.setattr(generation, "user_config", lambda _: {"base": "https://images.example", "key": "test", "image_model": "gpt-image-2"})
+    monkeypatch.setattr(generation, "urlopen", lambda *_args, **_kwargs: FakeResponse())
 
-    main.generate_asset(asset_id)
+    generation.generate_asset(asset_id)
     generated = client.get(f"/api/projects/{project_id}").json()["assets"][0]
     assert generated["status"] == "failed: 图像服务返回比例 16:9，但请求的是 2:3"
     assert generated["file_path"] is None
@@ -410,10 +426,10 @@ def test_generation_rejects_a_mismatched_image_ratio(monkeypatch):
 
 
 def test_image_size_for_ratio_uses_the_short_edge_and_long_edge_limits():
-    assert main.image_size_for_ratio("1:1") == (1024, 1024)
-    assert main.image_size_for_ratio("4:5") == (1024, 1280)
-    assert main.image_size_for_ratio("2:3") == (1024, 1536)
-    assert main.image_size_for_ratio("16:9") == (1536, 864)
+    assert generation.image_size_for_ratio("1:1") == (1024, 1024)
+    assert generation.image_size_for_ratio("4:5") == (1024, 1280)
+    assert generation.image_size_for_ratio("2:3") == (1024, 1536)
+    assert generation.image_size_for_ratio("16:9") == (1536, 864)
 
 
 def test_existing_generated_images_are_backfilled_as_versions():
@@ -428,7 +444,7 @@ def test_existing_generated_images_are_backfilled_as_versions():
     }).json()["id"]
     assert client.post(f"/api/projects/{project_id}/pack", json={"kind": "custom", "scene_template_ids": []}).status_code == 200
     asset_id = client.get(f"/api/projects/{project_id}").json()["assets"][0]["id"]
-    directory = main.GENERATED / project_id
+    directory = GENERATED / project_id
     directory.mkdir(parents=True, exist_ok=True)
     filename = f"{asset_id}-legacy.png"
     (directory / filename).write_bytes(b"legacy")
@@ -455,7 +471,7 @@ def test_settings_use_model_aliases_for_all_huabot_requests(monkeypatch):
         connection.execute("insert into sessions values(?,?,?)", (session_id, user_id, 4_102_444_800))
         connection.execute(
             "insert into tokens values(?,?,?,?,?,?,?,?)",
-            (user_id, "token", "Token", main.crypt("test-key"), "masked", 1, "0", "0"),
+            (user_id, "token", "Token", crypt("test-key"), "masked", 1, "0", "0"),
         )
         connection.executemany(
             "insert into models(user_id,id,name,alias) values(?,?,?,?)",
@@ -469,7 +485,7 @@ def test_settings_use_model_aliases_for_all_huabot_requests(monkeypatch):
 
         client = TestClient(app)
         client.cookies.set("session", session_id)
-        monkeypatch.setattr(main, "huabot_models", lambda: [
+        monkeypatch.setattr(settings, "huabot_models", lambda: [
             {"id": "101", "name": "Image title", "alias": "gpt-image-2"},
             {"id": "102", "name": "Text title", "alias": "text-alias"},
             {"id": "103", "name": "Chat title", "alias": "chat-alias"},
@@ -528,7 +544,8 @@ def test_settings_use_model_aliases_for_all_huabot_requests(monkeypatch):
             return FakeResponse({"choices": [{"message": {"content": "Test reply"}}]})
 
         monkeypatch.setenv("HUABOT_BASE_URL", "https://huabot.example")
-        monkeypatch.setattr(main, "urlopen", fake_urlopen)
+        monkeypatch.setattr(generation, "urlopen", fake_urlopen)
+        monkeypatch.setattr(assistant, "urlopen", fake_urlopen)
 
         project = client.post("/api/projects", json={
             "name": "Alias project",
@@ -542,13 +559,13 @@ def test_settings_use_model_aliases_for_all_huabot_requests(monkeypatch):
         assert client.post(f"/api/projects/{project_id}/pack", json={"kind": "custom", "scene_template_ids": []}).status_code == 200
         asset_id = client.get(f"/api/projects/{project_id}").json()["assets"][0]["id"]
         assert client.patch(f"/api/assets/{asset_id}", json={"ratio": "1:1"}).status_code == 200
-        main.generate_asset(asset_id)
+        generation.generate_asset(asset_id)
         assert client.post("/api/analyze-product", json={"mode": "name", "product": "Alias product", "reference": ""}).status_code == 200
         assert client.post("/api/chat", json={"messages": [{"role": "user", "content": "hello"}]}).status_code == 200
         assert [payload["model"] for _, payload in requests] == ["gpt-image-2", "text-alias", "chat-alias"]
     finally:
         if project_id:
-            main.shutil.rmtree(main.GENERATED / project_id, ignore_errors=True)
+            shutil.rmtree(GENERATED / project_id, ignore_errors=True)
         connection.execute("delete from asset_versions where asset_id in (select id from assets where project_id=?)", (project_id,))
         connection.execute("delete from assets where project_id=?", (project_id,))
         connection.execute("delete from projects where id=?", (project_id,))
