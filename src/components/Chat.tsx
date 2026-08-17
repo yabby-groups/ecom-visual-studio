@@ -16,15 +16,19 @@ export function Chat({ onClose }: { onClose: () => void }) {
     setMessages(next);
     setText("");
     setBusy(true);
+    let reply = "";
+    setMessages([...next, { role: "assistant", content: reply }]);
     try {
-      const result = await client.chat(next);
-      setMessages([...next, { role: "assistant", content: result.reply }]);
+      await client.chat(next, (delta) => {
+        reply += delta;
+        setMessages([...next, { role: "assistant", content: reply }]);
+      });
     } catch (error) {
       setMessages([
         ...next,
         {
           role: "assistant",
-          content: error instanceof Error ? error.message : "对话失败",
+          content: `${reply}${reply ? "\n\n" : ""}${error instanceof Error ? error.message : "对话失败"}`,
         },
       ]);
     } finally {

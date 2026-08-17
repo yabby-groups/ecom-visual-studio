@@ -3,7 +3,7 @@ import struct
 import time
 import uuid
 
-import httpx
+from openai import OpenAI
 from .config import DATA, GENERATED, PNG_SIGNATURE
 from .db import asset_versions, assets
 from .db.core import db
@@ -50,19 +50,17 @@ def generate_asset(asset_id: str) -> None:
         if not config["image_model"].startswith("gpt-image-"):
             raise ValueError("图像生成模型必须是 GPT Image 模型")
         expected_width, expected_height = image_size_for_ratio(asset["ratio"])
-        payload = {"model": config["image_model"], "prompt": asset["prompt"], "size": f"{expected_width}x{expected_height}", "n": 1}
-        response = httpx.post(f"{config['base']}/images/generations", json=payload, headers={"Authorization": f"Bearer {config['key']}"}, timeout=300)
-        response.raise_for_status()
-        result = response.json()
-        image = (result.get("data") or [{}])[0]
-        if image.get("b64_json"):
-            image_bytes = base64.b64decode(image["b64_json"], validate=True)
-        elif image.get("url"):
-            response = httpx.get(image["url"], headers={"User-Agent": "EcomVisualStudio/1.0"}, timeout=300)
-            response.raise_for_status()
-            image_bytes = response.content
-        else:
+        client = OpenAI(base_url=config["base"], api_key=config["key"], timeout=300)
+        result = client.images.generate(
+            model=config["image_model"],
+            prompt=asset["prompt"],
+            size=f"{expected_width}x{expected_height}",
+            n=1,
+        )
+        image = result.data[0] if result.data else None
+        if not image or not image.b64_json:
             raise ValueError("图像服务没有返回图片")
+        image_bytes = base64.b64decode(image.b64_json, validate=True)
         actual_width, actual_height = png_dimensions(image_bytes)
         if actual_width * expected_height != actual_height * expected_width:
             raise ValueError(f"图像服务返回比例 {actual_width}:{actual_height}，但请求的是 {asset['ratio']}")

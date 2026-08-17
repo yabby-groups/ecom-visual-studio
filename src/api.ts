@@ -83,8 +83,41 @@ export const client = {
       method: "POST",
       body,
     }),
-  chat: (messages: { role: string; content: string }[]) =>
-    api<{ reply: string }>("chat", { method: "POST", body: { messages } }),
+  chat: async (
+    messages: { role: string; content: string }[],
+    onDelta: (delta: string) => void,
+  ) => {
+    const response = await fetch("/api/chat", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages }),
+    });
+    if (!response.ok || !response.body) {
+      const payload = await response.json().catch(() => ({}));
+      throw new ApiError(payload.detail || payload.error || "对话请求失败");
+    }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      buffer += decoder.decode(value, { stream: !done });
+      const events = buffer.split("\n\n");
+      buffer = events.pop() || "";
+      for (const event of events) {
+        const data = event
+          .split("\n")
+          .find((line) => line.startsWith("data: "))
+          ?.slice(6);
+        if (!data) continue;
+        const payload = JSON.parse(data) as { delta?: string; error?: string };
+        if (payload.error) throw new ApiError(payload.error);
+        if (payload.delta) onDelta(payload.delta);
+      }
+      if (done) break;
+    }
+  },
   tokenSettings: () => api<TokenSettings>("huabot/tokens"),
   models: () => api<{ models: Model[] }>("huabot/models"),
   saveSettings: (body: {

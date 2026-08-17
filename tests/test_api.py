@@ -3,6 +3,7 @@ import json
 import shutil
 import struct
 import zlib
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -343,13 +344,18 @@ def test_generation_started_at_is_persisted_from_enqueue_to_completion(monkeypat
 
     payloads = []
 
-    def fake_post(_url, **kwargs):
-        payloads.append(kwargs["json"])
-        return httpx.Response(200, json={"data": [{"b64_json": base64.b64encode(png_bytes(2, 3)).decode()}]}, request=httpx.Request("POST", _url))
+    class FakeOpenAI:
+        def __init__(self, **kwargs):
+            assert kwargs == {"base_url": "https://images.example", "api_key": "test", "timeout": 300}
+            self.images = self
+
+        def generate(self, **kwargs):
+            payloads.append(kwargs)
+            return SimpleNamespace(data=[SimpleNamespace(b64_json=base64.b64encode(png_bytes(2, 3)).decode())])
 
     assert client.patch(f"/api/assets/{asset_id}", json={"ratio": "2:3"}).status_code == 200
     monkeypatch.setattr(generation, "user_config", lambda _: {"base": "https://images.example", "key": "test", "image_model": "gpt-image-2"})
-    monkeypatch.setattr(generation.httpx, "post", fake_post)
+    monkeypatch.setattr(generation, "OpenAI", FakeOpenAI)
     monkeypatch.setattr(generation.time, "time", lambda: 1_700_000_000)
 
     generation.generate_asset(asset_id)
@@ -382,13 +388,79 @@ def test_generation_rejects_a_mismatched_image_ratio(monkeypatch):
 
     assert client.patch(f"/api/assets/{asset_id}", json={"ratio": "2:3"}).status_code == 200
     monkeypatch.setattr(generation, "user_config", lambda _: {"base": "https://images.example", "key": "test", "image_model": "gpt-image-2"})
-    monkeypatch.setattr(generation.httpx, "post", lambda url, **_kwargs: httpx.Response(200, json={"data": [{"b64_json": base64.b64encode(png_bytes(16, 9)).decode()}]}, request=httpx.Request("POST", url)))
+    class FakeOpenAI:
+        def __init__(self, **_kwargs):
+            self.images = self
+
+        def generate(self, **_kwargs):
+            return SimpleNamespace(data=[SimpleNamespace(b64_json=base64.b64encode(png_bytes(16, 9)).decode())])
+
+    monkeypatch.setattr(generation, "OpenAI", FakeOpenAI)
 
     generation.generate_asset(asset_id)
     generated = client.get(f"/api/projects/{project_id}").json()["assets"][0]
     assert generated["status"] == "failed: 图像服务返回比例 16:9，但请求的是 2:3"
     assert generated["file_path"] is None
     assert generated["versions"] == []
+
+
+def test_generation_marks_failed_when_the_sdk_returns_no_image(monkeypatch):
+    client = authenticated_client()
+    project_id = client.post("/api/projects", json={
+        "name": "Missing image",
+        "product": "Missing image product",
+        "description": "",
+        "benefits": "",
+        "color": "#A16207",
+        "reference": "",
+    }).json()["id"]
+    assert client.post(f"/api/projects/{project_id}/pack", json={"kind": "amazon", "scene_template_ids": []}).status_code == 200
+    asset_id = client.get(f"/api/projects/{project_id}").json()["assets"][0]["id"]
+
+    class FakeOpenAI:
+        def __init__(self, **_kwargs):
+            self.images = self
+
+        def generate(self, **_kwargs):
+            return SimpleNamespace(data=[])
+
+    monkeypatch.setattr(generation, "user_config", lambda _: {"base": "https://images.example", "key": "test", "image_model": "gpt-image-2"})
+    monkeypatch.setattr(generation, "OpenAI", FakeOpenAI)
+
+    generation.generate_asset(asset_id)
+    generated = client.get(f"/api/projects/{project_id}").json()["assets"][0]
+    assert generated["status"] == "failed: 图像服务没有返回图片"
+    assert generated["file_path"] is None
+    assert generated["versions"] == []
+
+
+def test_chat_uses_the_openai_responses_api(monkeypatch):
+    client = authenticated_client()
+    requests = []
+
+    class FakeOpenAI:
+        def __init__(self, **kwargs):
+            assert kwargs == {"base_url": "https://chat.example", "api_key": "test", "timeout": 90}
+            self.responses = self
+
+        def create(self, **kwargs):
+            requests.append(kwargs)
+            return iter([SimpleNamespace(type="response.output_text.delta", delta="可直接使用的"), SimpleNamespace(type="response.output_text.delta", delta="电商文案。")])
+
+    monkeypatch.setattr(assistant, "user_config", lambda _: {"base": "https://chat.example", "key": "test", "chat_model": "gpt-5.6-luna"})
+    monkeypatch.setattr(assistant, "OpenAI", FakeOpenAI)
+
+    response = client.post("/api/chat", json={"messages": [{"role": "user", "content": "帮我写标题"}]})
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert response.text == 'data: {"delta": "可直接使用的"}\n\ndata: {"delta": "电商文案。"}\n\n'
+    assert requests == [{
+        "model": "gpt-5.6-luna",
+        "instructions": "You are a helpful Chinese e-commerce creative assistant. Return copy-ready, accurate answers.",
+        "input": [{"role": "user", "content": "帮我写标题"}],
+        "stream": True,
+    }]
 
 
 def test_image_size_for_ratio_only_allows_supported_provider_sizes():
@@ -518,19 +590,34 @@ def test_settings_use_model_aliases_for_all_huabot_requests(monkeypatch):
 
         requests = []
 
-        def fake_post(url, **kwargs):
-            payload = kwargs["json"]
-            requests.append((url, payload))
-            if url.endswith("/images/generations"):
-                image = base64.b64encode(png_bytes(1024, 1024)).decode()
-                return httpx.Response(200, json={"data": [{"b64_json": image}]}, request=httpx.Request("POST", url))
-            if "Return JSON only" in str(payload["messages"][-1]["content"]):
-                return httpx.Response(200, json={"choices": [{"message": {"content": '{"description":"Test description","benefits":["A","B","C","D"]}'}}]}, request=httpx.Request("POST", url))
-            return httpx.Response(200, json={"choices": [{"message": {"content": "Test reply"}}]}, request=httpx.Request("POST", url))
+        class FakeOpenAI:
+            def __init__(self, **kwargs):
+                assert kwargs == {"base_url": "https://huabot.example", "api_key": "test-key", "timeout": 300}
+                self.images = self
+
+            def generate(self, **kwargs):
+                requests.append(("sdk", kwargs))
+                return SimpleNamespace(data=[SimpleNamespace(b64_json=base64.b64encode(png_bytes(1024, 1024)).decode())])
+
+        class FakeResponsesOpenAI:
+            def __init__(self, **kwargs):
+                assert kwargs in [
+                    {"base_url": "https://huabot.example", "api_key": "test-key", "timeout": 60},
+                    {"base_url": "https://huabot.example", "api_key": "test-key", "timeout": 90},
+                ]
+                self.responses = self
+
+            def create(self, **kwargs):
+                requests.append(("responses", kwargs))
+                if kwargs.get("stream"):
+                    return iter([SimpleNamespace(type="response.output_text.delta", delta="Test reply")])
+                if kwargs["model"] == "text-alias":
+                    return SimpleNamespace(output_text='{"description":"Test description","benefits":["A","B","C","D"]}')
+                return SimpleNamespace(output_text="Test reply")
 
         monkeypatch.setenv("HUABOT_BASE_URL", "https://huabot.example")
-        monkeypatch.setattr(generation.httpx, "post", fake_post)
-        monkeypatch.setattr(assistant.httpx, "post", fake_post)
+        monkeypatch.setattr(generation, "OpenAI", FakeOpenAI)
+        monkeypatch.setattr(assistant, "OpenAI", FakeResponsesOpenAI)
 
         project = client.post("/api/projects", json={
             "name": "Alias project",
