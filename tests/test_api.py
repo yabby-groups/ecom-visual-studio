@@ -2,6 +2,8 @@ import base64
 import json
 import shutil
 import struct
+import threading
+import time
 import zlib
 from pathlib import Path
 from types import SimpleNamespace
@@ -35,12 +37,64 @@ def test_database_initialization_enables_fk_and_expected_indexes():
     connection = db()
     try:
         assert connection.execute("pragma foreign_keys").fetchone()[0] == 1
+        assert connection.execute("pragma journal_mode").fetchone()[0] == "wal"
+        assert connection.execute("pragma busy_timeout").fetchone()[0] == 5000
+        assert connection.execute("pragma synchronous").fetchone()[0] == 1
+        assert connection.execute("pragma wal_autocheckpoint").fetchone()[0] == 1000
         assert {row[1] for row in connection.execute("pragma index_list(projects)")} >= {"projects_user_created_idx"}
         assert {row[1] for row in connection.execute("pragma index_list(assets)")} >= {"assets_project_created_idx"}
         assert {row[1] for row in connection.execute("pragma index_list(asset_versions)")} >= {"asset_versions_asset_created_idx"}
         assert {row[1] for row in connection.execute("pragma index_list(try_on_jobs)")} >= {"try_on_jobs_user_created_idx"}
         assert {row[1] for row in connection.execute("pragma index_list(try_on_versions)")} >= {"try_on_versions_job_created_idx"}
     finally:
+        connection.close()
+
+
+def test_database_waits_for_a_short_concurrent_write_lock():
+    init_db()
+    writer_id = "sqlite-lock-test-writer"
+    waiter_id = "sqlite-lock-test-waiter"
+    connection = db()
+    connection.execute("delete from users where id in (?, ?)", (writer_id, waiter_id))
+    connection.commit()
+
+    started = threading.Event()
+    completed = threading.Event()
+    errors = []
+
+    def write_while_locked():
+        waiting_connection = db()
+        try:
+            started.set()
+            waiting_connection.execute(
+                "insert into users(id,username,password_hash,created_at) values(?,?,?,?)",
+                (waiter_id, waiter_id, "hash", 1),
+            )
+            waiting_connection.commit()
+        except Exception as error:
+            errors.append(error)
+        finally:
+            waiting_connection.close()
+            completed.set()
+
+    try:
+        connection.execute(
+            "insert into users(id,username,password_hash,created_at) values(?,?,?,?)",
+            (writer_id, writer_id, "hash", 1),
+        )
+        thread = threading.Thread(target=write_while_locked)
+        thread.start()
+        assert started.wait(timeout=1)
+        time.sleep(0.05)
+        assert not completed.is_set()
+        connection.commit()
+        thread.join(timeout=1)
+        assert completed.is_set()
+        assert errors == []
+    finally:
+        connection.rollback()
+        connection.execute("delete from users where id in (?, ?)", (writer_id, waiter_id))
+        connection.commit()
         connection.close()
 
 

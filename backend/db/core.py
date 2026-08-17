@@ -11,6 +11,8 @@ def db() -> sqlite3.Connection:
     connection.row_factory = sqlite3.Row
     connection.execute("pragma foreign_keys = on")
     connection.execute("pragma busy_timeout = 5000")
+    connection.execute("pragma synchronous = normal")
+    connection.execute("pragma wal_autocheckpoint = 1000")
     return connection
 
 
@@ -35,6 +37,11 @@ def ensure_storage() -> None:
 
 def init_db() -> None:
     ensure_storage()
+    connection = db()
+    try:
+        connection.execute("pragma journal_mode = wal")
+    finally:
+        connection.close()
     with transaction() as connection:
         for table in (users, sessions, settings, tokens, models, projects, assets, asset_versions, custom_templates, try_on_jobs, try_on_versions):
             table.ensure(connection)
