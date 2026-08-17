@@ -1,6 +1,7 @@
 import { type FormEvent, useLayoutEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { client } from "../api";
+import { nativeImageRatios } from "../constants/imageSizes";
 import { Shell } from "./Shell";
 import { useAppStore } from "../store";
 import "./Templates.css";
@@ -174,11 +175,12 @@ export function Templates() {
             placeholder="模板名称，例如：户外跑步场景"
             required
           />
-          <select name="ratio" defaultValue="4:5">
-            <option value="1:1">1:1 方图</option>
-            <option value="4:5">4:5 竖图</option>
-            <option value="2:3">2:3 详情长图</option>
-            <option value="16:9">16:9 横图</option>
+          <select name="ratio" defaultValue="1:1">
+            {nativeImageRatios.map(({ ratio, label, size }) => (
+              <option value={ratio} key={ratio}>
+                {ratio} {label} · {size}
+              </option>
+            ))}
           </select>
           <textarea
             name="direction"

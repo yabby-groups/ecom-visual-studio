@@ -50,7 +50,7 @@ def queue(connection: sqlite3.Connection, asset_id: str, queued_at: int) -> None
 
 
 def list_not_ready(connection: sqlite3.Connection, project_id: str):
-    return connection.execute("select id from assets where project_id=? and status!='ready'", (project_id,)).fetchall()
+    return connection.execute("select id,ratio from assets where project_id=? and status!='ready'", (project_id,)).fetchall()
 
 
 def mark_generating(connection: sqlite3.Connection, asset_id: str, started_at: int) -> None:

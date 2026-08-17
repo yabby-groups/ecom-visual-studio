@@ -373,6 +373,15 @@
   color: #e9edfa;
   font-size: 10px;
 }
+.ratio-row button b,
+.ratio-row button small {
+  display: block;
+}
+.ratio-row button small {
+  margin-top: 2px;
+  font-size: 9px;
+  opacity: 0.72;
+}
 .ratio-row button.active,
 .ratio-row button:hover {
   border-color: #2fa58d;

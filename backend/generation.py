@@ -4,24 +4,26 @@ import time
 import uuid
 
 import httpx
-from .config import DATA, GENERATED, MAX_LONG_EDGE, PNG_SIGNATURE, TARGET_SHORT_EDGE
+from .config import DATA, GENERATED, PNG_SIGNATURE
 from .db import asset_versions, assets
 from .db.core import db
 from .huabot import user_config
 
 
+IMAGE_SIZE_BY_RATIO = {
+    "1:1": (1024, 1024),
+    "3:2": (1536, 1024),
+    "2:3": (1024, 1536),
+    "16:9": (1536, 864),
+}
+
+
 def image_size_for_ratio(ratio: str) -> tuple[int, int]:
     try:
-        width_text, height_text = ratio.split(":", 1)
-        ratio_width, ratio_height = int(width_text), int(height_text)
-    except ValueError as error:
-        raise ValueError(f"不支持的画面比例: {ratio}") from error
-    if ratio_width < 1 or ratio_height < 1:
-        raise ValueError(f"不支持的画面比例: {ratio}")
-    scale = min(TARGET_SHORT_EDGE // min(ratio_width, ratio_height), MAX_LONG_EDGE // max(ratio_width, ratio_height))
-    if scale < 1:
-        raise ValueError(f"不支持的画面比例: {ratio}")
-    return ratio_width * scale, ratio_height * scale
+        return IMAGE_SIZE_BY_RATIO[ratio]
+    except KeyError as error:
+        supported = "、".join(IMAGE_SIZE_BY_RATIO)
+        raise ValueError(f"图像服务仅支持画面比例: {supported}") from error
 
 
 def png_dimensions(image_bytes: bytes) -> tuple[int, int]:

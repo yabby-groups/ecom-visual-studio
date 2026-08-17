@@ -33,7 +33,7 @@ class AssetPatch(BaseModel):
 
 class TemplateInput(BaseModel):
     name: str = Field(min_length=1, max_length=80)
-    ratio: str = Field(default="4:5", max_length=12)
+    ratio: str = Field(default="1:1", max_length=12)
     direction: str = Field(min_length=1, max_length=1800)
 
 

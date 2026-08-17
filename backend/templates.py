@@ -2,19 +2,20 @@ import time
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Cookie
+from fastapi import APIRouter, Cookie, HTTPException
 
 from .auth import require_user
 from .db import custom_templates
 from .db.core import db, transaction
+from .generation import image_size_for_ratio
 from .schemas import TemplateInput
 
 router = APIRouter()
 TEMPLATES = [
     ("hero-image", "商品主图", "商品展示", "1:1", "干净背景、完整展示商品轮廓、视觉焦点明确。"),
-    ("lifestyle-scene", "生活场景", "场景展示", "4:5", "将商品置于真实使用环境，体现尺度、氛围和使用价值。"),
-    ("detail-macro", "核心细节", "细节展示", "4:5", "特写呈现材质、结构、纹理和标志性细节。"),
-    ("poster-banner", "卖点海报", "营销展示", "4:5", "突出商品，留出信息排版空间，适用于促销和传播。"),
+    ("lifestyle-scene", "生活场景", "场景展示", "2:3", "将商品置于真实使用环境，体现尺度、氛围和使用价值。"),
+    ("detail-macro", "核心细节", "细节展示", "2:3", "特写呈现材质、结构、纹理和标志性细节。"),
+    ("poster-banner", "卖点海报", "营销展示", "2:3", "突出商品，留出信息排版空间，适用于促销和传播。"),
 ]
 
 
@@ -33,6 +34,10 @@ def templates(session: Optional[str] = Cookie(default=None)) -> list[dict[str, o
 @router.post("/api/templates")
 def add_template(body: TemplateInput, session: Optional[str] = Cookie(default=None)) -> dict[str, str]:
     user = require_user(session)
+    try:
+        image_size_for_ratio(body.ratio)
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
     template_id = uuid.uuid4().hex
     with transaction() as connection:
         custom_templates.create(connection, (template_id, user["id"], body.name, body.ratio, body.direction, int(time.time())))

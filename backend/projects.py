@@ -9,11 +9,18 @@ from .auth import require_user
 from .config import GENERATED
 from .db import asset_versions, assets as db_assets, projects as projects_table
 from .db.core import db
-from .generation import generate_asset
+from .generation import generate_asset, image_size_for_ratio
 from .schemas import AssetPatch, PackInput, ProjectInput
 from .templates import template_list
 
 router = APIRouter()
+
+
+def ensure_supported_ratio(ratio: str) -> None:
+    try:
+        image_size_for_ratio(ratio)
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
 
 
 def project_detail(project_id: str, user_id: str) -> dict[str, Any]:
@@ -33,7 +40,7 @@ def project_detail(project_id: str, user_id: str) -> dict[str, Any]:
 def built_in_pack(kind: str) -> list[tuple[str, str, str, str, str]]:
     packs = {
         "custom": [("H1", "商品主图", "hero-image", "1:1", "A clear ecommerce hero shot on a clean background, centered and fully visible.")],
-        "social": [("S1", "种草主视觉", "lifestyle-scene", "4:5", "A scroll-stopping lifestyle image with the product naturally featured."), ("S2", "产品细节", "detail-macro", "4:5", "A tactile close-up that highlights craftsmanship and product details."), ("S3", "品牌海报", "poster-banner", "4:5", "A premium campaign composition with generous copy space.")],
+        "social": [("S1", "种草主视觉", "lifestyle-scene", "2:3", "A scroll-stopping lifestyle image with the product naturally featured."), ("S2", "产品细节", "detail-macro", "2:3", "A tactile close-up that highlights craftsmanship and product details."), ("S3", "品牌海报", "poster-banner", "2:3", "A premium campaign composition with generous copy space.")],
         "amazon": [("H1", "商品主图", "hero-image", "1:1", "A clean hero shot on #FFFFFF, product occupies 38%, with clear price-overlay whitespace."), ("H2", "核心细节", "detail-macro", "1:1", "A macro close-up of material, texture and construction."), ("H3", "使用场景", "lifestyle-scene", "1:1", "The product naturally used in a believable everyday setting."), ("H4", "多角度展示", "multi-angle-grid", "1:1", "An orderly product grid showing useful angles and silhouette."), ("D1", "核心卖点", "poster-banner", "2:3", "A benefit-led product poster with reserved copy space."), ("D2", "品质特写", "detail-macro", "2:3", "An elevated detail scene emphasizing material and purchase confidence."), ("D3", "购买场景", "lifestyle-scene", "2:3", "A polished lifestyle scene showing daily value.")],
     }
     return packs.get(kind, packs["amazon"])
@@ -100,6 +107,8 @@ def create_pack(project_id: str, body: PackInput, session: Optional[str] = Cooki
     assets = [("T1", selected_template["name"], selected_template["id"], selected_template["ratio"], selected_template["direction"])] if selected_template else built_in_pack(body.kind)
     if not selected_template and body.kind == "amazon":
         assets += [(f"C{i}", templates[item]["name"], item, templates[item]["ratio"], templates[item]["direction"]) for i, item in enumerate(dict.fromkeys(body.scene_template_ids), 1) if item in templates and templates[item]["custom"]]
+    for _, _, _, ratio, _ in assets:
+        ensure_supported_ratio(ratio)
     connection = db()
     asset_versions.delete_for_project(connection, project_id)
     db_assets.delete_for_project(connection, project_id)
@@ -114,12 +123,14 @@ def create_pack(project_id: str, body: PackInput, session: Optional[str] = Cooki
 @router.patch("/api/assets/{asset_id}")
 def patch_asset(asset_id: str, body: AssetPatch, session: Optional[str] = Cookie(default=None)) -> dict[str, bool]:
     user = require_user(session)
+    fields = {key: value for key, value in body.model_dump().items() if value is not None}
+    if "ratio" in fields:
+        ensure_supported_ratio(fields["ratio"])
     connection = db()
     asset = db_assets.get_owned(connection, asset_id, user["id"])
     if not asset:
         connection.close()
         raise HTTPException(404, "画面不存在")
-    fields = {key: value for key, value in body.model_dump().items() if value is not None}
     if fields:
         db_assets.patch(connection, asset_id, fields)
         connection.commit()
@@ -151,6 +162,11 @@ def generate_one(asset_id: str, tasks: BackgroundTasks, session: Optional[str] =
     if not owned:
         connection.close()
         raise HTTPException(404, "画面不存在")
+    try:
+        ensure_supported_ratio(owned["ratio"])
+    except HTTPException:
+        connection.close()
+        raise
     db_assets.queue(connection, asset_id, int(time.time()))
     connection.commit()
     connection.close()
@@ -164,6 +180,12 @@ def generate_all(project_id: str, tasks: BackgroundTasks, session: Optional[str]
     project_detail(project_id, user["id"])
     connection = db()
     rows = db_assets.list_not_ready(connection, project_id)
+    try:
+        for row in rows:
+            ensure_supported_ratio(row["ratio"])
+    except HTTPException:
+        connection.close()
+        raise
     queued_at = int(time.time())
     for row in rows:
         db_assets.queue(connection, row["id"], queued_at)

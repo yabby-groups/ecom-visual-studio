@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { client } from "../api";
+import { nativeImageRatios } from "../constants/imageSizes";
 import { Notice } from "./Notice";
 import { Shell } from "./Shell";
 import { useAppStore } from "../store";
@@ -369,13 +370,15 @@ export function Workspace() {
               <fieldset>
                 <legend>画面比例</legend>
                 <div className="ratio-row">
-                  {["1:1", "4:5", "2:3", "16:9"].map((ratio) => (
+                  {nativeImageRatios.map(({ ratio, size }) => (
                     <button
                       key={ratio}
                       className={asset.ratio === ratio ? "active" : ""}
                       onClick={() => void updateAsset({ ratio })}
+                      title={`${ratio} · ${size}`}
                     >
-                      {ratio}
+                      <b>{ratio}</b>
+                      <small>{size}</small>
                     </button>
                   ))}
                 </div>

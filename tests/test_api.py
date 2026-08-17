@@ -5,6 +5,7 @@ import struct
 import zlib
 
 import httpx
+import pytest
 from fastapi.testclient import TestClient
 
 from backend import assistant, auth_routes, generation, huabot, projects, references, settings
@@ -268,9 +269,9 @@ def test_project_pack_and_custom_template_lifecycle():
         if not item["custom"]
     ] == [
         ("hero-image", "商品主图", "商品展示", "1:1", "干净背景、完整展示商品轮廓、视觉焦点明确。"),
-        ("lifestyle-scene", "生活场景", "场景展示", "4:5", "将商品置于真实使用环境，体现尺度、氛围和使用价值。"),
-        ("detail-macro", "核心细节", "细节展示", "4:5", "特写呈现材质、结构、纹理和标志性细节。"),
-        ("poster-banner", "卖点海报", "营销展示", "4:5", "突出商品，留出信息排版空间，适用于促销和传播。"),
+        ("lifestyle-scene", "生活场景", "场景展示", "2:3", "将商品置于真实使用环境，体现尺度、氛围和使用价值。"),
+        ("detail-macro", "核心细节", "细节展示", "2:3", "特写呈现材质、结构、纹理和标志性细节。"),
+        ("poster-banner", "卖点海报", "营销展示", "2:3", "突出商品，留出信息排版空间，适用于促销和传播。"),
     ]
 
     created = client.post("/api/projects", json={
@@ -284,7 +285,7 @@ def test_project_pack_and_custom_template_lifecycle():
     assert created.status_code == 200
     project_id = created.json()["id"]
 
-    template = client.post("/api/templates", json={"name": "Custom scene", "ratio": "4:5", "direction": "Natural afternoon light."})
+    template = client.post("/api/templates", json={"name": "Custom scene", "ratio": "3:2", "direction": "Natural afternoon light."})
     assert template.status_code == 200
     template_id = template.json()["id"]
     assert any(item["id"] == template_id and item["custom"] for item in client.get("/api/templates").json())
@@ -301,7 +302,7 @@ def test_project_pack_and_custom_template_lifecycle():
     )
     assert directed_builtin.status_code == 200
     detail = client.get(f"/api/projects/{project_id}").json()
-    assert [(asset["template"], asset["ratio"]) for asset in detail["assets"]] == [("lifestyle-scene", "4:5")]
+    assert [(asset["template"], asset["ratio"]) for asset in detail["assets"]] == [("lifestyle-scene", "2:3")]
     assert "真实使用环境" in detail["assets"][0]["prompt"]
 
     directed_custom = client.post(
@@ -310,7 +311,7 @@ def test_project_pack_and_custom_template_lifecycle():
     )
     assert directed_custom.status_code == 200
     detail = client.get(f"/api/projects/{project_id}").json()
-    assert [(asset["template"], asset["ratio"]) for asset in detail["assets"]] == [(template_id, "4:5")]
+    assert [(asset["template"], asset["ratio"]) for asset in detail["assets"]] == [(template_id, "3:2")]
     assert "Natural afternoon light." in detail["assets"][0]["prompt"]
 
     invalid_template = client.post(
@@ -322,7 +323,7 @@ def test_project_pack_and_custom_template_lifecycle():
     assert len(detail["assets"]) == 3
 
     asset_id = detail["assets"][0]["id"]
-    updated = client.patch(f"/api/assets/{asset_id}", json={"ratio": "16:9", "prompt": "Custom prompt"})
+    updated = client.patch(f"/api/assets/{asset_id}", json={"ratio": "3:2", "prompt": "Custom prompt"})
     assert updated.status_code == 200
     assert client.get(f"/api/projects/{project_id}").json()["assets"][0]["prompt"] == "Custom prompt"
 
@@ -390,11 +391,43 @@ def test_generation_rejects_a_mismatched_image_ratio(monkeypatch):
     assert generated["versions"] == []
 
 
-def test_image_size_for_ratio_uses_the_short_edge_and_long_edge_limits():
+def test_image_size_for_ratio_only_allows_supported_provider_sizes():
     assert generation.image_size_for_ratio("1:1") == (1024, 1024)
-    assert generation.image_size_for_ratio("4:5") == (1024, 1280)
+    assert generation.image_size_for_ratio("3:2") == (1536, 1024)
     assert generation.image_size_for_ratio("2:3") == (1024, 1536)
     assert generation.image_size_for_ratio("16:9") == (1536, 864)
+    with pytest.raises(ValueError, match="仅支持画面比例"):
+        generation.image_size_for_ratio("4:5")
+
+
+def test_rejects_non_native_ratios_before_generation_is_queued():
+    client = authenticated_client()
+    project_id = client.post("/api/projects", json={
+        "name": "Native ratio validation",
+        "product": "Native ratio product",
+        "description": "",
+        "benefits": "",
+        "color": "#A16207",
+        "reference": "",
+    }).json()["id"]
+    assert client.post(f"/api/projects/{project_id}/pack", json={"kind": "custom", "scene_template_ids": []}).status_code == 200
+    asset_id = client.get(f"/api/projects/{project_id}").json()["assets"][0]["id"]
+
+    invalid_template = client.post("/api/templates", json={"name": "Legacy portrait", "ratio": "4:5", "direction": "Legacy ratio."})
+    assert invalid_template.status_code == 422
+    assert "仅支持画面比例" in invalid_template.json()["detail"]
+
+    invalid_patch = client.patch(f"/api/assets/{asset_id}", json={"ratio": "4:5"})
+    assert invalid_patch.status_code == 422
+
+    connection = db()
+    connection.execute("update assets set ratio='4:5' where id=?", (asset_id,))
+    connection.commit()
+    connection.close()
+    invalid_generate = client.post(f"/api/assets/{asset_id}/generate")
+    assert invalid_generate.status_code == 422
+    asset = client.get(f"/api/projects/{project_id}").json()["assets"][0]
+    assert asset["status"] == "draft"
 
 
 def test_existing_generated_images_are_backfilled_as_versions():
