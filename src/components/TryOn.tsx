@@ -181,14 +181,26 @@ export function TryOn() {
       setError(reason instanceof Error ? reason.message : "无法加载换装记录");
     }
   }
+  const selectedJob = jobs.find((job) => job.id === selectedJobId);
+  const pendingJob = selectedJob && isPending(selectedJob.status) ? selectedJob : null;
   useEffect(() => {
     void load();
   }, [historyPage]);
   useEffect(() => {
-    if (!jobs.some((job) => isPending(job.status))) return;
-    const timer = window.setInterval(() => void load(), 2400);
+    if (!selectedJob || !isPending(selectedJob.status)) return;
+    const refreshSelectedJob = async () => {
+      try {
+        const job = await client.tryOnJob(selectedJob.id);
+        setJobs((current) =>
+          current.map((item) => (item.id === job.id ? job : item)),
+        );
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : "无法刷新换装任务");
+      }
+    };
+    const timer = window.setInterval(() => void refreshSelectedJob(), 2400);
     return () => window.clearInterval(timer);
-  }, [jobs]);
+  }, [selectedJob]);
   useEffect(() => {
     setSelectedJobId((current) =>
       current === "new" || jobs.some((job) => job.id === current)
@@ -284,8 +296,6 @@ export function TryOn() {
 
   const canCreate =
     personPaths.length > 0 && garmentPaths.length > 0 && consented && !uploading && !creating;
-  const selectedJob = jobs.find((job) => job.id === selectedJobId);
-  const pendingJob = selectedJob && isPending(selectedJob.status) ? selectedJob : null;
   useEffect(() => {
     setSelectedVersionPath(null);
   }, [selectedJobId]);

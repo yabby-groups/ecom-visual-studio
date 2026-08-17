@@ -5,6 +5,7 @@ import type {
   Project,
   Template,
   TokenSettings,
+  TryOnJob,
   TryOnPage,
   User,
 } from "./types";
@@ -81,6 +82,7 @@ export const client = {
     api<{ path: string }>("reference-url", { method: "POST", body: { url } }),
   tryOnJobs: (limit = 12, offset = 0) =>
     api<TryOnPage>(`try-on?limit=${limit}&offset=${offset}`),
+  tryOnJob: (id: string) => api<TryOnJob>(`try-on/${id}`),
   createTryOn: (body: {
     person_paths: string[];
     garment_paths: string[];
