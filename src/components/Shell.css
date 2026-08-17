@@ -219,6 +219,8 @@
 
 @media (max-width: 720px) {
   .app-shell {
+    --mobile-topbar-height: calc(64px + env(safe-area-inset-top));
+    --mobile-nav-height: calc(68px + env(safe-area-inset-bottom));
     display: block;
     min-height: 100dvh;
   }
@@ -227,8 +229,8 @@
   }
   .app-main {
     min-height: 100dvh;
-    padding-top: 64px;
-    padding-bottom: calc(76px + env(safe-area-inset-bottom));
+    padding-top: var(--mobile-topbar-height);
+    padding-bottom: calc(var(--mobile-nav-height) + 16px);
   }
   .mobile-bar {
     position: fixed;
@@ -236,12 +238,12 @@
     top: 0;
     right: 0;
     left: 0;
-    height: 64px;
-    min-height: 64px;
+    height: var(--mobile-topbar-height);
+    min-height: var(--mobile-topbar-height);
     display: flex;
     align-items: center;
     gap: 14px;
-    padding: 9px 112px 9px 18px;
+    padding: calc(9px + env(safe-area-inset-top)) 112px 9px 18px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.13);
     background: #0c1021;
     backdrop-filter: blur(18px);
@@ -260,7 +262,7 @@
     right: 0;
     bottom: 0;
     left: 0;
-    min-height: 68px;
+    min-height: var(--mobile-nav-height);
     display: flex;
     align-items: center;
     justify-content: space-around;

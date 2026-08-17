@@ -1,58 +1,89 @@
-.settings-form {
-  max-width: 720px;
-  display: grid;
-  gap: 18px;
-  margin: 0 34px 44px;
-}
-.settings-form section {
-  padding: 24px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: #fff;
-}
-.settings-form h2 {
-  margin: 0 0 6px;
-  font-size: 24px;
-}
-.settings-form section > p {
-  margin: 0 0 18px;
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 1.7;
+.settings-page {
+  max-width: 900px;
+  padding-top: 54px;
+  padding-bottom: 64px;
 }
 
-.settings-page {
-  max-width: 760px;
-  padding-top: 42px;
+.settings-intro {
+  max-width: 640px;
+  margin-bottom: 32px;
 }
-.settings-page > h1 {
-  margin: 0 0 28px;
+
+.settings-intro .eyebrow {
+  color: #aaf7df;
+}
+
+.settings-intro h1 {
+  margin: 0;
   color: #fff;
-  font-size: 52px;
-  line-height: 1.1;
+  font-size: clamp(38px, 5vw, 54px);
+  line-height: 1.08;
+}
+
+.settings-intro p {
+  margin: 15px 0 0;
+  color: #c5cde0;
+  font-size: 14px;
+  line-height: 1.7;
 }
 .settings-form {
   max-width: none;
-  gap: 18px;
+  display: grid;
+  gap: 16px;
   margin: 0;
 }
-.settings-form section {
-  padding: 20px;
+
+.settings-card {
+  min-width: 0;
+  padding: 24px;
   border: 1px solid var(--line);
-  border-radius: 18px;
+  border-radius: 22px;
   background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
-.settings-form h2 {
-  margin: 0 0 6px;
+
+.settings-card-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+  margin-bottom: 22px;
+}
+
+.settings-card-icon {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 13px;
+  background: rgba(68, 221, 183, 0.18);
+  color: #aaf7df;
+}
+
+.settings-card-icon-violet {
+  background: rgba(147, 133, 255, 0.22);
+  color: #d8d0ff;
+}
+
+.settings-card-icon-warm {
+  background: rgba(255, 121, 109, 0.18);
+  color: #ffc7bf;
+}
+
+.settings-card h2 {
+  margin: 1px 0 5px;
   color: #fff;
-  font-size: 19px;
+  font-size: 18px;
 }
-.settings-form section > p {
-  margin: 0 0 18px;
+
+.settings-card p {
+  max-width: 590px;
+  margin: 0;
   color: #c5cde0;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.6;
 }
+
 .settings-form label {
   display: grid;
   gap: 8px;
@@ -69,52 +100,102 @@
   background: #171d38;
   color: #fff;
 }
+
 .settings-form .form-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
 }
-.settings-logout {
-  display: none;
+
+.settings-save {
+  min-height: 48px;
+  justify-self: start;
+  padding-right: 20px;
+  padding-left: 20px;
 }
 
-@media (max-width: 720px) {
+.settings-logout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-top: 16px;
+}
+
+.settings-logout .settings-card-heading {
+  margin: 0;
+}
+
+.settings-logout-action {
+  flex: 0 0 auto;
+}
+
+.settings-logout-button {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid rgba(210, 118, 105, 0.68);
+  border-radius: 12px;
+  padding: 9px 14px;
+  background: rgba(166, 78, 69, 0.16);
+  color: #ffc7bf;
+  font-weight: 800;
+}
+
+.settings-logout-button:hover {
+  background: rgba(189, 91, 80, 0.28);
+}
+
+@media (max-width: 760px) {
+  .settings-form .form-grid {
+    grid-template-columns: 1fr;
+  }
+
   .settings-logout {
-    display: grid;
-    gap: 14px;
-    margin-top: 24px;
-    padding: 18px;
-    border: 1px solid rgba(255, 255, 255, 0.13);
-    border-radius: 14px;
-    background: rgba(255, 255, 255, 0.04);
-  }
-
-  .settings-logout h2 {
-    margin: 0 0 5px;
-    font-size: 16px;
-  }
-
-  .settings-logout p {
-    margin: 0;
-    color: #aebed0;
-    font-size: 13px;
-    line-height: 1.5;
+    align-items: stretch;
+    flex-direction: column;
+    gap: 18px;
   }
 
   .settings-logout-button {
-    min-height: 42px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    border: 1px solid rgba(210, 118, 105, 0.68);
-    border-radius: 11px;
-    background: rgba(166, 78, 69, 0.16);
-    color: #ffc7bf;
-    font-weight: 800;
+    width: 100%;
+  }
+}
+
+@media (max-width: 720px) {
+  .settings-page {
+    padding-top: 28px;
+    padding-bottom: 32px;
   }
 
-  .settings-logout-button:hover {
-    background: rgba(189, 91, 80, 0.28);
+  .settings-intro {
+    margin-bottom: 24px;
+  }
+
+  .settings-intro p {
+    font-size: 13px;
+  }
+
+  .settings-card {
+    padding: 18px;
+    border-radius: 18px;
+  }
+
+  .settings-card-heading {
+    gap: 11px;
+    margin-bottom: 18px;
+  }
+
+  .settings-card-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 12px;
+  }
+
+  .settings-form select {
+    min-height: 46px;
+    font-size: 16px;
   }
 }

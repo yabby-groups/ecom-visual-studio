@@ -1,5 +1,11 @@
 import { useEffect, useState } from "react";
-import { LoaderCircle, LogOut, Settings } from "lucide-react";
+import {
+  LoaderCircle,
+  LogOut,
+  Settings,
+  ShieldCheck,
+  Sparkles,
+} from "lucide-react";
 import { client } from "../api";
 import { LogoutButton } from "./LogoutButton";
 import { Notice } from "./Notice";
@@ -38,12 +44,12 @@ export function SettingsPage() {
   const modelsReady = models.length > 0;
   return (
     <Shell>
-      <div className="topbar">
-        <strong>设置</strong>
-      </div>
       <div className="page settings-page">
-        <span className="eyebrow">HUABOT TOKEN BASE</span>
-        <h1>设置</h1>
+        <header className="settings-intro">
+          <span className="eyebrow">HUABOT TOKEN BASE</span>
+          <h1>工作台设置</h1>
+          <p>管理创作所使用的 Token 与模型配置，变更会在保存后生效。</p>
+        </header>
         <form
           className="settings-form"
           onSubmit={async (event) => {
@@ -62,14 +68,20 @@ export function SettingsPage() {
             }
           }}
         >
-          <section>
-            <h2>选择 huabot Token</h2>
-            <p>
-              Token
-              只加密保存于服务端。图像生成、商品分析和对话都会使用当前选择。
-            </p>
+          <section className="settings-card">
+            <div className="settings-card-heading">
+              <span className="settings-card-icon" aria-hidden="true">
+                <ShieldCheck size={19} />
+              </span>
+              <div>
+                <h2>Huabot Token</h2>
+                <p>
+                  Token 只加密保存于服务端。图像生成、商品分析和对话都会使用当前选择。
+                </p>
+              </div>
+            </div>
             <label>
-              Token
+              当前 Token
               <select name="token_id" defaultValue={settings.active_token_id}>
                 {settings.tokens.map((token) => (
                   <option
@@ -85,8 +97,19 @@ export function SettingsPage() {
               </select>
             </label>
           </section>
-          <section>
-            <h2>模型分配</h2>
+          <section className="settings-card">
+            <div className="settings-card-heading">
+              <span
+                className="settings-card-icon settings-card-icon-violet"
+                aria-hidden="true"
+              >
+                <Sparkles size={19} />
+              </span>
+              <div>
+                <h2>模型分配</h2>
+                <p>为每种创作任务指定可用模型，未加载完成时不会提交配置。</p>
+              </div>
+            </div>
             <div className="form-grid">
               {[
                 ["image_model", "图像生成模型", settings.image_model],
@@ -116,20 +139,30 @@ export function SettingsPage() {
               ))}
             </div>
           </section>
-          <button className="create-button" disabled={!modelsReady}>
+          <button className="create-button settings-save" disabled={!modelsReady}>
             <Settings size={18} />
             保存配置
           </button>
         </form>
-        <section className="settings-logout">
-          <div>
-            <h2>账户</h2>
-            <p>退出后需要重新登录才能继续使用创作台。</p>
+        <section className="settings-logout settings-card">
+          <div className="settings-card-heading">
+            <span
+              className="settings-card-icon settings-card-icon-warm"
+              aria-hidden="true"
+            >
+              <LogOut size={19} />
+            </span>
+            <div>
+              <h2>账户</h2>
+              <p>退出后需要重新登录才能继续使用创作台。</p>
+            </div>
           </div>
-          <LogoutButton className="settings-logout-button">
-            <LogOut size={17} />
-            退出登录
-          </LogoutButton>
+          <div className="settings-logout-action">
+            <LogoutButton className="settings-logout-button">
+              <LogOut size={17} />
+              退出登录
+            </LogoutButton>
+          </div>
         </section>
       </div>
       {notice && <Notice text={notice} onClose={() => setNotice("")} />}
