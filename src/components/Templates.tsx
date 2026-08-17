@@ -191,7 +191,11 @@ export function Templates() {
           <button className="create-button">保存模板</button>
         </form>
         {error && <p className="form-error">{error}</p>}
-        <div className="template-wall" ref={wallRef} style={{ height: masonry.height }}>
+        <div
+          className="template-wall"
+          ref={wallRef}
+          style={{ height: masonry.height }}
+        >
           {templates.map((item) => {
             const direction = guide[item.id] || guide["hero-image"];
             const position = masonry.positions[item.id];
@@ -206,7 +210,11 @@ export function Templates() {
                   if (tile) tileRefs.current.set(item.id, tile);
                   else tileRefs.current.delete(item.id);
                 }}
-                style={position ? { left: position.left, top: position.top } : undefined}
+                style={
+                  position
+                    ? { left: position.left, top: position.top }
+                    : undefined
+                }
               >
                 <img
                   className="template-photo"

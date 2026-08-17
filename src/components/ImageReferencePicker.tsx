@@ -41,7 +41,11 @@ export function ImageReferencePicker({
           <span>图片来源</span>
           <small>支持 JPG、PNG、WebP，最大 15MB</small>
         </div>
-        <div className="reference-source-tabs" role="tablist" aria-label="选择图片来源">
+        <div
+          className="reference-source-tabs"
+          role="tablist"
+          aria-label="选择图片来源"
+        >
           <button
             type="button"
             role="tab"
@@ -76,8 +80,18 @@ export function ImageReferencePicker({
                 event.currentTarget.value = "";
               }}
             />
-            {loading ? <LoaderCircle className="spin" size={22} /> : <Upload size={22} />}
-            <b>{loading ? "正在上传图片" : preview ? "选择一张新图片" : "选择本地图片"}</b>
+            {loading ? (
+              <LoaderCircle className="spin" size={22} />
+            ) : (
+              <Upload size={22} />
+            )}
+            <b>
+              {loading
+                ? "正在上传图片"
+                : preview
+                  ? "选择一张新图片"
+                  : "选择本地图片"}
+            </b>
             <small>{loading ? "请稍候..." : "点击选择文件"}</small>
           </label>
         ) : (

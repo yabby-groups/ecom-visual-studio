@@ -67,3 +67,27 @@ export type TokenSettings = {
   text_model: string;
   chat_model: string;
 };
+export type TryOnJob = {
+  id: string;
+  user_id: string;
+  person_path: string;
+  garment_path: string;
+  instructions: string;
+  ratio: string;
+  status: AssetStatus;
+  file_path: string | null;
+  generation_started_at: number | null;
+  versions: TryOnVersion[];
+  created_at: number;
+};
+export type TryOnVersion = {
+  id: string;
+  job_id: string;
+  file_path: string;
+  created_at: number;
+};
+export type TryOnPage = {
+  items: TryOnJob[];
+  total: number;
+  has_more: boolean;
+};

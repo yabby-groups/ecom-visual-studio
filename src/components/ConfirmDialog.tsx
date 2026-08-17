@@ -41,10 +41,20 @@ export function ConfirmDialog({
         </div>
         {error && <p className="confirm-dialog-error">{error}</p>}
         <div className="confirm-dialog-actions">
-          <button className="text-button" type="button" onClick={onCancel} disabled={loading}>
+          <button
+            className="text-button"
+            type="button"
+            onClick={onCancel}
+            disabled={loading}
+          >
             取消
           </button>
-          <button className="confirm-dialog-confirm" type="button" onClick={onConfirm} disabled={loading}>
+          <button
+            className="confirm-dialog-confirm"
+            type="button"
+            onClick={onConfirm}
+            disabled={loading}
+          >
             {loading && <LoaderCircle className="spin" size={16} />}
             {confirmLabel}
           </button>

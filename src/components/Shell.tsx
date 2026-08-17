@@ -2,6 +2,7 @@ import { useState } from "react";
 import {
   FolderOpen,
   LayoutGrid,
+  Shirt,
   Settings,
   Sparkles,
 } from "lucide-react";
@@ -28,6 +29,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           <Nav to="/" icon={<LayoutGrid />} label="创作台" />
           <Nav to="/library" icon={<FolderOpen />} label="作品库" />
           <Nav to="/templates" icon={<Sparkles />} label="灵感模板" />
+          <Nav to="/try-on" icon={<Shirt />} label="AI 换装" />
         </nav>
         <div className="rail-bottom sidebar-bottom">
           <Nav to="/settings" icon={<Settings />} label="设置" />
@@ -46,12 +48,17 @@ export function Shell({ children }: { children: React.ReactNode }) {
         <Nav to="/" icon={<LayoutGrid />} label="创作台" />
         <Nav to="/library" icon={<FolderOpen />} label="作品库" />
         <Nav to="/templates" icon={<Sparkles />} label="模板" />
+        <Nav to="/try-on" icon={<Shirt />} label="换装" />
         <Nav to="/settings" icon={<Settings />} label="设置" />
       </nav>
       <div className="shell-actions">
         <LogoutButton className="text-button">
           {user.profile.avatar_url ? (
-            <img className="logout-avatar" src={user.profile.avatar_url} alt="" />
+            <img
+              className="logout-avatar"
+              src={user.profile.avatar_url}
+              alt=""
+            />
           ) : (
             <span className="logout-avatar logout-avatar-fallback">
               {displayName.slice(0, 1).toUpperCase()}

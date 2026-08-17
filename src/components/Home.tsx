@@ -11,7 +11,9 @@ import "./Home.css";
 export function Home() {
   const projects = useAppStore((state) => state.projects);
   const navigate = useNavigate();
-  const [latestCreation, setLatestCreation] = useState<LatestCreation | null>(null);
+  const [latestCreation, setLatestCreation] = useState<LatestCreation | null>(
+    null,
+  );
   useEffect(() => {
     let active = true;
     void client
@@ -66,10 +68,15 @@ export function Home() {
               <button
                 className="hero-art"
                 type="button"
-                onClick={() => navigate(`/projects/${latestCreation.project_id}`)}
+                onClick={() =>
+                  navigate(`/projects/${latestCreation.project_id}`)
+                }
                 aria-label={`继续编辑 ${latestCreation.title}`}
               >
-                <img src={fileUrl(latestCreation.file_path)} alt={latestCreation.title} />
+                <img
+                  src={fileUrl(latestCreation.file_path)}
+                  alt={latestCreation.title}
+                />
               </button>
             ) : (
               <div className="visual-empty">

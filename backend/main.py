@@ -12,6 +12,7 @@ from .projects import router as projects_router
 from .references import router as references_router
 from .settings import router as settings_router
 from .templates import router as templates_router
+from .try_on import router as try_on_router
 
 ensure_storage()
 
@@ -28,5 +29,6 @@ app.include_router(settings_router)
 app.include_router(projects_router)
 app.include_router(templates_router)
 app.include_router(references_router)
+app.include_router(try_on_router)
 app.include_router(assistant_router)
 app.mount("/files", StaticFiles(directory=DATA), name="files")

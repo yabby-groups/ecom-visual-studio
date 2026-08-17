@@ -5,6 +5,7 @@ import type {
   Project,
   Template,
   TokenSettings,
+  TryOnPage,
   User,
 } from "./types";
 
@@ -78,6 +79,17 @@ export const client = {
   },
   importUrl: (url: string) =>
     api<{ path: string }>("reference-url", { method: "POST", body: { url } }),
+  tryOnJobs: (limit = 12, offset = 0) =>
+    api<TryOnPage>(`try-on?limit=${limit}&offset=${offset}`),
+  createTryOn: (body: {
+    person_path: string;
+    garment_path: string;
+    instructions: string;
+    ratio: string;
+  }) => api<{ id: string }>("try-on", { method: "POST", body }),
+  regenerateTryOn: (id: string) =>
+    api(`try-on/${id}/generate`, { method: "POST" }),
+  deleteTryOn: (id: string) => api(`try-on/${id}`, { method: "DELETE" }),
   analyze: (body: { mode: string; product: string; reference: string }) =>
     api<{ description: string; benefits: string[] }>("analyze-product", {
       method: "POST",

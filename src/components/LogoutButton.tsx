@@ -25,7 +25,9 @@ export function LogoutButton({ className, children }: LogoutButtonProps) {
       navigate("/");
     } catch (logoutError) {
       setError(
-        logoutError instanceof Error ? logoutError.message : "退出登录失败，请重试",
+        logoutError instanceof Error
+          ? logoutError.message
+          : "退出登录失败，请重试",
       );
     } finally {
       setPending(false);

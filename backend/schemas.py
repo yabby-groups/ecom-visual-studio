@@ -31,6 +31,13 @@ class AssetPatch(BaseModel):
     prompt: Optional[str] = Field(default=None, max_length=12000)
 
 
+class TryOnInput(BaseModel):
+    person_path: str = Field(min_length=1, max_length=500)
+    garment_path: str = Field(min_length=1, max_length=500)
+    instructions: str = Field(default="", max_length=1000)
+    ratio: str = Field(default="2:3", max_length=12)
+
+
 class TemplateInput(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     ratio: str = Field(default="1:1", max_length=12)

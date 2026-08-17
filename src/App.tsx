@@ -6,6 +6,7 @@ import { Login } from "./components/Login";
 import { NewProject } from "./components/NewProject";
 import { SettingsPage } from "./components/SettingsPage";
 import { Templates } from "./components/Templates";
+import { TryOn } from "./components/TryOn";
 import { Workspace } from "./components/Workspace";
 import { useAppStore } from "./store";
 
@@ -26,6 +27,7 @@ export function App() {
       <Route path="/projects/:id" element={<Workspace />} />
       <Route path="/library" element={<Library />} />
       <Route path="/templates" element={<Templates />} />
+      <Route path="/try-on" element={<TryOn />} />
       <Route path="/settings" element={<SettingsPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

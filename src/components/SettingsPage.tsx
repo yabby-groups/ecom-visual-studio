@@ -22,7 +22,8 @@ export function SettingsPage() {
     model.id.startsWith("gpt-image-"),
   );
   useEffect(() => {
-    void client.models()
+    void client
+      .models()
       .then(async (items) => {
         const next = await client.tokenSettings();
         setSettings(next);
@@ -76,7 +77,8 @@ export function SettingsPage() {
               <div>
                 <h2>Huabot Token</h2>
                 <p>
-                  Token 只加密保存于服务端。图像生成、商品分析和对话都会使用当前选择。
+                  Token
+                  只加密保存于服务端。图像生成、商品分析和对话都会使用当前选择。
                 </p>
               </div>
             </div>
@@ -129,17 +131,22 @@ export function SettingsPage() {
                     disabled={!modelsReady}
                   >
                     {!modelsReady && <option value="">暂无可用模型</option>}
-                    {(name === "image_model" ? imageModels : models).map((model) => (
-                      <option value={model.id} key={model.id}>
-                        {model.name}
-                      </option>
-                    ))}
+                    {(name === "image_model" ? imageModels : models).map(
+                      (model) => (
+                        <option value={model.id} key={model.id}>
+                          {model.name}
+                        </option>
+                      ),
+                    )}
                   </select>
                 </label>
               ))}
             </div>
           </section>
-          <button className="create-button settings-save" disabled={!modelsReady}>
+          <button
+            className="create-button settings-save"
+            disabled={!modelsReady}
+          >
             <Settings size={18} />
             保存配置
           </button>

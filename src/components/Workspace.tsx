@@ -38,7 +38,9 @@ export function Workspace() {
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [originalOpen, setOriginalOpen] = useState(false);
-  const [selectedVersionPath, setSelectedVersionPath] = useState<string | null>(null);
+  const [selectedVersionPath, setSelectedVersionPath] = useState<string | null>(
+    null,
+  );
   const [now, setNow] = useState(() => Date.now());
   const promptRef = useRef<HTMLTextAreaElement>(null);
   const shownFailureRef = useRef("");
@@ -72,16 +74,20 @@ export function Workspace() {
     const failures = project?.assets?.filter((item) =>
       item.status.startsWith("failed"),
     );
-    const failureKey = failures?.map((item) => `${item.id}:${item.status}`).join("|") ?? "";
+    const failureKey =
+      failures?.map((item) => `${item.id}:${item.status}`).join("|") ?? "";
     if (!failureKey) {
       shownFailureRef.current = "";
       return;
     }
     if (failureKey === shownFailureRef.current) return;
     shownFailureRef.current = failureKey;
-    const message = failures?.[0]?.status.replace(/^failed:\s*/, "") || "未知错误";
+    const message =
+      failures?.[0]?.status.replace(/^failed:\s*/, "") || "未知错误";
     showNotice(`图片生成失败：${message}`, null);
-  }, [project?.assets?.map((asset) => `${asset.id}:${asset.status}`).join("|")]);
+  }, [
+    project?.assets?.map((asset) => `${asset.id}:${asset.status}`).join("|"),
+  ]);
   const pendingAsset = project?.assets?.find(
     (item) => item.id === assetId && isPending(item.status),
   );
@@ -158,7 +164,10 @@ export function Workspace() {
       await updateAsset({ prompt: result.prompt });
       showNotice("已生成提示词");
     } catch (reason) {
-      showNotice(reason instanceof Error ? reason.message : "生成提示词失败", null);
+      showNotice(
+        reason instanceof Error ? reason.message : "生成提示词失败",
+        null,
+      );
     }
   }
   return (
@@ -257,9 +266,7 @@ export function Workspace() {
                   </button>
                 </div>
               </header>
-              <div
-                className={`artboard ${displayedPath ? "with-image" : ""}`}
-              >
+              <div className={`artboard ${displayedPath ? "with-image" : ""}`}>
                 {displayedPath && (
                   <img src={fileUrl(displayedPath)} alt={asset.title} />
                 )}
@@ -282,7 +289,8 @@ export function Workspace() {
                       <i style={{ transform: `scaleX(${cycleProgress})` }} />
                     </div>
                     <p className="generation-timing">
-                      生成中 · 预计剩余 {formatDuration(remainingSeconds)} · 已用时 {elapsedSeconds} 秒
+                      生成中 · 预计剩余 {formatDuration(remainingSeconds)} ·
+                      已用时 {elapsedSeconds} 秒
                     </p>
                   </div>
                 ) : !displayedPath ? (
@@ -320,12 +328,16 @@ export function Workspace() {
                         <button
                           className={`variant ${active ? "active" : ""}`}
                           type="button"
-                          onClick={() => setSelectedVersionPath(version.file_path)}
+                          onClick={() =>
+                            setSelectedVersionPath(version.file_path)
+                          }
                           key={version.id}
                           aria-label={`查看${current ? "当前" : `历史 ${versions.length - index}`}版本`}
                         >
                           <img src={fileUrl(version.file_path)} alt="" />
-                          <b>{current ? "当前" : `v${versions.length - index}`}</b>
+                          <b>
+                            {current ? "当前" : `v${versions.length - index}`}
+                          </b>
                         </button>
                       );
                     })}
@@ -405,7 +417,9 @@ export function Workspace() {
               <button
                 className="button secondary"
                 onClick={() => {
-                  void updateAsset({ prompt: promptRef.current?.value ?? asset.prompt });
+                  void updateAsset({
+                    prompt: promptRef.current?.value ?? asset.prompt,
+                  });
                   showNotice("创作控制已保存");
                 }}
               >

@@ -3,7 +3,7 @@ from contextlib import contextmanager
 from typing import Iterator
 
 from ..config import DATA, DB, GENERATED, UPLOADS
-from . import asset_versions, assets, custom_templates, models, projects, sessions, settings, tokens, users
+from . import asset_versions, assets, custom_templates, models, projects, sessions, settings, tokens, try_on_jobs, try_on_versions, users
 
 
 def db() -> sqlite3.Connection:
@@ -36,7 +36,9 @@ def ensure_storage() -> None:
 def init_db() -> None:
     ensure_storage()
     with transaction() as connection:
-        for table in (users, sessions, settings, tokens, models, projects, assets, asset_versions, custom_templates):
+        for table in (users, sessions, settings, tokens, models, projects, assets, asset_versions, custom_templates, try_on_jobs, try_on_versions):
             table.ensure(connection)
         asset_versions.backfill(connection)
+        try_on_versions.backfill(connection)
         assets.fail_interrupted(connection)
+        try_on_jobs.fail_interrupted(connection)

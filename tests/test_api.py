@@ -9,7 +9,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from backend import assistant, auth_routes, generation, huabot, projects, references, settings
+from backend import assistant, auth_routes, generation, huabot, projects, references, settings, try_on
 from backend.auth import crypt
 from backend.config import GENERATED, UPLOADS
 from backend.db import db, init_db
@@ -37,8 +37,113 @@ def test_database_initialization_enables_fk_and_expected_indexes():
         assert {row[1] for row in connection.execute("pragma index_list(projects)")} >= {"projects_user_created_idx"}
         assert {row[1] for row in connection.execute("pragma index_list(assets)")} >= {"assets_project_created_idx"}
         assert {row[1] for row in connection.execute("pragma index_list(asset_versions)")} >= {"asset_versions_asset_created_idx"}
+        assert {row[1] for row in connection.execute("pragma index_list(try_on_jobs)")} >= {"try_on_jobs_user_created_idx"}
+        assert {row[1] for row in connection.execute("pragma index_list(try_on_versions)")} >= {"try_on_versions_job_created_idx"}
     finally:
         connection.close()
+
+
+def test_try_on_requires_owned_uploaded_references_and_scopes_history(monkeypatch):
+    client = authenticated_client()
+    person = UPLOADS / "try-on-test-person.png"
+    garment = UPLOADS / "try-on-test-garment.png"
+    person.write_bytes(png_bytes(2, 3))
+    garment.write_bytes(png_bytes(2, 3))
+    monkeypatch.setattr(try_on, "generate_try_on", lambda _: None)
+    try:
+        assert client.post("/api/try-on", json={"person_path": "uploads/missing.png", "garment_path": "uploads/try-on-test-garment.png"}).status_code == 422
+        response = client.post("/api/try-on", json={"person_path": "uploads/try-on-test-person.png", "garment_path": "uploads/try-on-test-garment.png", "instructions": "Keep the background", "ratio": "2:3"})
+        assert response.status_code == 200
+        job_id = response.json()["id"]
+        job = client.get(f"/api/try-on/{job_id}")
+        assert job.status_code == 200
+        assert job.json()["status"] == "queued"
+        assert job.json()["person_path"] == "uploads/try-on-test-person.png"
+        history = client.get("/api/try-on?limit=48&offset=0").json()
+        assert set(history) == {"items", "total", "has_more"}
+        assert history["total"] >= 1
+        assert any(item["id"] == job_id for item in history["items"])
+
+        connection = db()
+        connection.execute("insert or ignore into users(id,username,password_hash,created_at) values(?,?,?,?)", ("try-on-other", "try-on-other", "hash", 1))
+        connection.execute("insert or replace into sessions values(?,?,?)", ("try-on-other-session", "try-on-other", 4102444800))
+        connection.commit()
+        connection.close()
+        other = TestClient(app)
+        other.cookies.set("session", "try-on-other-session")
+        assert other.get(f"/api/try-on/{job_id}").status_code == 404
+        assert other.post(f"/api/try-on/{job_id}/generate").status_code == 404
+        assert other.delete(f"/api/try-on/{job_id}").status_code == 404
+        assert client.delete(f"/api/try-on/{job_id}").status_code == 409
+        connection = db()
+        connection.execute("update try_on_jobs set status='failed: test' where id=?", (job_id,))
+        connection.commit()
+        connection.close()
+        assert client.delete(f"/api/try-on/{job_id}").json() == {"ok": True}
+    finally:
+        connection = db()
+        connection.execute("delete from try_on_versions where job_id in (select id from try_on_jobs where person_path=?)", ("uploads/try-on-test-person.png",))
+        connection.execute("delete from try_on_jobs where person_path=?", ("uploads/try-on-test-person.png",))
+        connection.execute("delete from sessions where id='try-on-other-session'")
+        connection.execute("delete from users where id='try-on-other'")
+        connection.commit()
+        connection.close()
+        person.unlink(missing_ok=True)
+        garment.unlink(missing_ok=True)
+
+
+def test_try_on_generation_sends_two_images_and_persists_result(monkeypatch):
+    client = authenticated_client()
+    person = UPLOADS / "try-on-generation-person.png"
+    garment = UPLOADS / "try-on-generation-garment.png"
+    person.write_bytes(png_bytes(2, 3))
+    garment.write_bytes(png_bytes(2, 3))
+    captured = []
+    class FakeOpenAI:
+        def __init__(self, **kwargs):
+            assert kwargs == {"base_url": "https://images.example", "api_key": "test", "timeout": 300}
+            self.images = self
+
+        def edit(self, **kwargs):
+            captured.append(kwargs)
+            return SimpleNamespace(data=[SimpleNamespace(b64_json=base64.b64encode(png_bytes(2, 3)).decode())])
+
+    monkeypatch.setattr(try_on, "user_config", lambda _: {"base": "https://images.example", "key": "test", "image_model": "gpt-image-2"})
+    monkeypatch.setattr(try_on, "OpenAI", FakeOpenAI)
+    monkeypatch.setattr(try_on.time, "time", lambda: 1_700_000_000)
+    try:
+        response = client.post("/api/try-on", json={"person_path": "uploads/try-on-generation-person.png", "garment_path": "uploads/try-on-generation-garment.png", "ratio": "2:3"})
+        assert response.status_code == 200
+        job_id = response.json()["id"]
+        job = client.get(f"/api/try-on/{job_id}").json()
+        assert job["status"] == "ready"
+        assert job["generation_started_at"] == 1_700_000_000
+        assert job["file_path"].startswith("generated/try-on/test-user/")
+        assert len(captured) == 1
+        assert captured[0]["model"] == "gpt-image-2"
+        assert captured[0]["size"] == "1024x1536"
+        assert len(captured[0]["image"]) == 2
+        assert "first reference image as the person" in captured[0]["prompt"]
+        assert len(job["versions"]) == 1
+        first_path = job["file_path"]
+        assert client.post(f"/api/try-on/{job_id}/generate").status_code == 200
+        regenerated = client.get(f"/api/try-on/{job_id}").json()
+        assert regenerated["status"] == "ready"
+        assert regenerated["file_path"] != first_path
+        assert {version["file_path"] for version in regenerated["versions"]} == {
+            first_path,
+            regenerated["file_path"],
+        }
+        for version in regenerated["versions"]:
+            (GENERATED / version["file_path"].removeprefix("generated/")).unlink(missing_ok=True)
+    finally:
+        connection = db()
+        connection.execute("delete from try_on_versions where job_id in (select id from try_on_jobs where person_path=?)", ("uploads/try-on-generation-person.png",))
+        connection.execute("delete from try_on_jobs where person_path=?", ("uploads/try-on-generation-person.png",))
+        connection.commit()
+        connection.close()
+        person.unlink(missing_ok=True)
+        garment.unlink(missing_ok=True)
 
 
 def png_bytes(width: int, height: int) -> bytes:
