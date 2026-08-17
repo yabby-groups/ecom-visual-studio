@@ -3,6 +3,7 @@ import json
 import shutil
 import struct
 import zlib
+from pathlib import Path
 from types import SimpleNamespace
 
 import httpx
@@ -59,6 +60,8 @@ def test_try_on_requires_owned_uploaded_references_and_scopes_history(monkeypatc
         assert job.status_code == 200
         assert job.json()["status"] == "queued"
         assert job.json()["person_path"] == "uploads/try-on-test-person.png"
+        assert job.json()["person_paths"] == ["uploads/try-on-test-person.png"]
+        assert job.json()["garment_paths"] == ["uploads/try-on-test-garment.png"]
         history = client.get("/api/try-on?limit=48&offset=0").json()
         assert set(history) == {"items", "total", "has_more"}
         assert history["total"] >= 1
@@ -123,7 +126,7 @@ def test_try_on_generation_sends_two_images_and_persists_result(monkeypatch):
         assert captured[0]["model"] == "gpt-image-2"
         assert captured[0]["size"] == "1024x1536"
         assert len(captured[0]["image"]) == 2
-        assert "first reference image as the person" in captured[0]["prompt"]
+        assert "first group of reference images shows the person" in captured[0]["prompt"]
         assert len(job["versions"]) == 1
         first_path = job["file_path"]
         assert client.post(f"/api/try-on/{job_id}/generate").status_code == 200
@@ -144,6 +147,102 @@ def test_try_on_generation_sends_two_images_and_persists_result(monkeypatch):
         connection.close()
         person.unlink(missing_ok=True)
         garment.unlink(missing_ok=True)
+
+
+def test_try_on_accepts_multiple_references_and_creates_all_combinations(monkeypatch):
+    client = authenticated_client()
+    paths = [
+        "try-on-multi-person-1.png",
+        "try-on-multi-person-2.png",
+        "try-on-multi-garment-1.png",
+        "try-on-multi-garment-2.png",
+    ]
+    for name in paths:
+        (UPLOADS / name).write_bytes(png_bytes(2, 3))
+    monkeypatch.setattr(try_on, "generate_try_on", lambda _: None)
+    people = [f"uploads/{name}" for name in paths[:2]]
+    garments = [f"uploads/{name}" for name in paths[2:]]
+    try:
+        invalid = client.post("/api/try-on", json={
+            "person_paths": people + [people[0], people[0], people[0]],
+            "garment_paths": garments,
+        })
+        assert invalid.status_code == 422
+
+        combined = client.post("/api/try-on", json={
+            "person_paths": people,
+            "garment_paths": garments,
+            "generation_mode": "combined",
+        })
+        assert combined.status_code == 200
+        assert combined.json()["ids"] == [combined.json()["id"]]
+        combined_job = client.get(f"/api/try-on/{combined.json()['id']}").json()
+        assert combined_job["person_paths"] == people
+        assert combined_job["garment_paths"] == garments
+
+        combinations = client.post("/api/try-on", json={
+            "person_paths": people,
+            "garment_paths": garments,
+            "generation_mode": "combinations",
+        })
+        assert combinations.status_code == 200
+        assert len(combinations.json()["ids"]) == 4
+        jobs = [client.get(f"/api/try-on/{job_id}").json() for job_id in combinations.json()["ids"]]
+        assert {(job["person_paths"][0], job["garment_paths"][0]) for job in jobs} == {
+            (person, garment) for person in people for garment in garments
+        }
+        assert all(len(job["person_paths"]) == len(job["garment_paths"]) == 1 for job in jobs)
+    finally:
+        connection = db()
+        connection.execute("delete from try_on_versions where job_id in (select id from try_on_jobs where person_path like 'uploads/try-on-multi-%')")
+        connection.execute("delete from try_on_jobs where person_path like 'uploads/try-on-multi-%'")
+        connection.commit()
+        connection.close()
+        for name in paths:
+            (UPLOADS / name).unlink(missing_ok=True)
+
+
+def test_try_on_generation_orders_multiple_references(monkeypatch):
+    client = authenticated_client()
+    names = [
+        "try-on-order-person-1.png",
+        "try-on-order-person-2.png",
+        "try-on-order-garment-1.png",
+        "try-on-order-garment-2.png",
+    ]
+    for name in names:
+        (UPLOADS / name).write_bytes(png_bytes(2, 3))
+    captured = []
+
+    class FakeOpenAI:
+        def __init__(self, **kwargs):
+            self.images = self
+
+        def edit(self, **kwargs):
+            captured.append(kwargs)
+            return SimpleNamespace(data=[SimpleNamespace(b64_json=base64.b64encode(png_bytes(2, 3)).decode())])
+
+    monkeypatch.setattr(try_on, "user_config", lambda _: {"base": "https://images.example", "key": "test", "image_model": "gpt-image-2"})
+    monkeypatch.setattr(try_on, "OpenAI", FakeOpenAI)
+    try:
+        response = client.post("/api/try-on", json={
+            "person_paths": [f"uploads/{name}" for name in names[:2]],
+            "garment_paths": [f"uploads/{name}" for name in names[2:]],
+            "generation_mode": "combined",
+        })
+        assert response.status_code == 200
+        assert [Path(image.name).name for image in captured[0]["image"]] == names
+        job = client.get(f"/api/try-on/{response.json()['id']}").json()
+        assert job["status"] == "ready"
+        (GENERATED / job["file_path"].removeprefix("generated/")).unlink(missing_ok=True)
+    finally:
+        connection = db()
+        connection.execute("delete from try_on_versions where job_id in (select id from try_on_jobs where person_path like 'uploads/try-on-order-%')")
+        connection.execute("delete from try_on_jobs where person_path like 'uploads/try-on-order-%'")
+        connection.commit()
+        connection.close()
+        for name in names:
+            (UPLOADS / name).unlink(missing_ok=True)
 
 
 def png_bytes(width: int, height: int) -> bytes:

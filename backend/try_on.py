@@ -1,6 +1,9 @@
 import base64
+import json
 import time
 import uuid
+from contextlib import ExitStack
+from itertools import product
 from pathlib import Path
 from typing import Any, Optional
 
@@ -17,7 +20,7 @@ from .schemas import TryOnInput
 
 router = APIRouter()
 
-TRY_ON_PROMPT = """Create a realistic full-body fashion try-on image. Use the first reference image as the person and the second reference image as the single garment to wear. Preserve the person's identity, pose, body proportions, hair, and background. Replace only their clothing with the supplied garment, accurately preserving its color, fabric, silhouette, and visible details. Compose a complete full-body fashion image. Do not add text, watermarks, logos, extra garments, or unrelated objects."""
+TRY_ON_PROMPT = """Create a realistic full-body fashion try-on image. The first group of reference images shows the person and the second group shows one garment. The first image of each group is the primary reference; any later images only provide additional angles and visual details. Preserve the person's identity, pose, body proportions, hair, and background. Replace only their clothing with the supplied garment, accurately preserving its color, fabric, silhouette, and visible details. Compose a complete full-body fashion image. Do not add text, watermarks, logos, extra garments, or unrelated objects."""
 
 
 def _uploaded_path(path: str) -> Path:
@@ -27,6 +30,19 @@ def _uploaded_path(path: str) -> Path:
     if UPLOADS.resolve() not in target.parents or not target.is_file():
         raise ValueError("换装参考图片不存在")
     return target
+
+
+def _reference_paths(job: Any, key: str) -> list[str]:
+    raw = job[f"{key}_paths"]
+    if raw:
+        try:
+            paths = json.loads(raw)
+        except (TypeError, json.JSONDecodeError) as error:
+            raise ValueError("换装参考图片记录无效") from error
+        if isinstance(paths, list) and all(isinstance(path, str) for path in paths):
+            return paths
+        raise ValueError("换装参考图片记录无效")
+    return [job[f"{key}_path"]]
 
 
 def generate_try_on(job_id: str) -> None:
@@ -43,14 +59,21 @@ def generate_try_on(job_id: str) -> None:
             raise ValueError("请设置 HUABOT_BASE_URL 或 IMG_BASE_URL")
         if not config["image_model"].startswith("gpt-image-"):
             raise ValueError("图像生成模型必须是 GPT Image 模型")
-        person = _uploaded_path(job["person_path"])
-        garment = _uploaded_path(job["garment_path"])
+        person_paths = _reference_paths(job, "person")
+        garment_paths = _reference_paths(job, "garment")
+        reference_paths = person_paths + garment_paths
+        if not reference_paths:
+            raise ValueError("换装参考图片不能为空")
         width, height = image_size_for_ratio(job["ratio"])
         client = OpenAI(base_url=config["base"], api_key=config["key"], timeout=300)
-        with person.open("rb") as person_file, garment.open("rb") as garment_file:
+        with ExitStack() as stack:
+            image_files = [
+                stack.enter_context(_uploaded_path(path).open("rb"))
+                for path in reference_paths
+            ]
             result = client.images.edit(
                 model=config["image_model"],
-                image=[person_file, garment_file],
+                image=image_files,
                 prompt=f"{TRY_ON_PROMPT}\nAdditional direction: {job['instructions'].strip() or 'None.'}",
                 size=f"{width}x{height}",
                 n=1,
@@ -81,6 +104,8 @@ def generate_try_on(job_id: str) -> None:
 
 def _job_payload(connection: Any, row: Any) -> dict[str, Any]:
     payload = dict(row)
+    payload["person_paths"] = _reference_paths(payload, "person")
+    payload["garment_paths"] = _reference_paths(payload, "garment")
     payload["versions"] = [
         dict(version) for version in try_on_versions.list_for_job(connection, payload["id"])
     ]
@@ -112,21 +137,40 @@ def get_try_on(job_id: str, session: Optional[str] = Cookie(default=None)) -> di
 
 
 @router.post("/api/try-on")
-def create_try_on(body: TryOnInput, tasks: BackgroundTasks, session: Optional[str] = Cookie(default=None)) -> dict[str, str]:
+def create_try_on(body: TryOnInput, tasks: BackgroundTasks, session: Optional[str] = Cookie(default=None)) -> dict[str, Any]:
     user = require_user(session)
+    person_paths = body.person_paths or ([body.person_path] if body.person_path else [])
+    garment_paths = body.garment_paths or ([body.garment_path] if body.garment_path else [])
     try:
-        _uploaded_path(body.person_path)
-        _uploaded_path(body.garment_path)
+        if not person_paths or not garment_paths:
+            raise ValueError("请至少添加一张人物照片和一张服装图片")
+        if len(person_paths) > 4 or len(garment_paths) > 4:
+            raise ValueError("人物照片和服装图片最多各添加 4 张")
+        for path in [*person_paths, *garment_paths]:
+            _uploaded_path(path)
         image_size_for_ratio(body.ratio)
     except ValueError as error:
         raise HTTPException(422, str(error)) from error
-    job_id = uuid.uuid4().hex
     with_connection = db()
-    try_on_jobs.create(with_connection, (job_id, user["id"], body.person_path, body.garment_path, body.instructions, body.ratio, "queued", None, int(time.time())))
+    references = (
+        [(person_paths, garment_paths)]
+        if body.generation_mode == "combined"
+        else [([person_path], [garment_path]) for person_path, garment_path in product(person_paths, garment_paths)]
+    )
+    job_ids = []
+    for people, garments in references:
+        job_id = uuid.uuid4().hex
+        try_on_jobs.create(with_connection, (
+            job_id, user["id"], people[0], garments[0], json.dumps(people),
+            json.dumps(garments), body.instructions, body.ratio, "queued", None,
+            int(time.time()),
+        ))
+        job_ids.append(job_id)
     with_connection.commit()
     with_connection.close()
-    tasks.add_task(generate_try_on, job_id)
-    return {"id": job_id}
+    for job_id in job_ids:
+        tasks.add_task(generate_try_on, job_id)
+    return {"id": job_ids[0], "ids": job_ids}
 
 
 @router.post("/api/try-on/{job_id}/generate")

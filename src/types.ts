@@ -72,6 +72,8 @@ export type TryOnJob = {
   user_id: string;
   person_path: string;
   garment_path: string;
+  person_paths: string[];
+  garment_paths: string[];
   instructions: string;
   ratio: string;
   status: AssetStatus;

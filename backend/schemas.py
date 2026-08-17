@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -32,8 +32,11 @@ class AssetPatch(BaseModel):
 
 
 class TryOnInput(BaseModel):
-    person_path: str = Field(min_length=1, max_length=500)
-    garment_path: str = Field(min_length=1, max_length=500)
+    person_path: Optional[str] = Field(default=None, min_length=1, max_length=500)
+    garment_path: Optional[str] = Field(default=None, min_length=1, max_length=500)
+    person_paths: list[str] = Field(default_factory=list, max_length=4)
+    garment_paths: list[str] = Field(default_factory=list, max_length=4)
+    generation_mode: Literal["combined", "combinations"] = "combined"
     instructions: str = Field(default="", max_length=1000)
     ratio: str = Field(default="2:3", max_length=12)
 

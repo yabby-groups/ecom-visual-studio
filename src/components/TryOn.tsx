@@ -32,19 +32,21 @@ function formatDuration(seconds: number) {
 type ReferenceSlotProps = {
   title: string;
   hint: string;
-  path: string;
+  paths: string[];
   loading: boolean;
   onUpload: (file: File) => void;
   onImport: (url: string) => void;
+  onRemove: (path: string) => void;
 };
 
 function ReferenceSlot({
   title,
   hint,
-  path,
+  paths,
   loading,
   onUpload,
   onImport,
+  onRemove,
 }: ReferenceSlotProps) {
   const [source, setSource] = useState<"upload" | "url">("upload");
   const [url, setUrl] = useState("");
@@ -76,27 +78,37 @@ function ReferenceSlot({
           <Link2 size={13} /> 链接导入
         </button>
       </div>
+      <div className="try-on-reference-images" aria-label={`${title}图片列表`}>
+        {paths.map((path, index) => (
+          <div className="try-on-reference-thumbnail" key={path}>
+            <img src={fileUrl(path)} alt={`${title} ${index + 1}`} />
+            {index === 0 && <span>主图</span>}
+            <button
+              type="button"
+              onClick={() => onRemove(path)}
+              aria-label={`移除${title} ${index + 1}`}
+              title="移除图片"
+            >
+              <X size={13} />
+            </button>
+          </div>
+        ))}
+      </div>
       {source === "upload" ? (
-        <label className={`try-on-upload ${path ? "has-image" : ""}`}>
+        <label className="try-on-upload">
           <input
             type="file"
             accept="image/png,image/jpeg,image/webp"
-            disabled={loading}
+            disabled={loading || paths.length >= 4}
             onChange={(event) => {
               const file = event.target.files?.[0];
               if (file) onUpload(file);
               event.currentTarget.value = "";
             }}
           />
-          {path ? (
-            <img src={fileUrl(path)} alt={title} />
-          ) : (
-            <>
-              <ImagePlus size={28} />
-              <b>上传图片</b>
-              <span>JPG、PNG、WebP，最大 15MB</span>
-            </>
-          )}
+          <ImagePlus size={28} />
+          <b>{paths.length ? "继续添加图片" : "上传图片"}</b>
+          <span>{paths.length}/4 张 · JPG、PNG、WebP，最大 15MB</span>
           {loading && (
             <span className="try-on-upload-loading">
               <LoaderCircle className="spin" size={22} /> 上传中
@@ -111,14 +123,14 @@ function ReferenceSlot({
           <input
             type="url"
             value={url}
-            disabled={loading}
+            disabled={loading || paths.length >= 4}
             onChange={(event) => setUrl(event.target.value)}
             placeholder="https://example.com/image.jpg"
           />
           <button
             type="button"
             className="button secondary"
-            disabled={loading || !url.trim()}
+            disabled={loading || paths.length >= 4 || !url.trim()}
             onClick={() => onImport(url.trim())}
           >
             {loading ? (
@@ -126,7 +138,7 @@ function ReferenceSlot({
             ) : (
               <Link2 size={16} />
             )}
-            导入图片
+            导入图片（{paths.length}/4）
           </button>
         </div>
       )}
@@ -136,8 +148,9 @@ function ReferenceSlot({
 
 export function TryOn() {
   const navigate = useNavigate();
-  const [personPath, setPersonPath] = useState("");
-  const [garmentPath, setGarmentPath] = useState("");
+  const [personPaths, setPersonPaths] = useState<string[]>([]);
+  const [garmentPaths, setGarmentPaths] = useState<string[]>([]);
+  const [generationMode, setGenerationMode] = useState<"combined" | "combinations">("combined");
   const [instructions, setInstructions] = useState("");
   const [ratio, setRatio] = useState("2:3");
   const [consented, setConsented] = useState(false);
@@ -190,8 +203,8 @@ export function TryOn() {
     try {
       const { path } = await client.upload(file);
       setSelectedJobId("new");
-      if (slot === "person") setPersonPath(path);
-      else setGarmentPath(path);
+      if (slot === "person") setPersonPaths((paths) => [...paths, path]);
+      else setGarmentPaths((paths) => [...paths, path]);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "图片上传失败");
     } finally {
@@ -205,8 +218,8 @@ export function TryOn() {
     try {
       const { path } = await client.importUrl(url);
       setSelectedJobId("new");
-      if (slot === "person") setPersonPath(path);
-      else setGarmentPath(path);
+      if (slot === "person") setPersonPaths((paths) => [...paths, path]);
+      else setGarmentPaths((paths) => [...paths, path]);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "图片链接导入失败");
     } finally {
@@ -219,8 +232,9 @@ export function TryOn() {
     setCreating(true);
     try {
       const { id } = await client.createTryOn({
-        person_path: personPath,
-        garment_path: garmentPath,
+        person_paths: personPaths,
+        garment_paths: garmentPaths,
+        generation_mode: generationMode,
         instructions,
         ratio,
       });
@@ -262,8 +276,14 @@ export function TryOn() {
     }
   }
 
+  function removeReference(slot: "person" | "garment", path: string) {
+    setSelectedJobId("new");
+    if (slot === "person") setPersonPaths((paths) => paths.filter((item) => item !== path));
+    else setGarmentPaths((paths) => paths.filter((item) => item !== path));
+  }
+
   const canCreate =
-    !!personPath && !!garmentPath && consented && !uploading && !creating;
+    personPaths.length > 0 && garmentPaths.length > 0 && consented && !uploading && !creating;
   const selectedJob = jobs.find((job) => job.id === selectedJobId);
   const pendingJob = selectedJob && isPending(selectedJob.status) ? selectedJob : null;
   useEffect(() => {
@@ -277,9 +297,10 @@ export function TryOn() {
     return () => window.clearInterval(timer);
   }, [pendingJob?.generation_started_at]);
   const displayedPath = selectedVersionPath ?? selectedJob?.file_path ?? null;
-  const referencePersonPath = selectedJob?.person_path ?? personPath;
-  const referenceGarmentPath = selectedJob?.garment_path ?? garmentPath;
-  const hasOriginals = !!referencePersonPath && !!referenceGarmentPath;
+  const referencePersonPaths = selectedJob?.person_paths ?? personPaths;
+  const referenceGarmentPaths = selectedJob?.garment_paths ?? garmentPaths;
+  const hasOriginals = referencePersonPaths.length > 0 && referenceGarmentPaths.length > 0;
+  const combinationCount = personPaths.length * garmentPaths.length;
   const totalPages = Math.max(1, Math.ceil(historyTotal / HISTORY_PAGE_SIZE));
   const elapsedSeconds =
     pendingJob?.generation_started_at
@@ -508,19 +529,42 @@ export function TryOn() {
           <ReferenceSlot
             title="人物照片"
             hint="清晰、全身的人像效果最佳"
-            path={referencePersonPath}
+            paths={personPaths}
             loading={uploading === "person"}
             onUpload={(file) => void upload("person", file)}
             onImport={(url) => void importUrl("person", url)}
+            onRemove={(path) => removeReference("person", path)}
           />
           <ReferenceSlot
             title="主服装"
             hint="平铺或挂拍的单件服装"
-            path={referenceGarmentPath}
+            paths={garmentPaths}
             loading={uploading === "garment"}
             onUpload={(file) => void upload("garment", file)}
             onImport={(url) => void importUrl("garment", url)}
+            onRemove={(path) => removeReference("garment", path)}
           />
+          <fieldset className="try-on-generation-mode">
+            <legend>生成方式</legend>
+            <div className="try-on-mode-options">
+              <button
+                type="button"
+                className={generationMode === "combined" ? "active" : ""}
+                onClick={() => setGenerationMode("combined")}
+              >
+                <b>合并参考</b>
+                <small>全部图片共同生成 1 个结果</small>
+              </button>
+              <button
+                type="button"
+                className={generationMode === "combinations" ? "active" : ""}
+                onClick={() => setGenerationMode("combinations")}
+              >
+                <b>全部组合</b>
+                <small>将生成 {combinationCount || 0} 个独立结果</small>
+              </button>
+            </div>
+          </fieldset>
           <fieldset>
             <legend>画面比例</legend>
             <div className="ratio-row">
@@ -545,8 +589,8 @@ export function TryOn() {
           <div className="style-lock">
             <i style={{ background: "#e6ba73" }} />
             <div>
-              <b>人物与服装已锁定</b>
-              <span>保持人物身份，仅替换指定服装</span>
+              <b>首图为主参考</b>
+              <span>其余图片将补充人物角度与服装细节</span>
             </div>
           </div>
           <label>
@@ -578,7 +622,7 @@ export function TryOn() {
             ) : (
               <Sparkles size={17} />
             )}
-            保存并生成试穿
+            {generationMode === "combinations" ? `生成 ${combinationCount} 个组合` : "保存并生成试穿"}
           </button>
         </aside>
       </div>
@@ -610,14 +654,18 @@ export function TryOn() {
               </button>
             </header>
             <div className="try-on-original-grid">
-              <figure>
-                <img src={fileUrl(referencePersonPath)} alt="人物原图" />
-                <figcaption>人物原图</figcaption>
-              </figure>
-              <figure>
-                <img src={fileUrl(referenceGarmentPath)} alt="服装原图" />
-                <figcaption>服装原图</figcaption>
-              </figure>
+              {referencePersonPaths.map((path, index) => (
+                <figure key={path}>
+                  <img src={fileUrl(path)} alt={`人物原图 ${index + 1}`} />
+                  <figcaption>人物原图 {index + 1}{index === 0 ? "（主图）" : ""}</figcaption>
+                </figure>
+              ))}
+              {referenceGarmentPaths.map((path, index) => (
+                <figure key={path}>
+                  <img src={fileUrl(path)} alt={`服装原图 ${index + 1}`} />
+                  <figcaption>服装原图 {index + 1}{index === 0 ? "（主图）" : ""}</figcaption>
+                </figure>
+              ))}
             </div>
           </section>
         </div>

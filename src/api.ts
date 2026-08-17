@@ -82,11 +82,12 @@ export const client = {
   tryOnJobs: (limit = 12, offset = 0) =>
     api<TryOnPage>(`try-on?limit=${limit}&offset=${offset}`),
   createTryOn: (body: {
-    person_path: string;
-    garment_path: string;
+    person_paths: string[];
+    garment_paths: string[];
+    generation_mode: "combined" | "combinations";
     instructions: string;
     ratio: string;
-  }) => api<{ id: string }>("try-on", { method: "POST", body }),
+  }) => api<{ id: string; ids: string[] }>("try-on", { method: "POST", body }),
   regenerateTryOn: (id: string) =>
     api(`try-on/${id}/generate`, { method: "POST" }),
   deleteTryOn: (id: string) => api(`try-on/${id}`, { method: "DELETE" }),
