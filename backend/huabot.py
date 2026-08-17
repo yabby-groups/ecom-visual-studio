@@ -1,8 +1,7 @@
 import json
 from typing import Any, Optional
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
 
+import httpx
 from .auth import decrypt
 from .config import env
 from .db import settings
@@ -17,9 +16,10 @@ def parse_huabot_models(raw_models: dict[str, Any]) -> list[dict[str, str]]:
 def huabot_models() -> list[dict[str, str]]:
     web_base = env().get("HUABOT_WEB_BASE_URL", "https://www.huabot.com").rstrip("/")
     try:
-        with urlopen(Request(f"{web_base}/api/token_base/model/list/?size=500&offset=0&enabled=1"), timeout=30) as response:
-            models = parse_huabot_models(json.loads(response.read().decode()))
-    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as error:
+        response = httpx.get(f"{web_base}/api/token_base/model/list/?size=500&offset=0&enabled=1", timeout=30)
+        response.raise_for_status()
+        models = parse_huabot_models(response.json())
+    except (httpx.HTTPError, json.JSONDecodeError) as error:
         raise ValueError(f"无法读取 huabot 模型列表：{error}") from error
     if not models:
         raise ValueError("huabot 没有返回可用模型")
@@ -31,25 +31,27 @@ def huabot_login(name: str, password: str, totp_code: str) -> tuple[list[dict[st
     base = (values.get("HUABOT_BASE_URL") or values.get("IMG_BASE_URL") or "https://huabot.com").removesuffix("/v1").rstrip("/")
 
     def call(path: str, data: Optional[dict[str, str]] = None, bearer: str = "", form: bool = False) -> dict[str, Any]:
-        from urllib.parse import urlencode
-        body = (urlencode(data).encode() if form else json.dumps(data).encode()) if data else None
-        headers = {"Content-Type": "application/x-www-form-urlencoded" if form else "application/json"} if body else {}
+        headers = {}
         if bearer:
             headers["Authorization"] = f"Bearer {bearer}"
         try:
-            with urlopen(Request(base + path, data=body, headers=headers, method="POST" if body else "GET"), timeout=30) as response:
-                result = json.loads(response.read().decode())
-        except HTTPError as error:
+            kwargs: dict[str, Any] = {"headers": headers, "timeout": 30}
+            if data:
+                kwargs["data" if form else "json"] = data
+            response = httpx.request("POST" if data else "GET", base + path, **kwargs)
+            response.raise_for_status()
+            result = response.json()
+        except httpx.HTTPStatusError as error:
             try:
-                error_result = json.loads(error.read().decode())
+                error_result = error.response.json()
             except (UnicodeDecodeError, json.JSONDecodeError):
                 error_result = None
             if isinstance(error_result, dict):
                 message = error_result.get("err") or error_result.get("detail") or error_result.get("error")
                 if message:
                     raise ValueError(str(message)) from error
-            raise ValueError(f"huabot 登录失败：HTTP {error.code}") from error
-        except (URLError, TimeoutError, json.JSONDecodeError) as error:
+            raise ValueError(f"huabot 登录失败：HTTP {error.response.status_code}") from error
+        except (httpx.RequestError, json.JSONDecodeError) as error:
             raise ValueError(f"无法连接 huabot：{error}") from error
         if not isinstance(result, dict) or result.get("err"):
             raise ValueError(str(result.get("err", "huabot 返回异常")))

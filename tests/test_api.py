@@ -1,16 +1,15 @@
 import base64
-import io
 import json
 import shutil
 import struct
 import zlib
-from urllib.error import HTTPError
 
+import httpx
 from fastapi.testclient import TestClient
 
-from backend import assistant, auth_routes, generation, huabot, projects, settings
+from backend import assistant, auth_routes, generation, huabot, projects, references, settings
 from backend.auth import crypt
-from backend.config import GENERATED
+from backend.config import GENERATED, UPLOADS
 from backend.db import db, init_db
 from backend.main import app
 
@@ -126,58 +125,58 @@ def test_settings_reject_a_non_gpt_image_model():
 def test_huabot_models_use_the_public_alias_endpoint(monkeypatch):
     captured = []
 
-    class FakeResponse:
+    def fake_get(url, **_kwargs):
+        captured.append(url)
+        return httpx.Response(200, json={"models": [{"id": 7, "alias": "gpt-image-2", "title": "GPT Image"}]}, request=httpx.Request("GET", url))
+
+    monkeypatch.setenv("HUABOT_WEB_BASE_URL", "https://models.example")
+    monkeypatch.setattr(huabot.httpx, "get", fake_get)
+
+    assert huabot.huabot_models() == [{"id": "7", "name": "GPT Image", "alias": "gpt-image-2"}]
+    assert captured == ["https://models.example/api/token_base/model/list/?size=500&offset=0&enabled=1"]
+
+
+def test_reference_url_downloads_an_image_with_httpx_stream(monkeypatch):
+    client = authenticated_client()
+    captured = []
+
+    class FakeStream:
         def __enter__(self):
-            return self
+            return httpx.Response(200, content=b"image-data", headers={"content-type": "image/webp; charset=binary"}, request=httpx.Request("GET", "https://images.example/reference.webp"))
 
         def __exit__(self, *_):
             return False
 
-        def read(self):
-            return b'{"models":[{"id":7,"alias":"gpt-image-2","title":"GPT Image"}]}'
+    def fake_stream(method, url, **kwargs):
+        captured.append((method, url, kwargs))
+        return FakeStream()
 
-    def fake_urlopen(request, **_kwargs):
-        captured.append(request)
-        return FakeResponse()
+    monkeypatch.setattr(references.httpx, "stream", fake_stream)
+    response = client.post("/api/reference-url", json={"url": "https://images.example/reference.webp"})
 
-    monkeypatch.setenv("HUABOT_WEB_BASE_URL", "https://models.example")
-    monkeypatch.setattr(huabot, "urlopen", fake_urlopen)
-
-    assert huabot.huabot_models() == [{"id": "7", "name": "GPT Image", "alias": "gpt-image-2"}]
-    assert captured[0].full_url == "https://models.example/api/token_base/model/list/?size=500&offset=0&enabled=1"
-    assert captured[0].get_header("Authorization") is None
+    assert response.status_code == 200
+    assert captured == [("GET", "https://images.example/reference.webp", {"headers": {"User-Agent": "EcomVisualStudio/1.0"}, "timeout": 20})]
+    target = UPLOADS / response.json()["path"].removeprefix("uploads/")
+    try:
+        assert target.suffix == ".webp"
+        assert target.read_bytes() == b"image-data"
+    finally:
+        target.unlink(missing_ok=True)
 
 
 def test_huabot_login_only_sends_totp_after_the_challenge(monkeypatch):
     requests = []
 
-    class FakeResponse:
-        def __init__(self, payload):
-            self.payload = payload
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_):
-            return False
-
-        def read(self):
-            return json.dumps(self.payload).encode()
-
-    def fake_urlopen(request, **_kwargs):
-        requests.append(request)
-        if request.full_url.endswith("/api/signin/"):
-            raise HTTPError(
-                request.full_url,
-                400,
-                "Bad Request",
-                None,
-                io.BytesIO(b'{"err":"totp required"}'),
-            )
-        raise AssertionError(f"unexpected request: {request.full_url}")
+    def fake_request(method, url, **kwargs):
+        requests.append((method, url, kwargs))
+        if url.endswith("/api/signin/"):
+            request = httpx.Request(method, url)
+            response = httpx.Response(400, json={"err": "totp required"}, request=request)
+            raise httpx.HTTPStatusError("Bad Request", request=request, response=response)
+        raise AssertionError(f"unexpected request: {url}")
 
     monkeypatch.setenv("HUABOT_BASE_URL", "https://huabot.example")
-    monkeypatch.setattr(huabot, "urlopen", fake_urlopen)
+    monkeypatch.setattr(huabot.httpx, "request", fake_request)
 
     try:
         huabot.huabot_login("alice", "secret", "")
@@ -186,7 +185,7 @@ def test_huabot_login_only_sends_totp_after_the_challenge(monkeypatch):
     else:
         raise AssertionError("TOTP challenge should fail the first login attempt")
 
-    assert requests[0].data == b"name=alice&passwd=secret"
+    assert requests[0][2]["data"] == {"name": "alice", "passwd": "secret"}
     with TestClient(app) as client:
         response = client.post("/api/auth/login", json={"name": "alice", "password": "secret"})
 
@@ -197,27 +196,14 @@ def test_huabot_login_only_sends_totp_after_the_challenge(monkeypatch):
 def test_huabot_login_sends_the_totp_code_after_a_challenge(monkeypatch):
     requests = []
 
-    class FakeResponse:
-        def __init__(self, payload):
-            self.payload = payload
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_):
-            return False
-
-        def read(self):
-            return json.dumps(self.payload).encode()
-
-    def fake_urlopen(request, **_kwargs):
-        requests.append(request)
-        if request.full_url.endswith("/api/signin/"):
-            return FakeResponse({"err": "totp invalid"})
-        raise AssertionError(f"unexpected request: {request.full_url}")
+    def fake_request(method, url, **kwargs):
+        requests.append((method, url, kwargs))
+        if url.endswith("/api/signin/"):
+            return httpx.Response(200, json={"err": "totp invalid"}, request=httpx.Request(method, url))
+        raise AssertionError(f"unexpected request: {url}")
 
     monkeypatch.setenv("HUABOT_BASE_URL", "https://huabot.example")
-    monkeypatch.setattr(huabot, "urlopen", fake_urlopen)
+    monkeypatch.setattr(huabot.httpx, "request", fake_request)
 
     try:
         huabot.huabot_login("alice", "secret", "123456")
@@ -226,7 +212,7 @@ def test_huabot_login_sends_the_totp_code_after_a_challenge(monkeypatch):
     else:
         raise AssertionError("An invalid TOTP code should fail login")
 
-    assert requests[0].data == b"name=alice&passwd=secret&totp_code=123456"
+    assert requests[0][2]["data"] == {"name": "alice", "passwd": "secret", "totp_code": "123456"}
 
 
 def test_latest_creation_returns_only_the_users_newest_version():
@@ -356,23 +342,13 @@ def test_generation_started_at_is_persisted_from_enqueue_to_completion(monkeypat
 
     payloads = []
 
-    class FakeResponse:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_):
-            return False
-
-        def read(self):
-            return json.dumps({"data": [{"b64_json": base64.b64encode(png_bytes(2, 3)).decode()}]}).encode()
-
-    def fake_urlopen(request, *_args, **_kwargs):
-        payloads.append(json.loads(request.data.decode()))
-        return FakeResponse()
+    def fake_post(_url, **kwargs):
+        payloads.append(kwargs["json"])
+        return httpx.Response(200, json={"data": [{"b64_json": base64.b64encode(png_bytes(2, 3)).decode()}]}, request=httpx.Request("POST", _url))
 
     assert client.patch(f"/api/assets/{asset_id}", json={"ratio": "2:3"}).status_code == 200
     monkeypatch.setattr(generation, "user_config", lambda _: {"base": "https://images.example", "key": "test", "image_model": "gpt-image-2"})
-    monkeypatch.setattr(generation, "urlopen", fake_urlopen)
+    monkeypatch.setattr(generation.httpx, "post", fake_post)
     monkeypatch.setattr(generation.time, "time", lambda: 1_700_000_000)
 
     generation.generate_asset(asset_id)
@@ -403,20 +379,9 @@ def test_generation_rejects_a_mismatched_image_ratio(monkeypatch):
     assert client.post(f"/api/projects/{project_id}/pack", json={"kind": "amazon", "scene_template_ids": []}).status_code == 200
     asset_id = client.get(f"/api/projects/{project_id}").json()["assets"][0]["id"]
 
-    class FakeResponse:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_):
-            return False
-
-        def read(self):
-            image = base64.b64encode(png_bytes(16, 9)).decode()
-            return json.dumps({"data": [{"b64_json": image}]}).encode()
-
     assert client.patch(f"/api/assets/{asset_id}", json={"ratio": "2:3"}).status_code == 200
     monkeypatch.setattr(generation, "user_config", lambda _: {"base": "https://images.example", "key": "test", "image_model": "gpt-image-2"})
-    monkeypatch.setattr(generation, "urlopen", lambda *_args, **_kwargs: FakeResponse())
+    monkeypatch.setattr(generation.httpx, "post", lambda url, **_kwargs: httpx.Response(200, json={"data": [{"b64_json": base64.b64encode(png_bytes(16, 9)).decode()}]}, request=httpx.Request("POST", url)))
 
     generation.generate_asset(asset_id)
     generated = client.get(f"/api/projects/{project_id}").json()["assets"][0]
@@ -520,32 +485,19 @@ def test_settings_use_model_aliases_for_all_huabot_requests(monkeypatch):
 
         requests = []
 
-        class FakeResponse:
-            def __init__(self, payload):
-                self.payload = payload
-
-            def __enter__(self):
-                return self
-
-            def __exit__(self, *_):
-                return False
-
-            def read(self):
-                return json.dumps(self.payload).encode()
-
-        def fake_urlopen(request, **_kwargs):
-            payload = json.loads(request.data.decode())
-            requests.append((request.full_url, payload))
-            if request.full_url.endswith("/images/generations"):
+        def fake_post(url, **kwargs):
+            payload = kwargs["json"]
+            requests.append((url, payload))
+            if url.endswith("/images/generations"):
                 image = base64.b64encode(png_bytes(1024, 1024)).decode()
-                return FakeResponse({"data": [{"b64_json": image}]})
+                return httpx.Response(200, json={"data": [{"b64_json": image}]}, request=httpx.Request("POST", url))
             if "Return JSON only" in str(payload["messages"][-1]["content"]):
-                return FakeResponse({"choices": [{"message": {"content": '{"description":"Test description","benefits":["A","B","C","D"]}'}}]})
-            return FakeResponse({"choices": [{"message": {"content": "Test reply"}}]})
+                return httpx.Response(200, json={"choices": [{"message": {"content": '{"description":"Test description","benefits":["A","B","C","D"]}'}}]}, request=httpx.Request("POST", url))
+            return httpx.Response(200, json={"choices": [{"message": {"content": "Test reply"}}]}, request=httpx.Request("POST", url))
 
         monkeypatch.setenv("HUABOT_BASE_URL", "https://huabot.example")
-        monkeypatch.setattr(generation, "urlopen", fake_urlopen)
-        monkeypatch.setattr(assistant, "urlopen", fake_urlopen)
+        monkeypatch.setattr(generation.httpx, "post", fake_post)
+        monkeypatch.setattr(assistant.httpx, "post", fake_post)
 
         project = client.post("/api/projects", json={
             "name": "Alias project",

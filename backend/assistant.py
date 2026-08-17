@@ -2,8 +2,8 @@ import base64
 import json
 import mimetypes
 from typing import Any, Optional
-from urllib.request import Request, urlopen
 
+import httpx
 from fastapi import APIRouter, Cookie, HTTPException
 
 from .auth import require_user
@@ -24,10 +24,11 @@ def chat(body: ChatInput, session: Optional[str] = Cookie(default=None)) -> dict
     messages = [{"role": item.get("role"), "content": str(item.get("content", ""))[:6000]} for item in body.messages if item.get("role") in {"user", "assistant"} and item.get("content")]
     if not messages or messages[-1]["role"] != "user":
         raise HTTPException(400, "请输入消息")
-    payload = json.dumps({"model": config["chat_model"], "messages": [{"role": "system", "content": "You are a helpful Chinese e-commerce creative assistant. Return copy-ready, accurate answers."}, *messages]}).encode()
+    payload = {"model": config["chat_model"], "messages": [{"role": "system", "content": "You are a helpful Chinese e-commerce creative assistant. Return copy-ready, accurate answers."}, *messages]}
     try:
-        with urlopen(Request(f"{config['base']}/chat/completions", data=payload, headers={"Authorization": f"Bearer {config['key']}", "Content-Type": "application/json"}, method="POST"), timeout=90) as response:
-            result = json.loads(response.read().decode())
+        response = httpx.post(f"{config['base']}/chat/completions", json=payload, headers={"Authorization": f"Bearer {config['key']}"}, timeout=90)
+        response.raise_for_status()
+        result = response.json()
         return {"reply": str(result["choices"][0]["message"]["content"]).strip()}
     except Exception as error:
         raise HTTPException(502, f"AI 对话失败：{error}") from error
@@ -48,10 +49,11 @@ def analyze(body: AnalyzeInput, session: Optional[str] = Cookie(default=None)) -
         if not image.is_file() or DATA not in image.parents:
             raise HTTPException(400, "请先上传图片")
         content = [{"type": "text", "text": content}, {"type": "image_url", "image_url": {"url": f"data:{mimetypes.guess_type(image)[0] or 'image/jpeg'};base64,{base64.b64encode(image.read_bytes()).decode()}"}}]
-    payload = json.dumps({"model": config["text_model"], "temperature": 0.35, "messages": [{"role": "user", "content": content}]}).encode()
+    payload = {"model": config["text_model"], "temperature": 0.35, "messages": [{"role": "user", "content": content}]}
     try:
-        with urlopen(Request(f"{config['base']}/chat/completions", data=payload, headers={"Authorization": f"Bearer {config['key']}", "Content-Type": "application/json"}, method="POST"), timeout=60) as response:
-            result = json.loads(response.read().decode())
+        response = httpx.post(f"{config['base']}/chat/completions", json=payload, headers={"Authorization": f"Bearer {config['key']}"}, timeout=60)
+        response.raise_for_status()
+        result = response.json()
         raw = str(result["choices"][0]["message"]["content"]).strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
         parsed = json.loads(raw)
         return {"description": str(parsed["description"]), "benefits": [str(item) for item in parsed["benefits"]][:4]}

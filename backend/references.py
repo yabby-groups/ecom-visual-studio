@@ -2,9 +2,8 @@ import mimetypes
 import uuid
 from pathlib import Path
 from typing import Optional
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
 
+import httpx
 from fastapi import APIRouter, Cookie, File, HTTPException, UploadFile
 
 from .auth import require_user
@@ -34,10 +33,15 @@ def import_reference(payload: dict[str, str], session: Optional[str] = Cookie(de
     if not url.startswith(("https://", "http://")):
         raise HTTPException(400, "请输入公开可访问的图片 URL")
     try:
-        with urlopen(Request(url, headers={"User-Agent": "EcomVisualStudio/1.0"}), timeout=20) as response:
-            content = response.read(MAX_UPLOAD + 1)
-            mime = response.headers.get_content_type()
-    except (HTTPError, URLError, TimeoutError) as error:
+        with httpx.stream("GET", url, headers={"User-Agent": "EcomVisualStudio/1.0"}, timeout=20) as response:
+            response.raise_for_status()
+            mime = response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+            content = b""
+            for chunk in response.iter_bytes():
+                content += chunk
+                if len(content) > MAX_UPLOAD:
+                    break
+    except httpx.HTTPError as error:
         raise HTTPException(400, f"无法导入图片：{error}") from error
     if len(content) > MAX_UPLOAD or not mime.startswith("image/"):
         raise HTTPException(400, "图片格式无效或超过 15MB")

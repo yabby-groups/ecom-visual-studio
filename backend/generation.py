@@ -1,10 +1,9 @@
 import base64
-import json
 import struct
 import time
 import uuid
-from urllib.request import Request, urlopen
 
+import httpx
 from .config import DATA, GENERATED, MAX_LONG_EDGE, PNG_SIGNATURE, TARGET_SHORT_EDGE
 from .db import asset_versions, assets
 from .db.core import db
@@ -49,16 +48,17 @@ def generate_asset(asset_id: str) -> None:
         if not config["image_model"].startswith("gpt-image-"):
             raise ValueError("图像生成模型必须是 GPT Image 模型")
         expected_width, expected_height = image_size_for_ratio(asset["ratio"])
-        payload = json.dumps({"model": config["image_model"], "prompt": asset["prompt"], "size": f"{expected_width}x{expected_height}", "n": 1}).encode()
-        request = Request(f"{config['base']}/images/generations", data=payload, headers={"Authorization": f"Bearer {config['key']}", "Content-Type": "application/json"}, method="POST")
-        with urlopen(request, timeout=300) as response:
-            result = json.loads(response.read().decode())
+        payload = {"model": config["image_model"], "prompt": asset["prompt"], "size": f"{expected_width}x{expected_height}", "n": 1}
+        response = httpx.post(f"{config['base']}/images/generations", json=payload, headers={"Authorization": f"Bearer {config['key']}"}, timeout=300)
+        response.raise_for_status()
+        result = response.json()
         image = (result.get("data") or [{}])[0]
         if image.get("b64_json"):
             image_bytes = base64.b64decode(image["b64_json"], validate=True)
         elif image.get("url"):
-            with urlopen(Request(image["url"], headers={"User-Agent": "EcomVisualStudio/1.0"}), timeout=300) as response:
-                image_bytes = response.read()
+            response = httpx.get(image["url"], headers={"User-Agent": "EcomVisualStudio/1.0"}, timeout=300)
+            response.raise_for_status()
+            image_bytes = response.content
         else:
             raise ValueError("图像服务没有返回图片")
         actual_width, actual_height = png_dimensions(image_bytes)
