@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   Copy,
+  Download,
   Eye,
   ImagePlus,
   LoaderCircle,
@@ -38,6 +39,7 @@ export function Workspace() {
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [originalOpen, setOriginalOpen] = useState(false);
+  const [referenceOpen, setReferenceOpen] = useState(false);
   const [selectedVersionPath, setSelectedVersionPath] = useState<string | null>(
     null,
   );
@@ -100,16 +102,20 @@ export function Workspace() {
   }, [pendingAsset?.generation_started_at]);
   useEffect(() => {
     setOriginalOpen(false);
+    setReferenceOpen(false);
     setSelectedVersionPath(null);
   }, [assetId]);
   useEffect(() => {
-    if (!originalOpen) return;
+    if (!originalOpen && !referenceOpen) return;
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOriginalOpen(false);
+      if (event.key === "Escape") {
+        setOriginalOpen(false);
+        setReferenceOpen(false);
+      }
     };
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [originalOpen]);
+  }, [originalOpen, referenceOpen]);
   if (loading || !project)
     return (
       <Shell>
@@ -226,6 +232,35 @@ export function Workspace() {
                 </div>
                 <div>
                   <button
+                    className="button secondary original-preview-button"
+                    type="button"
+                    disabled={!displayedPath}
+                    onClick={() => setOriginalOpen(true)}
+                    aria-label="查看生成大图"
+                  >
+                    <Eye size={16} />
+                    原图
+                  </button>
+                  {displayedPath && (
+                    <a
+                      className="button secondary"
+                      href={fileUrl(displayedPath)}
+                      download
+                    >
+                      <Download size={16} />
+                      下载
+                    </a>
+                  )}
+                  <button
+                    className="button secondary"
+                    type="button"
+                    disabled={!project.reference}
+                    onClick={() => setReferenceOpen(true)}
+                  >
+                    <Eye size={16} />
+                    参考图
+                  </button>
+                  <button
                     className="button secondary"
                     onClick={() => void rebuildPrompt()}
                   >
@@ -254,21 +289,18 @@ export function Workspace() {
                     )}
                     {asset.status === "ready" ? "创建新版本" : "生成画面"}
                   </button>
-                  <button
-                    className="icon-button original-preview-button"
-                    type="button"
-                    disabled={!displayedPath}
-                    onClick={() => setOriginalOpen(true)}
-                    aria-label="查看原图"
-                    title="查看原图"
-                  >
-                    <Eye size={17} />
-                  </button>
                 </div>
               </header>
               <div className={`artboard ${displayedPath ? "with-image" : ""}`}>
                 {displayedPath && (
-                  <img src={fileUrl(displayedPath)} alt={asset.title} />
+                  <button
+                    className="workspace-result-preview"
+                    type="button"
+                    onClick={() => setOriginalOpen(true)}
+                    aria-label="查看生成大图"
+                  >
+                    <img src={fileUrl(displayedPath)} alt={asset.title} />
+                  </button>
                 )}
                 {showGenerationProgress ? (
                   <div
@@ -449,6 +481,32 @@ export function Workspace() {
               type="button"
               onClick={() => setOriginalOpen(false)}
               aria-label="关闭原图预览"
+              title="关闭"
+            >
+              <X size={20} />
+            </button>
+          </section>
+        </div>
+      )}
+      {referenceOpen && project.reference && (
+        <div
+          className="original-preview-backdrop"
+          role="presentation"
+          onClick={() => setReferenceOpen(false)}
+        >
+          <section
+            className="original-preview"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`${project.name} 参考原图预览`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <img src={fileUrl(project.reference)} alt={`${project.name} 参考原图`} />
+            <button
+              className="icon-button original-preview-close"
+              type="button"
+              onClick={() => setReferenceOpen(false)}
+              aria-label="关闭参考原图预览"
               title="关闭"
             >
               <X size={20} />

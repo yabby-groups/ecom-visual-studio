@@ -397,7 +397,7 @@ export function TryOn() {
                     onClick={() => setResultOpen(true)}
                   >
                     <Eye size={16} />
-                    查看大图
+                    原图
                   </button>
                   <a
                     className="button secondary"
@@ -415,7 +415,7 @@ export function TryOn() {
                 onClick={() => setOriginalsOpen(true)}
               >
                 <Eye size={16} />
-                查看参考原图
+                参考图
               </button>
               {selectedJob && (
                 <button
