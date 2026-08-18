@@ -4,7 +4,7 @@ import time
 import uuid
 
 from openai import OpenAI
-from .config import DATA, GENERATED, PNG_SIGNATURE
+from .config import DATA, GENERATED, PNG_SIGNATURE, UPLOADS
 from .db import asset_versions, assets
 from .db.core import db
 from .huabot import user_config
@@ -35,6 +35,15 @@ def png_dimensions(image_bytes: bytes) -> tuple[int, int]:
     return width, height
 
 
+def project_reference_path(path: str):
+    if not path.startswith("uploads/"):
+        raise ValueError("项目参考图必须先通过上传功能添加")
+    target = (DATA / path).resolve()
+    if UPLOADS.resolve() not in target.parents or not target.is_file():
+        raise ValueError("项目参考图片不存在")
+    return target
+
+
 def generate_asset(asset_id: str) -> None:
     connection = db()
     asset = assets.get_for_generation(connection, asset_id)
@@ -51,12 +60,22 @@ def generate_asset(asset_id: str) -> None:
             raise ValueError("图像生成模型必须是 GPT Image 模型")
         expected_width, expected_height = image_size_for_ratio(asset["ratio"])
         client = OpenAI(base_url=config["base"], api_key=config["key"], timeout=300)
-        result = client.images.generate(
-            model=config["image_model"],
-            prompt=asset["prompt"],
-            size=f"{expected_width}x{expected_height}",
-            n=1,
-        )
+        if asset["reference"]:
+            with project_reference_path(asset["reference"]).open("rb") as reference:
+                result = client.images.edit(
+                    model=config["image_model"],
+                    image=reference,
+                    prompt=asset["prompt"],
+                    size=f"{expected_width}x{expected_height}",
+                    n=1,
+                )
+        else:
+            result = client.images.generate(
+                model=config["image_model"],
+                prompt=asset["prompt"],
+                size=f"{expected_width}x{expected_height}",
+                n=1,
+            )
         image = result.data[0] if result.data else None
         if not image or not image.b64_json:
             raise ValueError("图像服务没有返回图片")

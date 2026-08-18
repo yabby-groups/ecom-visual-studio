@@ -631,6 +631,79 @@ def test_generation_started_at_is_persisted_from_enqueue_to_completion(monkeypat
     assert requeued["generation_started_at"] == 1_700_000_000
 
 
+def test_generation_sends_project_reference_to_image_edit(monkeypatch):
+    client = authenticated_client()
+    reference = UPLOADS / "project-reference-generation.png"
+    reference.write_bytes(png_bytes(2, 3))
+    project_id = client.post("/api/projects", json={
+        "name": "Reference generation",
+        "product": "Reference product",
+        "description": "",
+        "benefits": "",
+        "color": "#A16207",
+        "reference": "uploads/project-reference-generation.png",
+    }).json()["id"]
+    assert client.post(f"/api/projects/{project_id}/pack", json={"kind": "amazon", "scene_template_ids": []}).status_code == 200
+    asset_id = client.get(f"/api/projects/{project_id}").json()["assets"][0]["id"]
+    assert client.patch(f"/api/assets/{asset_id}", json={"ratio": "2:3"}).status_code == 200
+    captured = []
+
+    class FakeOpenAI:
+        def __init__(self, **_kwargs):
+            self.images = self
+
+        def edit(self, **kwargs):
+            captured.append((Path(kwargs["image"].name).name, kwargs))
+            return SimpleNamespace(data=[SimpleNamespace(b64_json=base64.b64encode(png_bytes(2, 3)).decode())])
+
+    monkeypatch.setattr(generation, "user_config", lambda _: {"base": "https://images.example", "key": "test", "image_model": "gpt-image-2"})
+    monkeypatch.setattr(generation, "OpenAI", FakeOpenAI)
+    try:
+        generation.generate_asset(asset_id)
+        generated = client.get(f"/api/projects/{project_id}").json()["assets"][0]
+        assert generated["status"] == "ready"
+        assert captured[0][0] == "project-reference-generation.png"
+        assert captured[0][1]["model"] == "gpt-image-2"
+        assert captured[0][1]["prompt"] == generated["prompt"]
+        assert captured[0][1]["size"] == "1024x1536"
+        assert captured[0][1]["n"] == 1
+        (GENERATED / generated["file_path"].removeprefix("generated/")).unlink(missing_ok=True)
+    finally:
+        connection = db()
+        connection.execute("delete from asset_versions where asset_id in (select id from assets where project_id=?)", (project_id,))
+        connection.execute("delete from assets where project_id=?", (project_id,))
+        connection.execute("delete from projects where id=?", (project_id,))
+        connection.commit()
+        connection.close()
+        reference.unlink(missing_ok=True)
+
+
+def test_generation_marks_failed_when_project_reference_is_missing(monkeypatch):
+    client = authenticated_client()
+    project_id = client.post("/api/projects", json={
+        "name": "Missing reference generation",
+        "product": "Missing reference product",
+        "description": "",
+        "benefits": "",
+        "color": "#A16207",
+        "reference": "uploads/missing-project-reference.png",
+    }).json()["id"]
+    assert client.post(f"/api/projects/{project_id}/pack", json={"kind": "amazon", "scene_template_ids": []}).status_code == 200
+    asset_id = client.get(f"/api/projects/{project_id}").json()["assets"][0]["id"]
+
+    monkeypatch.setattr(generation, "user_config", lambda _: {"base": "https://images.example", "key": "test", "image_model": "gpt-image-2"})
+    generation.generate_asset(asset_id)
+    generated = client.get(f"/api/projects/{project_id}").json()["assets"][0]
+    assert generated["status"] == "failed: 项目参考图片不存在"
+    assert generated["file_path"] is None
+
+    connection = db()
+    connection.execute("delete from assets where project_id=?", (project_id,))
+    connection.execute("delete from projects where id=?", (project_id,))
+    connection.commit()
+    connection.close()
+
+
 def test_generation_rejects_a_mismatched_image_ratio(monkeypatch):
     client = authenticated_client()
     project_id = client.post("/api/projects", json={
