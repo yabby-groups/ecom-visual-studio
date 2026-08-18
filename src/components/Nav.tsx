@@ -10,10 +10,13 @@ export function Nav({
   label: string;
 }) {
   const location = useLocation();
+  const active =
+    location.pathname === to ||
+    (to !== "/" && location.pathname.startsWith(`${to}/`));
   return (
     <Link
       to={to}
-      className={`nav-link ${location.pathname === to ? "active" : ""}`}
+      className={`nav-link ${active ? "active" : ""}`}
     >
       {icon}
       <span>{label}</span>

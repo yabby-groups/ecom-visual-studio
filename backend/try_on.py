@@ -162,7 +162,7 @@ def create_try_on(body: TryOnInput, tasks: BackgroundTasks, session: Optional[st
         job_id = uuid.uuid4().hex
         try_on_jobs.create(with_connection, (
             job_id, user["id"], people[0], garments[0], json.dumps(people),
-            json.dumps(garments), body.instructions, body.ratio, "queued", None,
+            json.dumps(garments), body.generation_mode, body.instructions, body.ratio, "queued", None,
             int(time.time()),
         ))
         job_ids.append(job_id)

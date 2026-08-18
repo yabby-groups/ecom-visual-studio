@@ -2,17 +2,19 @@ import sqlite3
 
 
 def ensure(connection: sqlite3.Connection) -> None:
-    connection.execute("create table if not exists try_on_jobs (id text primary key, user_id text not null, person_path text not null, garment_path text not null, person_paths text, garment_paths text, instructions text not null default '', ratio text not null, status text not null, file_path text, generation_started_at integer, created_at integer not null)")
+    connection.execute("create table if not exists try_on_jobs (id text primary key, user_id text not null, person_path text not null, garment_path text not null, person_paths text, garment_paths text, generation_mode text not null default 'combined', instructions text not null default '', ratio text not null, status text not null, file_path text, generation_started_at integer, created_at integer not null)")
     columns = {row["name"] for row in connection.execute("pragma table_info(try_on_jobs)")}
     if "person_paths" not in columns:
         connection.execute("alter table try_on_jobs add column person_paths text")
     if "garment_paths" not in columns:
         connection.execute("alter table try_on_jobs add column garment_paths text")
+    if "generation_mode" not in columns:
+        connection.execute("alter table try_on_jobs add column generation_mode text not null default 'combined'")
     connection.execute("create index if not exists try_on_jobs_user_created_idx on try_on_jobs(user_id, created_at desc)")
 
 
 def create(connection: sqlite3.Connection, values: tuple[object, ...]) -> None:
-    connection.execute("insert into try_on_jobs (id,user_id,person_path,garment_path,person_paths,garment_paths,instructions,ratio,status,file_path,created_at) values(?,?,?,?,?,?,?,?,?,?,?)", values)
+    connection.execute("insert into try_on_jobs (id,user_id,person_path,garment_path,person_paths,garment_paths,generation_mode,instructions,ratio,status,file_path,created_at) values(?,?,?,?,?,?,?,?,?,?,?,?)", values)
 
 
 def list_for_user(connection: sqlite3.Connection, user_id: str, limit: int, offset: int):

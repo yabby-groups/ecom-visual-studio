@@ -13,7 +13,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { client } from "../api";
 import type { TryOnJob } from "../types";
 import { fileUrl, isPending, statusText } from "../utils/assets";
@@ -148,6 +148,7 @@ function ReferenceSlot({
 
 export function TryOn() {
   const navigate = useNavigate();
+  const { id: selectedJobId } = useParams<{ id: string }>();
   const [personPaths, setPersonPaths] = useState<string[]>([]);
   const [garmentPaths, setGarmentPaths] = useState<string[]>([]);
   const [generationMode, setGenerationMode] = useState<"combined" | "combinations">("combined");
@@ -161,7 +162,6 @@ export function TryOn() {
   const [deletingId, setDeletingId] = useState("");
   const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
-  const [selectedJobId, setSelectedJobId] = useState("new");
   const [originalsOpen, setOriginalsOpen] = useState(false);
   const [resultOpen, setResultOpen] = useState(false);
   const [selectedVersionPath, setSelectedVersionPath] = useState<string | null>(
@@ -181,7 +181,9 @@ export function TryOn() {
       setError(reason instanceof Error ? reason.message : "无法加载换装记录");
     }
   }
-  const selectedJob = jobs.find((job) => job.id === selectedJobId);
+  const selectedJob = selectedJobId
+    ? jobs.find((job) => job.id === selectedJobId)
+    : undefined;
   const pendingJob = selectedJob && isPending(selectedJob.status) ? selectedJob : null;
   useEffect(() => {
     void load();
@@ -202,19 +204,52 @@ export function TryOn() {
     return () => window.clearInterval(timer);
   }, [selectedJob]);
   useEffect(() => {
-    setSelectedJobId((current) =>
-      current === "new" || jobs.some((job) => job.id === current)
-        ? current
-        : jobs[0]?.id || "new",
-    );
-  }, [jobs]);
+    if (!selectedJobId || selectedJob) return;
+    let active = true;
+    void client
+      .tryOnJob(selectedJobId)
+      .then((job) => {
+        if (!active) return;
+        setJobs((current) => [job, ...current.filter((item) => item.id !== job.id)]);
+      })
+      .catch((reason) => {
+        if (!active) return;
+        setError(reason instanceof Error ? reason.message : "无法加载换装任务");
+        navigate("/try-on", { replace: true });
+      });
+    return () => {
+      active = false;
+    };
+  }, [navigate, selectedJob, selectedJobId]);
+  useEffect(() => {
+    if (!selectedJob) return;
+    setPersonPaths(selectedJob.person_paths);
+    setGarmentPaths(selectedJob.garment_paths);
+    setGenerationMode(selectedJob.generation_mode);
+    setInstructions(selectedJob.instructions);
+    setRatio(selectedJob.ratio);
+  }, [selectedJob?.id]);
+
+  function beginDraft() {
+    if (selectedJobId) navigate("/try-on");
+  }
+
+  function startNewDraft() {
+    navigate("/try-on");
+    setPersonPaths([]);
+    setGarmentPaths([]);
+    setGenerationMode("combined");
+    setInstructions("");
+    setRatio("2:3");
+    setConsented(false);
+  }
 
   async function upload(slot: "person" | "garment", file: File) {
+    beginDraft();
     setError("");
     setUploading(slot);
     try {
       const { path } = await client.upload(file);
-      setSelectedJobId("new");
       if (slot === "person") setPersonPaths((paths) => [...paths, path]);
       else setGarmentPaths((paths) => [...paths, path]);
     } catch (reason) {
@@ -225,11 +260,11 @@ export function TryOn() {
   }
 
   async function importUrl(slot: "person" | "garment", url: string) {
+    beginDraft();
     setError("");
     setUploading(slot);
     try {
       const { path } = await client.importUrl(url);
-      setSelectedJobId("new");
       if (slot === "person") setPersonPaths((paths) => [...paths, path]);
       else setGarmentPaths((paths) => [...paths, path]);
     } catch (reason) {
@@ -250,10 +285,10 @@ export function TryOn() {
         instructions,
         ratio,
       });
-      setSelectedJobId(id);
       setInstructions("");
       setHistoryPage(1);
       await load(1);
+      navigate(`/try-on/${id}`);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "换装任务创建失败");
     } finally {
@@ -278,7 +313,7 @@ export function TryOn() {
     setDeletingId(job.id);
     try {
       await client.deleteTryOn(job.id);
-      if (selectedJobId === job.id) setSelectedJobId("new");
+      if (selectedJobId === job.id) navigate("/try-on");
       if (jobs.length === 1 && historyPage > 1) setHistoryPage(historyPage - 1);
       else await load();
     } catch (reason) {
@@ -289,7 +324,7 @@ export function TryOn() {
   }
 
   function removeReference(slot: "person" | "garment", path: string) {
-    setSelectedJobId("new");
+    beginDraft();
     if (slot === "person") setPersonPaths((paths) => paths.filter((item) => item !== path));
     else setGarmentPaths((paths) => paths.filter((item) => item !== path));
   }
@@ -359,8 +394,8 @@ export function TryOn() {
             <small>{historyTotal} 个结果</small>
           </div>
           <button
-            className={`sequence-item ${selectedJobId === "new" ? "active" : ""}`}
-            onClick={() => setSelectedJobId("new")}
+            className={`sequence-item ${!selectedJobId ? "active" : ""}`}
+            onClick={startNewDraft}
           >
             <b>＋</b>
             <span>
@@ -371,7 +406,7 @@ export function TryOn() {
           </button>
           {jobs.map((job, index) => (
             <div className="try-on-sequence-row" key={job.id}>
-              <button className={`sequence-item ${job.id === selectedJobId ? "active" : ""}`} onClick={() => setSelectedJobId(job.id)}>
+              <button className={`sequence-item ${job.id === selectedJobId ? "active" : ""}`} onClick={() => navigate(`/try-on/${job.id}`)}>
                 <b>{String((historyPage - 1) * HISTORY_PAGE_SIZE + index + 1).padStart(2, "0")}</b>
                 <span><strong>{job.ratio} 全身试穿</strong><small>{statusText(job.status)}</small></span>
                 {job.file_path ? <img src={fileUrl(job.file_path)} alt="" /> : <i />}
@@ -560,7 +595,10 @@ export function TryOn() {
               <button
                 type="button"
                 className={generationMode === "combined" ? "active" : ""}
-                onClick={() => setGenerationMode("combined")}
+                onClick={() => {
+                  beginDraft();
+                  setGenerationMode("combined");
+                }}
               >
                 <b>合并参考</b>
                 <small>全部图片共同生成 1 个结果</small>
@@ -568,7 +606,10 @@ export function TryOn() {
               <button
                 type="button"
                 className={generationMode === "combinations" ? "active" : ""}
-                onClick={() => setGenerationMode("combinations")}
+                onClick={() => {
+                  beginDraft();
+                  setGenerationMode("combinations");
+                }}
               >
                 <b>全部组合</b>
                 <small>将生成 {combinationCount || 0} 个独立结果</small>
@@ -587,7 +628,10 @@ export function TryOn() {
                 <button
                   type="button"
                   className={ratio === value ? "active" : ""}
-                  onClick={() => setRatio(value)}
+                  onClick={() => {
+                    beginDraft();
+                    setRatio(value);
+                  }}
                   key={value}
                 >
                   <b>{value}</b>
@@ -607,7 +651,10 @@ export function TryOn() {
             高级 Prompt
             <textarea
               value={instructions}
-              onChange={(event) => setInstructions(event.target.value)}
+              onChange={(event) => {
+                beginDraft();
+                setInstructions(event.target.value);
+              }}
               rows={5}
               maxLength={1000}
               placeholder="例如：保持原有站姿，营造简洁的室内自然光效果"
@@ -617,7 +664,10 @@ export function TryOn() {
             <input
               type="checkbox"
               checked={consented}
-              onChange={(event) => setConsented(event.target.checked)}
+              onChange={(event) => {
+                beginDraft();
+                setConsented(event.target.checked);
+              }}
             />
             我确认已获得图片中人物的使用授权
           </label>

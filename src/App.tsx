@@ -28,6 +28,7 @@ export function App() {
       <Route path="/library" element={<Library />} />
       <Route path="/templates" element={<Templates />} />
       <Route path="/try-on" element={<TryOn />} />
+      <Route path="/try-on/:id" element={<TryOn />} />
       <Route path="/settings" element={<SettingsPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

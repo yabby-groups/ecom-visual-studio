@@ -74,6 +74,7 @@ export type TryOnJob = {
   garment_path: string;
   person_paths: string[];
   garment_paths: string[];
+  generation_mode: "combined" | "combinations";
   instructions: string;
   ratio: string;
   status: AssetStatus;

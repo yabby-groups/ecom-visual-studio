@@ -1,5 +1,6 @@
 import base64
 import json
+import sqlite3
 import shutil
 import struct
 import threading
@@ -15,7 +16,7 @@ from fastapi.testclient import TestClient
 from backend import assistant, auth_routes, generation, huabot, projects, references, settings, try_on
 from backend.auth import crypt
 from backend.config import GENERATED, UPLOADS
-from backend.db import db, init_db
+from backend.db import db, init_db, try_on_jobs
 from backend.main import app
 
 
@@ -46,6 +47,22 @@ def test_database_initialization_enables_fk_and_expected_indexes():
         assert {row[1] for row in connection.execute("pragma index_list(asset_versions)")} >= {"asset_versions_asset_created_idx"}
         assert {row[1] for row in connection.execute("pragma index_list(try_on_jobs)")} >= {"try_on_jobs_user_created_idx"}
         assert {row[1] for row in connection.execute("pragma index_list(try_on_versions)")} >= {"try_on_versions_job_created_idx"}
+    finally:
+        connection.close()
+
+
+def test_try_on_jobs_migration_defaults_legacy_generation_mode():
+    connection = sqlite3.connect(":memory:")
+    connection.row_factory = sqlite3.Row
+    try:
+        connection.execute(
+            "create table try_on_jobs (id text primary key, user_id text not null, person_path text not null, garment_path text not null, person_paths text, garment_paths text, instructions text not null default '', ratio text not null, status text not null, file_path text, generation_started_at integer, created_at integer not null)"
+        )
+        connection.execute(
+            "insert into try_on_jobs(id,user_id,person_path,garment_path,instructions,ratio,status,created_at) values('legacy','user','uploads/person.png','uploads/garment.png','','2:3','ready',1)"
+        )
+        try_on_jobs.ensure(connection)
+        assert connection.execute("select generation_mode from try_on_jobs where id='legacy'").fetchone()[0] == "combined"
     finally:
         connection.close()
 
@@ -116,6 +133,7 @@ def test_try_on_requires_owned_uploaded_references_and_scopes_history(monkeypatc
         assert job.json()["person_path"] == "uploads/try-on-test-person.png"
         assert job.json()["person_paths"] == ["uploads/try-on-test-person.png"]
         assert job.json()["garment_paths"] == ["uploads/try-on-test-garment.png"]
+        assert job.json()["generation_mode"] == "combined"
         history = client.get("/api/try-on?limit=48&offset=0").json()
         assert set(history) == {"items", "total", "has_more"}
         assert history["total"] >= 1
@@ -233,6 +251,7 @@ def test_try_on_accepts_multiple_references_and_creates_all_combinations(monkeyp
         combined_job = client.get(f"/api/try-on/{combined.json()['id']}").json()
         assert combined_job["person_paths"] == people
         assert combined_job["garment_paths"] == garments
+        assert combined_job["generation_mode"] == "combined"
 
         combinations = client.post("/api/try-on", json={
             "person_paths": people,
@@ -242,6 +261,7 @@ def test_try_on_accepts_multiple_references_and_creates_all_combinations(monkeyp
         assert combinations.status_code == 200
         assert len(combinations.json()["ids"]) == 4
         jobs = [client.get(f"/api/try-on/{job_id}").json() for job_id in combinations.json()["ids"]]
+        assert {job["generation_mode"] for job in jobs} == {"combinations"}
         assert {(job["person_paths"][0], job["garment_paths"][0]) for job in jobs} == {
             (person, garment) for person in people for garment in garments
         }
