@@ -1,5 +1,4 @@
 .settings-page {
-  max-width: 900px;
   padding-top: 54px;
   padding-bottom: 64px;
 }
@@ -91,7 +90,8 @@
   font-size: 12px;
   font-weight: 700;
 }
-.settings-form select {
+.settings-form select,
+.settings-select-trigger {
   min-height: 42px;
   width: 100%;
   border: 1px solid rgba(255, 255, 255, 0.24);
@@ -99,6 +99,65 @@
   padding: 10px;
   background: #171d38;
   color: #fff;
+}
+
+.settings-select {
+  position: relative;
+}
+
+.settings-select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  text-align: left;
+}
+
+.settings-select-trigger span,
+.settings-select-menu button {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-select-trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.settings-select-menu {
+  position: absolute;
+  z-index: 25;
+  top: calc(100% + 6px);
+  right: 0;
+  left: 0;
+  max-height: min(280px, 50vh);
+  overflow-y: auto;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 10px;
+  background: #171d38;
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.3);
+}
+
+.settings-select-menu button {
+  width: 100%;
+  min-height: 42px;
+  display: block;
+  border: 0;
+  padding: 10px 12px;
+  background: transparent;
+  color: #fff;
+  text-align: left;
+}
+
+.settings-select-menu button:hover,
+.settings-select-menu button:focus-visible,
+.settings-select-menu button.is-selected {
+  background: rgba(68, 221, 183, 0.2);
+}
+
+.settings-select-menu button:disabled {
+  color: #8d96a9;
 }
 
 .settings-form .form-grid {
@@ -194,7 +253,8 @@
     border-radius: 12px;
   }
 
-  .settings-form select {
+  .settings-form select,
+  .settings-select-trigger {
     min-height: 46px;
     font-size: 16px;
   }

@@ -10,13 +10,22 @@ import { client } from "../api";
 import { LogoutButton } from "./LogoutButton";
 import { Notice } from "./Notice";
 import { Shell } from "./Shell";
+import { SettingsSelect } from "./SettingsSelect";
 import "./SettingsPage.css";
+
+type SettingsValues = {
+  token_id: string;
+  image_model: string;
+  text_model: string;
+  chat_model: string;
+};
 
 export function SettingsPage() {
   const [settings, setSettings] = useState<Awaited<
     ReturnType<typeof client.tokenSettings>
   > | null>(null);
   const [models, setModels] = useState<{ id: string; name: string }[]>([]);
+  const [values, setValues] = useState<SettingsValues | null>(null);
   const [notice, setNotice] = useState("");
   const imageModels = models.filter((model) =>
     model.id.startsWith("gpt-image-"),
@@ -26,6 +35,19 @@ export function SettingsPage() {
       .models()
       .then(async (items) => {
         const next = await client.tokenSettings();
+        const nextImageModels = items.models.filter((model) =>
+          model.id.startsWith("gpt-image-"),
+        );
+        setValues({
+          token_id: next.active_token_id,
+          image_model: nextImageModels.some(
+            (model) => model.id === next.image_model,
+          )
+            ? next.image_model
+            : nextImageModels[0]?.id || "",
+          text_model: next.text_model,
+          chat_model: next.chat_model,
+        });
         setSettings(next);
         setModels(items.models);
       })
@@ -33,7 +55,7 @@ export function SettingsPage() {
         setNotice(error instanceof Error ? error.message : "无法读取设置"),
       );
   }, []);
-  if (!settings)
+  if (!settings || !values)
     return (
       <Shell>
         <div className="loading-page">
@@ -55,14 +77,8 @@ export function SettingsPage() {
           className="settings-form"
           onSubmit={async (event) => {
             event.preventDefault();
-            const data = new FormData(event.currentTarget);
             try {
-              await client.saveSettings({
-                token_id: String(data.get("token_id")),
-                image_model: String(data.get("image_model")),
-                text_model: String(data.get("text_model")),
-                chat_model: String(data.get("chat_model")),
-              });
+              await client.saveSettings(values);
               setNotice("配置已保存");
             } catch (error) {
               setNotice(error instanceof Error ? error.message : "保存失败");
@@ -84,19 +100,18 @@ export function SettingsPage() {
             </div>
             <label>
               当前 Token
-              <select name="token_id" defaultValue={settings.active_token_id}>
-                {settings.tokens.map((token) => (
-                  <option
-                    key={token.id}
-                    value={token.id}
-                    disabled={token.status !== 1}
-                  >
-                    {token.name} · 今日 {token.today_cost} · 累计{" "}
-                    {token.total_cost}
-                    {token.status === 1 ? "" : " · 不可用"}
-                  </option>
-                ))}
-              </select>
+              <SettingsSelect
+                name="token_id"
+                value={values.token_id}
+                options={settings.tokens.map((token) => ({
+                  value: token.id,
+                  label: `${token.name} · 今日 ${token.today_cost} · 累计 ${token.total_cost}${token.status === 1 ? "" : " · 不可用"}`,
+                  disabled: token.status !== 1,
+                }))}
+                onChange={(token_id) =>
+                  setValues((current) => current && { ...current, token_id })
+                }
+              />
             </label>
           </section>
           <section className="settings-card">
@@ -114,31 +129,25 @@ export function SettingsPage() {
             </div>
             <div className="form-grid">
               {[
-                ["image_model", "图像生成模型", settings.image_model],
-                ["text_model", "商品分析模型", settings.text_model],
-                ["chat_model", "创作对话模型", settings.chat_model],
+                ["image_model", "图像生成模型", values.image_model],
+                ["text_model", "商品分析模型", values.text_model],
+                ["chat_model", "创作对话模型", values.chat_model],
               ].map(([name, label, value]) => (
                 <label key={name}>
                   {label}
-                  <select
+                  <SettingsSelect
                     name={name}
-                    defaultValue={
-                      name === "image_model" &&
-                      !imageModels.some((model) => model.id === value)
-                        ? imageModels[0]?.id || ""
-                        : value
-                    }
-                    disabled={!modelsReady}
-                  >
-                    {!modelsReady && <option value="">暂无可用模型</option>}
-                    {(name === "image_model" ? imageModels : models).map(
-                      (model) => (
-                        <option value={model.id} key={model.id}>
-                          {model.name}
-                        </option>
-                      ),
+                    value={value}
+                    options={(name === "image_model" ? imageModels : models).map(
+                      (model) => ({ value: model.id, label: model.name }),
                     )}
-                  </select>
+                    disabled={!modelsReady}
+                    onChange={(nextValue) =>
+                      setValues((current) =>
+                        current ? { ...current, [name]: nextValue } : current,
+                      )
+                    }
+                  />
                 </label>
               ))}
             </div>
