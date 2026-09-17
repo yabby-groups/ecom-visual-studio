@@ -4,14 +4,67 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/openai/openai-go/v3"
 	_ "modernc.org/sqlite"
 )
+
+func TestSQLiteDSNEnablesWALAndBusyTimeout(t *testing.T) {
+	db, err := sql.Open("sqlite", sqliteDSN(filepath.Join(t.TempDir(), "studio.db")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	var busyTimeout int
+	if err := db.QueryRow("pragma busy_timeout").Scan(&busyTimeout); err != nil {
+		t.Fatal(err)
+	}
+	if busyTimeout != 5000 {
+		t.Fatalf("busy_timeout = %d, want 5000", busyTimeout)
+	}
+	var journalMode string
+	if err := db.QueryRow("pragma journal_mode").Scan(&journalMode); err != nil {
+		t.Fatal(err)
+	}
+	if journalMode != "wal" {
+		t.Fatalf("journal_mode = %q, want wal", journalMode)
+	}
+}
+
+func TestWriteTransactionRollsBackPartialGenerationWrite(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec("create table generation_writes (id text primary key)"); err != nil {
+		t.Fatal(err)
+	}
+	studio := &Studio{db: db}
+	err = studio.writeTransaction(func(tx *sql.Tx) error {
+		if _, err := tx.Exec("insert into generation_writes values ('version-1')"); err != nil {
+			return err
+		}
+		return errors.New("simulate asset update failure")
+	})
+	if err == nil {
+		t.Fatal("writeTransaction() error = nil, want rollback")
+	}
+	var count int
+	if err := db.QueryRow("select count(*) from generation_writes").Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatalf("generation_writes count = %d, want 0", count)
+	}
+}
 
 func TestStableIDIsDeterministicAndScoped(t *testing.T) {
 	if stableID("project-a") != stableID("project-a") {

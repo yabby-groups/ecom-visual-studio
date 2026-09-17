@@ -29,6 +29,7 @@ type Studio struct {
 	masterKey  []byte
 	httpClient *http.Client
 	mu         sync.RWMutex
+	dbWriteMu  sync.Mutex
 	user       *User
 }
 
@@ -62,7 +63,7 @@ func NewStudio() (*Studio, error) {
 	if err := os.MkdirAll(filepath.Join(dataDir, "storage", "generated"), 0o700); err != nil {
 		return nil, err
 	}
-	db, err := sql.Open("sqlite", filepath.Join(dataDir, "studio.db"))
+	db, err := sql.Open("sqlite", sqliteDSN(filepath.Join(dataDir, "studio.db")))
 	if err != nil {
 		return nil, err
 	}
@@ -81,6 +82,30 @@ func NewStudio() (*Studio, error) {
 		return nil, err
 	}
 	return studio, nil
+}
+
+func sqliteDSN(path string) string {
+	databaseURL := &url.URL{Scheme: "file", Path: filepath.ToSlash(path)}
+	query := databaseURL.Query()
+	query.Add("_pragma", "busy_timeout(5000)")
+	query.Add("_pragma", "journal_mode(WAL)")
+	databaseURL.RawQuery = query.Encode()
+	return databaseURL.String()
+}
+
+// Generation writes are short and serialized locally; provider requests never hold this lock.
+func (s *Studio) writeTransaction(fn func(*sql.Tx) error) error {
+	s.dbWriteMu.Lock()
+	defer s.dbWriteMu.Unlock()
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := fn(tx); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Studio) startup(ctx context.Context) { s.ctx = ctx }

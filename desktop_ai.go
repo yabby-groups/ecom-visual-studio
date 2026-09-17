@@ -72,7 +72,10 @@ func (s *Studio) GenerateAsset(id string) (map[string]bool, error) {
 	if owned == 0 {
 		return nil, errors.New("画面不存在")
 	}
-	if _, err = s.db.Exec("update assets set status='queued',generation_started_at=null where id=?", id); err != nil {
+	if err = s.writeTransaction(func(tx *sql.Tx) error {
+		_, err := tx.Exec("update assets set status='queued',generation_started_at=null where id=?", id)
+		return err
+	}); err != nil {
 		return nil, err
 	}
 	go s.generateAsset(id)
@@ -90,23 +93,47 @@ func (s *Studio) GeneratePack(id string) (map[string]bool, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	assets := []string{}
 	for rows.Next() {
 		var asset string
 		if err = rows.Scan(&asset); err != nil {
+			rows.Close()
 			return nil, err
 		}
-		_, _ = s.db.Exec("update assets set status='queued',generation_started_at=null where id=?", asset)
+		assets = append(assets, asset)
+	}
+	if err = rows.Close(); err != nil {
+		return nil, err
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	if err = s.writeTransaction(func(tx *sql.Tx) error {
+		for _, asset := range assets {
+			if _, err := tx.Exec("update assets set status='queued',generation_started_at=null where id=?", asset); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	for _, asset := range assets {
 		go s.generateAsset(asset)
 	}
-	return map[string]bool{"ok": true}, rows.Err()
+	return map[string]bool{"ok": true}, nil
 }
 func (s *Studio) generateAsset(id string) {
 	var userID, projectID, prompt, ratio, reference string
 	if err := s.db.QueryRow("select p.user_id,a.project_id,a.prompt,a.ratio,p.reference from assets a join projects p on p.id=a.project_id where a.id=?", id).Scan(&userID, &projectID, &prompt, &ratio, &reference); err != nil {
 		return
 	}
-	_, _ = s.db.Exec("update assets set status='generating',generation_started_at=? where id=?", time.Now().Unix(), id)
+	if err := s.writeTransaction(func(tx *sql.Tx) error {
+		_, err := tx.Exec("update assets set status='generating',generation_started_at=? where id=?", time.Now().Unix(), id)
+		return err
+	}); err != nil {
+		return
+	}
 	s.NotifyGeneration(id, "generating")
 	config, key, image, _, _, err := s.activeProvider(userID)
 	if err == nil {
@@ -133,10 +160,12 @@ func (s *Studio) generateAsset(id string) {
 		}
 	}
 	if err != nil {
-		_, _ = s.db.Exec("update assets set status=? where id=?", "failed: "+truncate(err.Error()), id)
+		_ = s.writeTransaction(func(tx *sql.Tx) error {
+			_, err := tx.Exec("update assets set status=? where id=?", "failed: "+truncate(err.Error()), id)
+			return err
+		})
 		s.NotifyGeneration(id, "failed")
 	} else {
-		_, _ = s.db.Exec("update assets set status='ready' where id=?", id)
 		s.NotifyGeneration(id, "ready")
 	}
 }
@@ -206,15 +235,21 @@ func (s *Studio) saveImageResponse(raw *openai.ImagesResponse, folder, entity st
 		return err
 	}
 	path := filepath.ToSlash(filepath.Join("generated", folder, name))
-	if _, err = s.db.Exec(fmt.Sprintf("insert into %s(id,%s,file_path,created_at) values(?,?,?,?)", table, column), newID("version"), entity, path, time.Now().Unix()); err != nil {
-		return err
-	}
-	if table == "asset_versions" {
-		if _, err = s.db.Exec("update assets set file_path=? where id=?", path, entity); err != nil {
+	return s.writeTransaction(func(tx *sql.Tx) error {
+		if _, err := tx.Exec(fmt.Sprintf("insert into %s(id,%s,file_path,created_at) values(?,?,?,?)", table, column), newID("version"), entity, path, time.Now().Unix()); err != nil {
 			return err
 		}
-	}
-	return nil
+		switch table {
+		case "asset_versions":
+			_, err := tx.Exec("update assets set file_path=?,status='ready' where id=?", path, entity)
+			return err
+		case "try_on_versions":
+			_, err := tx.Exec("update try_on_jobs set status='ready',file_path=? where id=?", path, entity)
+			return err
+		default:
+			return errors.New("未知图像版本表")
+		}
+	})
 }
 
 func (s *Studio) imageBytes(result openai.Image) ([]byte, error) {
@@ -283,8 +318,6 @@ func (s *Studio) CreateTryOn(input TryOnInput) (map[string]any, error) {
 		}
 		f.Close()
 	}
-	persons, _ := json.Marshal(input.PersonPaths)
-	garments, _ := json.Marshal(input.GarmentPaths)
 	pairs := [][2][]string{{input.PersonPaths, input.GarmentPaths}}
 	if input.GenerationMode == "combinations" {
 		pairs = nil
@@ -294,19 +327,24 @@ func (s *Studio) CreateTryOn(input TryOnInput) (map[string]any, error) {
 			}
 		}
 	}
-	ids := []string{}
-	for _, pair := range pairs {
-		pp, _ := json.Marshal(pair[0])
-		gg, _ := json.Marshal(pair[1])
-		id := newID("tryon")
-		if _, err = s.db.Exec("insert into try_on_jobs(id,user_id,person_paths,garment_paths,generation_mode,instructions,ratio,status,created_at) values(?,?,?,?,?,?,?,?,?)", id, user.ID, string(pp), string(gg), input.GenerationMode, input.Instructions, input.Ratio, "queued", time.Now().Unix()); err != nil {
-			return nil, err
+	ids := make([]string, 0, len(pairs))
+	if err = s.writeTransaction(func(tx *sql.Tx) error {
+		for _, pair := range pairs {
+			pp, _ := json.Marshal(pair[0])
+			gg, _ := json.Marshal(pair[1])
+			id := newID("tryon")
+			if _, err := tx.Exec("insert into try_on_jobs(id,user_id,person_paths,garment_paths,generation_mode,instructions,ratio,status,created_at) values(?,?,?,?,?,?,?,?,?)", id, user.ID, string(pp), string(gg), input.GenerationMode, input.Instructions, input.Ratio, "queued", time.Now().Unix()); err != nil {
+				return err
+			}
+			ids = append(ids, id)
 		}
-		ids = append(ids, id)
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	for _, id := range ids {
 		go s.generateTryOn(id)
 	}
-	_ = persons
-	_ = garments
 	return map[string]any{"id": ids[0], "ids": ids}, nil
 }
 func (s *Studio) generateTryOn(id string) {
@@ -314,7 +352,12 @@ func (s *Studio) generateTryOn(id string) {
 	if err := s.db.QueryRow("select user_id,person_paths,garment_paths,instructions,ratio from try_on_jobs where id=?", id).Scan(&user, &persons, &garments, &instructions, &ratio); err != nil {
 		return
 	}
-	_, _ = s.db.Exec("update try_on_jobs set status='generating',generation_started_at=? where id=?", time.Now().Unix(), id)
+	if err := s.writeTransaction(func(tx *sql.Tx) error {
+		_, err := tx.Exec("update try_on_jobs set status='generating',generation_started_at=? where id=?", time.Now().Unix(), id)
+		return err
+	}); err != nil {
+		return
+	}
 	var pp, gg []string
 	_ = json.Unmarshal([]byte(persons), &pp)
 	_ = json.Unmarshal([]byte(garments), &gg)
@@ -334,11 +377,10 @@ func (s *Studio) generateTryOn(id string) {
 		}
 	}
 	if err != nil {
-		_, _ = s.db.Exec("update try_on_jobs set status=? where id=?", "failed: "+truncate(err.Error()), id)
-	} else {
-		var path string
-		_ = s.db.QueryRow("select file_path from try_on_versions where job_id=? order by created_at desc limit 1", id).Scan(&path)
-		_, _ = s.db.Exec("update try_on_jobs set status='ready',file_path=? where id=?", path, id)
+		_ = s.writeTransaction(func(tx *sql.Tx) error {
+			_, err := tx.Exec("update try_on_jobs set status=? where id=?", "failed: "+truncate(err.Error()), id)
+			return err
+		})
 	}
 }
 func truncate(value string) string {
