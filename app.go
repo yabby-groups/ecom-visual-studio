@@ -71,7 +71,7 @@ func NewStudio() (*Studio, error) {
 		db.Close()
 		return nil, err
 	}
-	studio := &Studio{db: db, dataDir: dataDir, masterKey: masterKey, httpClient: &http.Client{Timeout: 90 * time.Second}}
+	studio := &Studio{db: db, dataDir: dataDir, masterKey: masterKey, httpClient: &http.Client{Timeout: 300 * time.Second}}
 	if err := studio.migrate(); err != nil {
 		db.Close()
 		return nil, err
