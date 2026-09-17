@@ -38,6 +38,7 @@ export function Workspace() {
     autoCloseMs?: number | null;
   } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [originalOpen, setOriginalOpen] = useState(false);
   const [referenceOpen, setReferenceOpen] = useState(false);
   const [selectedVersionPath, setSelectedVersionPath] = useState<string | null>(
@@ -53,13 +54,16 @@ export function Workspace() {
     try {
       const next = await client.project(id);
       setProject(next);
+      setLoadError("");
       setAssetId((current) =>
         next.assets?.some((asset) => asset.id === current)
           ? current
           : next.assets?.[0]?.id || "",
       );
-    } catch {
-      navigate("/");
+    } catch (reason) {
+      setLoadError(
+        reason instanceof Error ? reason.message : "无法读取项目，请重试",
+      );
     } finally {
       setLoading(false);
     }
@@ -116,12 +120,34 @@ export function Workspace() {
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [originalOpen, referenceOpen]);
-  if (loading || !project)
+  if (loading)
     return (
       <Shell>
         <div className="loading-page">
           <LoaderCircle className="spin" size={28} />
           加载项目...
+        </div>
+      </Shell>
+    );
+  if (!project)
+    return (
+      <Shell>
+        <div className="loading-page">
+          <p>{loadError || "无法读取项目"}</p>
+          <button
+            className="button primary"
+            type="button"
+            onClick={() => void load()}
+          >
+            重试
+          </button>
+          <button
+            className="button secondary"
+            type="button"
+            onClick={() => navigate("/")}
+          >
+            返回创作台
+          </button>
         </div>
       </Shell>
     );
@@ -281,6 +307,7 @@ export function Workspace() {
                   </button>
                   <button
                     className="button primary"
+                    type="button"
                     disabled={isPending(asset.status)}
                     onClick={() => void generate()}
                   >
