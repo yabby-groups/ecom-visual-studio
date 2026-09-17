@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/openai/openai-go/v3"
 	_ "modernc.org/sqlite"
 )
 
@@ -215,6 +217,73 @@ func TestAnalyzeAndChatReadResponsesOutputTextViaOfficialSDK(t *testing.T) {
 	if chat["text"] != "商品分析" {
 		t.Fatalf("chat = %#v", chat)
 	}
+}
+
+func TestImageGenerationRequestsPNGOutput(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path != "/v1/images/generations" {
+			t.Fatalf("request path = %q, want /v1/images/generations", r.URL.Path)
+		}
+		if r.Header.Get("Authorization") != "Bearer sk-test" {
+			t.Fatalf("authorization = %q", r.Header.Get("Authorization"))
+		}
+		var request map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Fatal(err)
+		}
+		if request["output_format"] != "png" {
+			t.Fatalf("output_format = %#v, want png", request["output_format"])
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"created": 1, "data": []any{}})
+	}))
+	defer server.Close()
+	studio := &Studio{httpClient: server.Client()}
+	client := studio.openAIClient(huabotConfig{APIBase: server.URL + "/v1"}, "sk-test")
+	if _, err := client.Images.Generate(context.Background(), openai.ImageGenerateParams{
+		Model:        "gpt-image-2",
+		Prompt:       "product image",
+		N:            openai.Int(1),
+		OutputFormat: openai.ImageGenerateParamsOutputFormatPNG,
+		Size:         openai.ImageGenerateParamsSize1024x1024,
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestImageFormat(t *testing.T) {
+	if got := imageFormat([]byte{255, 216, 255, 0}); got != "JPEG" {
+		t.Fatalf("imageFormat(JPEG) = %q", got)
+	}
+	if got := imageFormat([]byte("RIFFxxxxWEBP")); got != "WebP" {
+		t.Fatalf("imageFormat(WebP) = %q", got)
+	}
+}
+
+func TestImageBytesRejectsRedirectToPrivateNetwork(t *testing.T) {
+	requests := 0
+	studio := &Studio{httpClient: &http.Client{Transport: roundTripperFunc(func(request *http.Request) (*http.Response, error) {
+		requests++
+		return &http.Response{
+			StatusCode: http.StatusFound,
+			Header:     http.Header{"Location": []string{"http://127.0.0.1/image.png"}},
+			Body:       http.NoBody,
+			Request:    request,
+		}, nil
+	})}}
+	_, err := studio.imageBytes(openai.Image{URL: "http://8.8.8.8/image.png"})
+	if err == nil || !strings.Contains(err.Error(), "图片链接不能指向本机或私有网络") {
+		t.Fatalf("imageBytes() error = %v, want rejected private redirect", err)
+	}
+	if requests != 1 {
+		t.Fatalf("request count = %d, want 1", requests)
+	}
+}
+
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(request *http.Request) (*http.Response, error) {
+	return f(request)
 }
 
 func TestDeleteTryOnDoesNotDeleteAnotherUsersVersions(t *testing.T) {

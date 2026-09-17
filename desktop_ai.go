@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"mime"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -31,7 +32,7 @@ func imageSize(ratio string) ([2]int, error) {
 }
 func validPNG(data []byte, expected [2]int) error {
 	if len(data) < 24 || !bytes.Equal(data[:8], []byte{137, 80, 78, 71, 13, 10, 26, 10}) || !bytes.Equal(data[12:16], []byte("IHDR")) {
-		return errors.New("图像服务没有返回 PNG 图片")
+		return fmt.Errorf("图像服务未按请求返回 PNG 图片（收到 %s，%d 字节）", imageFormat(data), len(data))
 	}
 	w := int(data[16])<<24 | int(data[17])<<16 | int(data[18])<<8 | int(data[19])
 	h := int(data[20])<<24 | int(data[21])<<16 | int(data[22])<<8 | int(data[23])
@@ -42,6 +43,21 @@ func validPNG(data []byte, expected [2]int) error {
 		return fmt.Errorf("图像服务返回比例 %d:%d，但请求的是 %d:%d", w, h, expected[0], expected[1])
 	}
 	return nil
+}
+
+func imageFormat(data []byte) string {
+	switch {
+	case len(data) >= 8 && bytes.Equal(data[:8], []byte{137, 80, 78, 71, 13, 10, 26, 10}):
+		return "PNG"
+	case len(data) >= 3 && bytes.Equal(data[:3], []byte{255, 216, 255}):
+		return "JPEG"
+	case len(data) >= 12 && bytes.Equal(data[:4], []byte("RIFF")) && bytes.Equal(data[8:12], []byte("WEBP")):
+		return "WebP"
+	case len(data) == 0:
+		return "空数据"
+	default:
+		return fmt.Sprintf("未知数据 % x", data[:min(len(data), 12)])
+	}
 }
 
 func (s *Studio) GenerateAsset(id string) (map[string]bool, error) {
@@ -104,10 +120,11 @@ func (s *Studio) generateAsset(id string) {
 				raw, err = s.imageEdit(client, image, prompt, size, []string{reference})
 			} else {
 				raw, err = client.Images.Generate(context.Background(), openai.ImageGenerateParams{
-					Model:  openai.ImageModel(image),
-					Prompt: prompt,
-					N:      openai.Int(1),
-					Size:   openai.ImageGenerateParamsSize(fmt.Sprintf("%dx%d", size[0], size[1])),
+					Model:        openai.ImageModel(image),
+					Prompt:       prompt,
+					N:            openai.Int(1),
+					OutputFormat: openai.ImageGenerateParamsOutputFormatPNG,
+					Size:         openai.ImageGenerateParamsSize(fmt.Sprintf("%dx%d", size[0], size[1])),
 				})
 			}
 			if err == nil {
@@ -149,11 +166,12 @@ func (s *Studio) imageEdit(client openai.Client, model, prompt string, size [2]i
 		readers = append(readers, openai.File(file, filepath.Base(path), mime.TypeByExtension(filepath.Ext(path))))
 	}
 	return client.Images.Edit(context.Background(), openai.ImageEditParams{
-		Image:  openai.ImageEditParamsImageUnion{OfFileArray: readers},
-		Model:  openai.ImageModel(model),
-		Prompt: prompt,
-		N:      openai.Int(1),
-		Size:   openai.ImageEditParamsSize(fmt.Sprintf("%dx%d", size[0], size[1])),
+		Image:        openai.ImageEditParamsImageUnion{OfFileArray: readers},
+		Model:        openai.ImageModel(model),
+		Prompt:       prompt,
+		N:            openai.Int(1),
+		OutputFormat: openai.ImageEditParamsOutputFormatPNG,
+		Size:         openai.ImageEditParamsSize(fmt.Sprintf("%dx%d", size[0], size[1])),
 	})
 }
 func safeUpload(dataDir, path string) (*os.File, error) {
@@ -172,9 +190,9 @@ func (s *Studio) saveImageResponse(raw *openai.ImagesResponse, folder, entity st
 	if raw == nil || len(raw.Data) == 0 {
 		return errors.New("图像服务没有返回图片")
 	}
-	image, err := base64.StdEncoding.DecodeString(raw.Data[0].B64JSON)
+	image, err := s.imageBytes(raw.Data[0])
 	if err != nil {
-		return errors.New("图像服务返回图片无效")
+		return err
 	}
 	if err = validPNG(image, size); err != nil {
 		return err
@@ -197,6 +215,43 @@ func (s *Studio) saveImageResponse(raw *openai.ImagesResponse, folder, entity st
 		}
 	}
 	return nil
+}
+
+func (s *Studio) imageBytes(result openai.Image) ([]byte, error) {
+	if encoded := strings.TrimSpace(result.B64JSON); encoded != "" {
+		image, err := base64.StdEncoding.DecodeString(encoded)
+		if err != nil {
+			return nil, errors.New("图像服务返回的 b64_json 无效")
+		}
+		return image, nil
+	}
+	if result.URL == "" {
+		return nil, errors.New("图像服务没有返回图像数据（b64_json 和 url 均为空）")
+	}
+	if _, err := publicImageURL(result.URL); err != nil {
+		return nil, fmt.Errorf("图像服务返回的图片 URL 无效: %w", err)
+	}
+	client := *s.httpClient
+	client.CheckRedirect = func(request *http.Request, _ []*http.Request) error {
+		_, err := publicImageURL(request.URL.String())
+		return err
+	}
+	response, err := client.Get(result.URL)
+	if err != nil {
+		return nil, fmt.Errorf("下载图像服务返回的 URL 失败: %w", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return nil, fmt.Errorf("下载图像服务返回的 URL 失败: HTTP %d", response.StatusCode)
+	}
+	image, err := io.ReadAll(io.LimitReader(response.Body, maxUploadBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("读取图像服务返回的 URL 失败: %w", err)
+	}
+	if len(image) == 0 || len(image) > maxUploadBytes {
+		return nil, fmt.Errorf("图像服务返回的 URL 图片大小无效: %d 字节", len(image))
+	}
+	return image, nil
 }
 
 type TryOnInput struct {

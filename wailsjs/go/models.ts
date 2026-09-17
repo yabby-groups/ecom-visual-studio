@@ -1,11 +1,11 @@
 export namespace main {
-
+	
 	export class AssetPatch {
 	    title: string;
 	    template: string;
 	    ratio: string;
 	    prompt: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new AssetPatch(source);
 	    }
@@ -112,3 +112,4 @@ export namespace main {
 	}
 
 }
+
