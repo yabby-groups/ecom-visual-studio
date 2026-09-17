@@ -23,6 +23,11 @@ import (
 
 var imageSizes = map[string][2]int{"1:1": {1024, 1024}, "3:2": {1536, 1024}, "2:3": {1024, 1536}, "16:9": {1536, 864}}
 
+const (
+	imageAttemptTimeout    = 3 * time.Minute
+	imageGenerationTimeout = 10 * time.Minute
+)
+
 func imageSize(ratio string) ([2]int, error) {
 	size, ok := imageSizes[ratio]
 	if !ok {
@@ -141,12 +146,14 @@ func (s *Studio) generateAsset(id string) {
 		if sizeErr != nil {
 			err = sizeErr
 		} else {
-			client := s.openAIClient(config, key)
+			requestContext, cancel := context.WithTimeout(context.Background(), imageGenerationTimeout)
+			defer cancel()
+			client := s.imageOpenAIClient(config, key)
 			var raw *openai.ImagesResponse
 			if reference != "" {
-				raw, err = s.imageEdit(client, image, prompt, size, []string{reference})
+				raw, err = s.imageEdit(requestContext, client, image, prompt, size, []string{reference})
 			} else {
-				raw, err = client.Images.Generate(context.Background(), openai.ImageGenerateParams{
+				raw, err = client.Images.Generate(requestContext, openai.ImageGenerateParams{
 					Model:        openai.ImageModel(image),
 					Prompt:       prompt,
 					N:            openai.Int(1),
@@ -161,7 +168,7 @@ func (s *Studio) generateAsset(id string) {
 	}
 	if err != nil {
 		_ = s.writeTransaction(func(tx *sql.Tx) error {
-			_, err := tx.Exec("update assets set status=? where id=?", "failed: "+truncate(err.Error()), id)
+			_, err := tx.Exec("update assets set status=? where id=?", "failed: "+imageGenerationFailure(err), id)
 			return err
 		})
 		s.NotifyGeneration(id, "failed")
@@ -178,7 +185,25 @@ func (s *Studio) openAIClient(config huabotConfig, key string) openai.Client {
 	)
 }
 
-func (s *Studio) imageEdit(client openai.Client, model, prompt string, size [2]int, paths []string) (*openai.ImagesResponse, error) {
+func (s *Studio) imageOpenAIClient(config huabotConfig, key string) openai.Client {
+	client := *s.httpClient
+	client.Timeout = imageAttemptTimeout
+	return openai.NewClient(
+		option.WithBaseURL(config.APIBase),
+		option.WithAPIKey(key),
+		option.WithHTTPClient(&client),
+		option.WithRequestTimeout(imageAttemptTimeout),
+	)
+}
+
+func imageGenerationFailure(err error) string {
+	if errors.Is(err, context.DeadlineExceeded) || strings.Contains(err.Error(), "Client.Timeout exceeded") {
+		return "图像服务响应超时，请稍后重试"
+	}
+	return truncate(err.Error())
+}
+
+func (s *Studio) imageEdit(ctx context.Context, client openai.Client, model, prompt string, size [2]int, paths []string) (*openai.ImagesResponse, error) {
 	readers := make([]io.Reader, 0, len(paths))
 	closers := make([]io.Closer, 0, len(paths))
 	defer func() {
@@ -194,7 +219,7 @@ func (s *Studio) imageEdit(client openai.Client, model, prompt string, size [2]i
 		closers = append(closers, file)
 		readers = append(readers, openai.File(file, filepath.Base(path), mime.TypeByExtension(filepath.Ext(path))))
 	}
-	return client.Images.Edit(context.Background(), openai.ImageEditParams{
+	return client.Images.Edit(ctx, openai.ImageEditParams{
 		Image:        openai.ImageEditParamsImageUnion{OfFileArray: readers},
 		Model:        openai.ImageModel(model),
 		Prompt:       prompt,
@@ -367,9 +392,11 @@ func (s *Studio) generateTryOn(id string) {
 		if e != nil {
 			err = e
 		} else {
-			client := s.openAIClient(config, key)
+			requestContext, cancel := context.WithTimeout(context.Background(), imageGenerationTimeout)
+			defer cancel()
+			client := s.imageOpenAIClient(config, key)
 			prompt := "Create a realistic full-body fashion try-on image. Preserve the person's identity, pose, body proportions, hair, and background. Replace only their clothing with the supplied garment. Do not add text, watermarks, logos, extra garments, or unrelated objects.\nAdditional direction: " + strings.TrimSpace(instructions)
-			raw, requestErr := s.imageEdit(client, image, prompt, size, append(pp, gg...))
+			raw, requestErr := s.imageEdit(requestContext, client, image, prompt, size, append(pp, gg...))
 			err = requestErr
 			if err == nil {
 				err = s.saveImageResponse(raw, filepath.Join("try-on", user), id, size, "try_on_versions", "job_id")
@@ -378,7 +405,7 @@ func (s *Studio) generateTryOn(id string) {
 	}
 	if err != nil {
 		_ = s.writeTransaction(func(tx *sql.Tx) error {
-			_, err := tx.Exec("update try_on_jobs set status=? where id=?", "failed: "+truncate(err.Error()), id)
+			_, err := tx.Exec("update try_on_jobs set status=? where id=?", "failed: "+imageGenerationFailure(err), id)
 			return err
 		})
 	}

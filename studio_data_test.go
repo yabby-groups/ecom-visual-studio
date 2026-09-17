@@ -304,6 +304,26 @@ func TestImageGenerationRequestsPNGOutput(t *testing.T) {
 	}
 }
 
+func TestImageGenerationUsesPerAttemptTimeoutAndActionableTimeoutError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("X-Stainless-Timeout"); got != "180" {
+			t.Fatalf("X-Stainless-Timeout = %q, want 180", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"created": 1, "data": []any{}})
+	}))
+	defer server.Close()
+
+	studio := &Studio{httpClient: server.Client()}
+	client := studio.imageOpenAIClient(huabotConfig{APIBase: server.URL + "/v1"}, "sk-test")
+	if _, err := client.Images.Generate(context.Background(), openai.ImageGenerateParams{Model: "gpt-image-2", Prompt: "product image", N: openai.Int(1)}); err != nil {
+		t.Fatal(err)
+	}
+	if got := imageGenerationFailure(context.DeadlineExceeded); got != "图像服务响应超时，请稍后重试" {
+		t.Fatalf("imageGenerationFailure() = %q", got)
+	}
+}
+
 func TestImageFormat(t *testing.T) {
 	if got := imageFormat([]byte{255, 216, 255, 0}); got != "JPEG" {
 		t.Fatalf("imageFormat(JPEG) = %q", got)
