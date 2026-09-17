@@ -6,6 +6,11 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:desktop": "tsc -b && vite build --outDir desktop_assets",
+    "desktop:dev": "wails dev",
+    "desktop:build": "scripts/package-macos.sh",
+    "desktop:build:macos": "scripts/package-macos.sh",
+    "desktop:build:windows": "scripts/package-windows.sh",
     "preview": "vite preview",
     "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,css,scss,md}\"",
     "test": "vitest run"

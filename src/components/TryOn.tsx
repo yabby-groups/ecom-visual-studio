@@ -34,7 +34,7 @@ type ReferenceSlotProps = {
   hint: string;
   paths: string[];
   loading: boolean;
-  onUpload: (file: File) => void;
+  onUpload: () => void;
   onImport: (url: string) => void;
   onRemove: (path: string) => void;
 };
@@ -95,17 +95,12 @@ function ReferenceSlot({
         ))}
       </div>
       {source === "upload" ? (
-        <label className="try-on-upload">
-          <input
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            disabled={loading || paths.length >= 4}
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file) onUpload(file);
-              event.currentTarget.value = "";
-            }}
-          />
+        <button
+          type="button"
+          className="try-on-upload"
+          disabled={loading || paths.length >= 4}
+          onClick={onUpload}
+        >
           <ImagePlus size={28} />
           <b>{paths.length ? "继续添加图片" : "上传图片"}</b>
           <span>{paths.length}/4 张 · JPG、PNG、WebP，最大 15MB</span>
@@ -114,7 +109,7 @@ function ReferenceSlot({
               <LoaderCircle className="spin" size={22} /> 上传中
             </span>
           )}
-        </label>
+        </button>
       ) : (
         <div className="try-on-url-import">
           <Link2 size={24} />
@@ -244,12 +239,12 @@ export function TryOn() {
     setConsented(false);
   }
 
-  async function upload(slot: "person" | "garment", file: File) {
+  async function upload(slot: "person" | "garment") {
     beginDraft();
     setError("");
     setUploading(slot);
     try {
-      const { path } = await client.upload(file);
+      const { path } = await client.pickImage();
       if (slot === "person") setPersonPaths((paths) => [...paths, path]);
       else setGarmentPaths((paths) => [...paths, path]);
     } catch (reason) {
@@ -576,7 +571,7 @@ export function TryOn() {
             hint="清晰、全身的人像效果最佳"
             paths={personPaths}
             loading={uploading === "person"}
-            onUpload={(file) => void upload("person", file)}
+            onUpload={() => void upload("person")}
             onImport={(url) => void importUrl("person", url)}
             onRemove={(path) => removeReference("person", path)}
           />
@@ -585,7 +580,7 @@ export function TryOn() {
             hint="平铺或挂拍的单件服装"
             paths={garmentPaths}
             loading={uploading === "garment"}
-            onUpload={(file) => void upload("garment", file)}
+            onUpload={() => void upload("garment")}
             onImport={(url) => void importUrl("garment", url)}
             onRemove={(path) => removeReference("garment", path)}
           />

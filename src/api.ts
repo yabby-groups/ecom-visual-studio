@@ -1,144 +1,59 @@
-import type {
-  Asset,
-  Model,
-  LatestCreation,
-  Project,
-  Template,
-  TokenSettings,
-  TryOnJob,
-  TryOnPage,
-  User,
-} from "./types";
-
-type ApiOptions = Omit<RequestInit, "body"> & { body?: unknown };
+import type { Asset, LatestCreation, Model, Project, Template, TokenSettings, TryOnJob, TryOnPage, User } from "./types";
+import { studio, uploadFile } from "./desktop";
 
 export class ApiError extends Error {}
 
-export async function api<T>(
-  path: string,
-  options: ApiOptions = {},
-): Promise<T> {
-  const response = await fetch(`/api/${path}`, {
-    credentials: "include",
-    headers:
-      options.body instanceof FormData
-        ? undefined
-        : { "Content-Type": "application/json" },
-    ...options,
-    body:
-      options.body instanceof FormData
-        ? options.body
-        : options.body === undefined
-          ? undefined
-          : JSON.stringify(options.body),
-  });
-  const payload = await response
-    .json()
-    .catch(() => ({ detail: "服务返回无效响应" }));
-  if (!response.ok)
-    throw new ApiError(payload.detail || payload.error || "请求失败");
-  return payload as T;
+function errorMessage(reason: unknown): string {
+  if (reason instanceof Error && reason.message) return reason.message;
+  if (typeof reason === "string" && reason.trim()) return reason.trim();
+  if (reason && typeof reason === "object" && "message" in reason) {
+    const message = (reason as { message?: unknown }).message;
+    if (typeof message === "string" && message.trim()) return message.trim();
+  }
+  return "请求失败";
+}
+
+async function call<T>(method: string, ...args: unknown[]): Promise<T> {
+  try {
+    const fn = studio()[method];
+    if (!fn) throw new Error(`桌面服务尚未实现 ${method}`);
+    return (await fn(...args)) as T;
+  } catch (reason) {
+    throw new ApiError(errorMessage(reason));
+  }
 }
 
 export const client = {
-  me: () => api<{ user: User | null }>("auth/me"),
-  login: (body: { name: string; password: string; totp_code: string }) =>
-    api<{ user: User }>("auth/login", { method: "POST", body }),
-  logout: () => api("auth/logout", { method: "POST" }),
-  projects: () => api<Project[]>("projects"),
-  latestCreation: () =>
-    api<{ creation: LatestCreation | null }>("creations/latest"),
-  project: (id: string) => api<Project>(`projects/${id}`),
-  createProject: (
-    body: Omit<Project, "id" | "user_id" | "created_at" | "assets">,
-  ) => api<{ id: string }>("projects", { method: "POST", body }),
-  createPack: (
-    id: string,
-    body: {
-      kind: string;
-      scene_template_ids: string[];
-      template_id?: string;
-    },
-  ) => api(`projects/${id}/pack`, { method: "POST", body }),
-  deleteProject: (id: string) => api(`projects/${id}`, { method: "DELETE" }),
-  updateAsset: (id: string, body: Partial<Asset>) =>
-    api(`assets/${id}`, { method: "PATCH", body }),
-  resetPrompt: (id: string) =>
-    api<{ prompt: string }>(`assets/${id}/prompt`, { method: "POST" }),
-  generateAsset: (id: string) =>
-    api(`assets/${id}/generate`, { method: "POST" }),
-  generatePack: (id: string) =>
-    api(`projects/${id}/generate-pack`, { method: "POST" }),
-  templates: () => api<Template[]>("templates"),
-  addTemplate: (body: { name: string; ratio: string; direction: string }) =>
-    api("templates", { method: "POST", body }),
-  deleteTemplate: (id: string) => api(`templates/${id}`, { method: "DELETE" }),
-  upload: (file: File) => {
-    const body = new FormData();
-    body.append("file", file);
-    return api<{ path: string }>("reference-upload", { method: "POST", body });
+  me: () => call<{ user: User | null }>("Me"),
+  login: (body: { name: string; password: string; totp_code: string }) => call<{ user: User }>("Login", body.name, body.password, body.totp_code),
+  logout: () => call("Logout"),
+  projects: () => call<Project[]>("Projects"),
+  latestCreation: () => call<{ creation: LatestCreation | null }>("LatestCreation"),
+  project: (id: string) => call<Project>("Project", id),
+  createProject: (body: Omit<Project, "id" | "user_id" | "created_at" | "assets">) => call<{ id: string }>("CreateProject", body),
+  createPack: (id: string, body: { kind: string; scene_template_ids: string[]; template_id?: string }) => call("CreatePack", id, body),
+  deleteProject: (id: string) => call("DeleteProject", id),
+  updateAsset: (id: string, body: Partial<Asset>) => call("UpdateAsset", id, body),
+  resetPrompt: (id: string) => call<{ prompt: string }>("ResetPrompt", id),
+  generateAsset: (id: string) => call("GenerateAsset", id),
+  generatePack: (id: string) => call("GeneratePack", id),
+  templates: () => call<Template[]>("Templates"),
+  addTemplate: (body: { name: string; ratio: string; direction: string }) => call("AddTemplate", body),
+  deleteTemplate: (id: string) => call("DeleteTemplate", id),
+  upload: uploadFile,
+  pickImage: () => call<{ path: string }>("PickImage"),
+  importUrl: (url: string) => call<{ path: string }>("ImportURL", url),
+  tryOnJobs: (limit = 12, offset = 0) => call<TryOnPage>("TryOnJobs", limit, offset),
+  tryOnJob: (id: string) => call<TryOnJob>("TryOnJob", id),
+  createTryOn: (body: { person_paths: string[]; garment_paths: string[]; generation_mode: "combined" | "combinations"; instructions: string; ratio: string }) => call<{ id: string; ids: string[] }>("CreateTryOn", body),
+  regenerateTryOn: (id: string) => call("RegenerateTryOn", id),
+  deleteTryOn: (id: string) => call("DeleteTryOn", id),
+  analyze: (body: { mode: string; product: string; reference: string }) => call<{ description: string; benefits: string[] }>("Analyze", body),
+  chat: async (messages: { role: string; content: string }[], onDelta: (delta: string) => void) => {
+    const result = await call<{ text: string }>("Chat", messages);
+    if (result.text) onDelta(result.text);
   },
-  importUrl: (url: string) =>
-    api<{ path: string }>("reference-url", { method: "POST", body: { url } }),
-  tryOnJobs: (limit = 12, offset = 0) =>
-    api<TryOnPage>(`try-on?limit=${limit}&offset=${offset}`),
-  tryOnJob: (id: string) => api<TryOnJob>(`try-on/${id}`),
-  createTryOn: (body: {
-    person_paths: string[];
-    garment_paths: string[];
-    generation_mode: "combined" | "combinations";
-    instructions: string;
-    ratio: string;
-  }) => api<{ id: string; ids: string[] }>("try-on", { method: "POST", body }),
-  regenerateTryOn: (id: string) =>
-    api(`try-on/${id}/generate`, { method: "POST" }),
-  deleteTryOn: (id: string) => api(`try-on/${id}`, { method: "DELETE" }),
-  analyze: (body: { mode: string; product: string; reference: string }) =>
-    api<{ description: string; benefits: string[] }>("analyze-product", {
-      method: "POST",
-      body,
-    }),
-  chat: async (
-    messages: { role: string; content: string }[],
-    onDelta: (delta: string) => void,
-  ) => {
-    const response = await fetch("/api/chat", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages }),
-    });
-    if (!response.ok || !response.body) {
-      const payload = await response.json().catch(() => ({}));
-      throw new ApiError(payload.detail || payload.error || "对话请求失败");
-    }
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    while (true) {
-      const { done, value } = await reader.read();
-      buffer += decoder.decode(value, { stream: !done });
-      const events = buffer.split("\n\n");
-      buffer = events.pop() || "";
-      for (const event of events) {
-        const data = event
-          .split("\n")
-          .find((line) => line.startsWith("data: "))
-          ?.slice(6);
-        if (!data) continue;
-        const payload = JSON.parse(data) as { delta?: string; error?: string };
-        if (payload.error) throw new ApiError(payload.error);
-        if (payload.delta) onDelta(payload.delta);
-      }
-      if (done) break;
-    }
-  },
-  tokenSettings: () => api<TokenSettings>("huabot/tokens"),
-  models: () => api<{ models: Model[] }>("huabot/models"),
-  saveSettings: (body: {
-    token_id: string;
-    image_model: string;
-    text_model: string;
-    chat_model: string;
-  }) => api("settings", { method: "POST", body }),
+  tokenSettings: () => call<TokenSettings>("TokenSettings"),
+  models: () => call<{ models: Model[] }>("Models"),
+  saveSettings: (body: { token_id: string; image_model: string; text_model: string; chat_model: string }) => call("SaveSettings", body),
 };

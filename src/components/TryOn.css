@@ -116,14 +116,13 @@
   background: #182038;
   color: #75e4c9;
   text-align: center;
-}
-.try-on-controls .try-on-upload input {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
   width: 100%;
-  opacity: 0;
+  font: inherit;
   cursor: pointer;
+}
+.try-on-controls .try-on-upload:disabled {
+  cursor: wait;
+  opacity: 0.7;
 }
 .try-on-controls .try-on-upload b {
   color: #c9faee;

@@ -46,9 +46,8 @@ Create a local `.env` file in the repository root. Do not commit it.
 
 ```dotenv
 APP_SECRET_KEY=replace-with-a-long-random-secret
-HUABOT_BASE_URL=https://your-huabot-compatible-endpoint
-# Optional: override the public endpoint used to refresh the model catalog.
-# HUABOT_WEB_BASE_URL=https://www.huabot.com
+HUABOT_BASE_URL=https://huabot.com/v1
+HUABOT_WEB_BASE_URL=https://huabot.com
 ```
 
 ## Configuration
@@ -56,9 +55,9 @@ HUABOT_BASE_URL=https://your-huabot-compatible-endpoint
 | Variable | Required | Purpose |
 | --- | --- | --- |
 | `APP_SECRET_KEY` | Yes | Encrypts huabot token secrets before they are stored in SQLite. Changing it makes existing encrypted tokens unreadable. |
-| `HUABOT_BASE_URL` | For live generation, chat, and analysis | Base URL for huabot authentication and OpenAI-compatible generation/chat calls. |
-| `IMG_BASE_URL` | No | Compatibility fallback when `HUABOT_BASE_URL` is not set. |
-| `HUABOT_WEB_BASE_URL` | No | Overrides the endpoint used to retrieve the public huabot model catalog. Defaults to `https://www.huabot.com`. |
+| `HUABOT_BASE_URL` | For live generation, chat, and analysis | OpenAI-compatible API base URL, including `/v1`; defaults to `https://huabot.com/v1`. |
+| `IMG_BASE_URL` | No | Legacy browser-service fallback when `HUABOT_BASE_URL` is not set. |
+| `HUABOT_WEB_BASE_URL` | For Huabot account sign-in and catalog sync | Website base URL for sign-in, Token Base and model catalog calls; defaults to `https://huabot.com`. |
 
 The application stores the selected account token encrypted on the server. Raw token values are never returned to the browser.
 
@@ -78,6 +77,20 @@ npm run dev
 ```
 
 Open the Vite URL shown in the terminal, normally `http://127.0.0.1:5173`. Sign in with a huabot account; an HTTP-only session cookie keeps the browser authenticated.
+
+## Desktop application
+
+The Wails desktop runtime uses the React application at the repository root and a Go service layer. It stores fresh desktop-only data under the operating system application-config directory (`EcomVisualStudio`), so it does not read or migrate the legacy `storage/` directory and does not require Python at runtime. It reads environment variables first and then an optional `.env` in that directory. The selected Huabot Token is encrypted locally with a generated, owner-only key; login passwords and TOTP codes are never stored.
+
+```sh
+npm run desktop:dev
+npm run desktop:build
+npm run desktop:build:windows
+```
+
+`desktop:build` creates the native build for the current platform. `desktop:build:windows` cross-builds a Windows x64 NSIS installer and needs the Wails Windows cross-compilation prerequisites (MinGW and NSIS) on the build host.
+
+The macOS package is ad-hoc signed with App Sandbox and outgoing-network entitlements. macOS notarization, Windows signing, automatic updates, and legacy data import are intentionally out of scope.
 
 ## Development checks
 

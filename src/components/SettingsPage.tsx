@@ -7,6 +7,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { client } from "../api";
+import type { TokenSettings } from "../types";
 import { LogoutButton } from "./LogoutButton";
 import { Notice } from "./Notice";
 import { Shell } from "./Shell";
@@ -20,6 +21,30 @@ type SettingsValues = {
   chat_model: string;
 };
 
+const EMPTY_SETTINGS: TokenSettings = {
+  tokens: [],
+  active_token_id: "",
+  image_model: "",
+  text_model: "",
+  chat_model: "",
+};
+
+function timeout<T>(request: Promise<T>, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error(message)), 6000);
+    request.then(
+      (value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      },
+      (error: unknown) => {
+        window.clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
 export function SettingsPage() {
   const [settings, setSettings] = useState<Awaited<
     ReturnType<typeof client.tokenSettings>
@@ -27,15 +52,25 @@ export function SettingsPage() {
   const [models, setModels] = useState<{ id: string; name: string }[]>([]);
   const [values, setValues] = useState<SettingsValues | null>(null);
   const [notice, setNotice] = useState("");
+  const [loading, setLoading] = useState(true);
   const imageModels = models.filter((model) =>
     model.id.startsWith("gpt-image-"),
   );
   useEffect(() => {
-    void client
-      .models()
-      .then(async (items) => {
-        const next = await client.tokenSettings();
-        const nextImageModels = items.models.filter((model) =>
+    let active = true;
+    void Promise.allSettled([
+      timeout(client.tokenSettings(), "桌面设置服务未响应"),
+      timeout(client.models(), "桌面模型服务未响应"),
+    ]).then(
+      ([settingsResult, modelsResult]) => {
+        if (!active) return;
+        const next =
+          settingsResult.status === "fulfilled"
+            ? settingsResult.value
+            : EMPTY_SETTINGS;
+        const nextModels =
+          modelsResult.status === "fulfilled" ? modelsResult.value.models : [];
+        const nextImageModels = nextModels.filter((model) =>
           model.id.startsWith("gpt-image-"),
         );
         setValues({
@@ -49,13 +84,24 @@ export function SettingsPage() {
           chat_model: next.chat_model,
         });
         setSettings(next);
-        setModels(items.models);
-      })
-      .catch((error: unknown) =>
-        setNotice(error instanceof Error ? error.message : "无法读取设置"),
-      );
+        setModels(nextModels);
+        if (settingsResult.status === "rejected" || modelsResult.status === "rejected") {
+          const error =
+            settingsResult.status === "rejected"
+              ? settingsResult.reason
+              : modelsResult.status === "rejected"
+                ? modelsResult.reason
+                : undefined;
+          setNotice(error instanceof Error ? error.message : "部分设置暂时无法读取");
+        }
+        setLoading(false);
+      },
+    );
+    return () => {
+      active = false;
+    };
   }, []);
-  if (!settings || !values)
+  if (loading)
     return (
       <Shell>
         <div className="loading-page">
@@ -64,6 +110,7 @@ export function SettingsPage() {
         </div>
       </Shell>
     );
+  if (!settings || !values) return null;
   const modelsReady = models.length > 0;
   return (
     <Shell>

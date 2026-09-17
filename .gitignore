@@ -3,6 +3,9 @@ dist/
 .env
 .venv/
 storage/
+desktop_assets/*
+!desktop_assets/.gitkeep
+build/bin/
 __pycache__/
 .pytest_cache/
 .devenv/

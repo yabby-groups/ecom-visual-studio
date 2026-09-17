@@ -14,7 +14,7 @@ def parse_huabot_models(raw_models: dict[str, Any]) -> list[dict[str, str]]:
 
 
 def huabot_models() -> list[dict[str, str]]:
-    web_base = env().get("HUABOT_WEB_BASE_URL", "https://www.huabot.com").rstrip("/")
+    web_base = env().get("HUABOT_WEB_BASE_URL", "https://huabot.com").rstrip("/")
     try:
         response = httpx.get(f"{web_base}/api/token_base/model/list/?size=500&offset=0&enabled=1", timeout=30)
         response.raise_for_status()

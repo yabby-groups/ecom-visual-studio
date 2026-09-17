@@ -539,19 +539,17 @@
   background: rgba(68, 221, 183, 0.07);
   color: #9ff0d9;
   cursor: pointer;
+  width: 100%;
+  font: inherit;
+  text-align: center;
 }
 .creation-form .reference-upload-zone:hover {
   border-color: var(--accent);
   background: rgba(68, 221, 183, 0.13);
 }
-.creation-form .reference-upload-zone input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  clip-path: inset(50%);
-  white-space: nowrap;
+.creation-form .reference-upload-zone:disabled {
+  cursor: wait;
+  opacity: 0.7;
 }
 .creation-form .reference-upload-zone b {
   color: #fff;

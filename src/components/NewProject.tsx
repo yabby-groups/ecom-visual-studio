@@ -35,11 +35,11 @@ export function NewProject() {
   const [pickerColor, setPickerColor] = useState("#137a65");
   const formRef = useRef<HTMLFormElement>(null);
 
-  async function upload(file: File) {
+  async function upload() {
     setReferenceBusy(true);
     setError("");
     try {
-      const result = await client.upload(file);
+      const result = await client.pickImage();
       setReference(result.path);
       setPreview(fileUrl(result.path));
     } catch (reason) {
@@ -187,7 +187,7 @@ export function NewProject() {
               <ImageReferencePicker
                 preview={preview}
                 loading={referenceBusy}
-                onUpload={(file) => void upload(file)}
+                onUpload={() => void upload()}
                 onImport={(url) => void importUrl(url)}
               />
               <AiProductAnalysis

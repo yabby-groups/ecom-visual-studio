@@ -4,7 +4,7 @@ import { useState } from "react";
 type ImageReferencePickerProps = {
   preview: string;
   loading: boolean;
-  onUpload: (file: File) => void;
+  onUpload: () => void;
   onImport: (url: string) => void;
 };
 
@@ -69,17 +69,12 @@ export function ImageReferencePicker({
         </div>
 
         {source === "upload" ? (
-          <label className="reference-upload-zone">
-            <input
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              disabled={loading}
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (file) onUpload(file);
-                event.currentTarget.value = "";
-              }}
-            />
+          <button
+            type="button"
+            className="reference-upload-zone"
+            disabled={loading}
+            onClick={onUpload}
+          >
             {loading ? (
               <LoaderCircle className="spin" size={22} />
             ) : (
@@ -93,7 +88,7 @@ export function ImageReferencePicker({
                   : "选择本地图片"}
             </b>
             <small>{loading ? "请稍候..." : "点击选择文件"}</small>
-          </label>
+          </button>
         ) : (
           <div className="reference-url-form">
             <label htmlFor="reference-url">公开图片链接</label>
