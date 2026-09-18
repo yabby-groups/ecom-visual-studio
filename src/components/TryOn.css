@@ -180,6 +180,12 @@
   min-height: 29px !important;
   border-radius: 8px !important;
 }
+.try-on-url-import .try-on-url-error {
+  margin: 0;
+  color: #ffb4aa;
+  font-size: 10px;
+  line-height: 1.35;
+}
 .try-on-controls label {
   display: grid;
   gap: 7px;

@@ -26,6 +26,7 @@ export function NewProject() {
   const [preview, setPreview] = useState("");
   const [selectedTemplates, setSelectedTemplates] = useState<string[]>([]);
   const [error, setError] = useState("");
+  const [referenceError, setReferenceError] = useState("");
   const [referenceBusy, setReferenceBusy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
@@ -37,6 +38,7 @@ export function NewProject() {
 
   async function upload() {
     setReferenceBusy(true);
+    setReferenceError("");
     setError("");
     try {
       const result = await client.pickImage();
@@ -50,13 +52,14 @@ export function NewProject() {
   }
   async function importUrl(url: string) {
     setReferenceBusy(true);
+    setReferenceError("");
     setError("");
     try {
       const result = await client.importUrl(url);
       setReference(result.path);
       setPreview(fileUrl(result.path));
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "导入失败");
+      setReferenceError(reason instanceof Error ? reason.message : "导入失败");
     } finally {
       setReferenceBusy(false);
     }
@@ -187,6 +190,7 @@ export function NewProject() {
               <ImageReferencePicker
                 preview={preview}
                 loading={referenceBusy}
+                error={referenceError}
                 onUpload={() => void upload()}
                 onImport={(url) => void importUrl(url)}
               />

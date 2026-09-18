@@ -4,6 +4,7 @@ import { useState } from "react";
 type ImageReferencePickerProps = {
   preview: string;
   loading: boolean;
+  error?: string;
   onUpload: () => void;
   onImport: (url: string) => void;
 };
@@ -13,6 +14,7 @@ type Source = "upload" | "url";
 export function ImageReferencePicker({
   preview,
   loading,
+  error,
   onUpload,
   onImport,
 }: ImageReferencePickerProps) {
@@ -106,10 +108,11 @@ export function ImageReferencePicker({
                 disabled={loading || !url.trim()}
                 onClick={() => onImport(url.trim())}
               >
-                {loading ? <LoaderCircle className="spin" size={17} /> : "导入"}
+                {loading ? <LoaderCircle className="spin" size={17} /> : error ? "重新导入" : "导入"}
               </button>
             </div>
             <small>请输入可公开访问的图片地址</small>
+            {error && <p className="reference-url-error" role="alert">{error}</p>}
           </div>
         )}
       </div>

@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -377,6 +379,62 @@ func TestImageBytesRejectsRedirectToPrivateNetwork(t *testing.T) {
 	}
 	if requests != 1 {
 		t.Fatalf("request count = %d, want 1", requests)
+	}
+}
+
+func TestImportURLRetriesTimeoutAndStoresImage(t *testing.T) {
+	attempts := 0
+	dataDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dataDir, "storage", "uploads"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	studio := &Studio{
+		dataDir: dataDir,
+		user:    &User{ID: "alice"},
+		httpClient: &http.Client{Transport: roundTripperFunc(func(request *http.Request) (*http.Response, error) {
+			attempts++
+			if got := request.Header.Get("User-Agent"); got != "Ecom Visual Studio/1.0" {
+				t.Fatalf("User-Agent = %q", got)
+			}
+			if attempts == 1 {
+				return nil, context.DeadlineExceeded
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"image/png"}},
+				Body:       io.NopCloser(bytes.NewReader([]byte{137, 80, 78, 71, 13, 10, 26, 10})),
+				Request:    request,
+			}, nil
+		})},
+	}
+
+	result, err := studio.ImportURL("http://8.8.8.8/image.png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if attempts != 2 {
+		t.Fatalf("attempts = %d, want 2", attempts)
+	}
+	if _, err := os.Stat(filepath.Join(dataDir, "storage", result["path"])); err != nil {
+		t.Fatalf("stored import missing: %v", err)
+	}
+}
+
+func TestImportURLDoesNotRetryClientErrors(t *testing.T) {
+	attempts := 0
+	studio := &Studio{
+		user: &User{ID: "alice"},
+		httpClient: &http.Client{Transport: roundTripperFunc(func(request *http.Request) (*http.Response, error) {
+			attempts++
+			return &http.Response{StatusCode: http.StatusNotFound, Header: make(http.Header), Body: http.NoBody, Request: request}, nil
+		})},
+	}
+	_, err := studio.ImportURL("http://8.8.8.8/image.png")
+	if err == nil || !strings.Contains(err.Error(), "HTTP 404") {
+		t.Fatalf("ImportURL() error = %v", err)
+	}
+	if attempts != 1 {
+		t.Fatalf("attempts = %d, want 1", attempts)
 	}
 }
 

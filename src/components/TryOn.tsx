@@ -34,6 +34,7 @@ type ReferenceSlotProps = {
   hint: string;
   paths: string[];
   loading: boolean;
+  error?: string;
   onUpload: () => void;
   onImport: (url: string) => void;
   onRemove: (path: string) => void;
@@ -44,6 +45,7 @@ function ReferenceSlot({
   hint,
   paths,
   loading,
+  error,
   onUpload,
   onImport,
   onRemove,
@@ -133,8 +135,9 @@ function ReferenceSlot({
             ) : (
               <Link2 size={16} />
             )}
-            导入图片（{paths.length}/4）
+            {error ? "重新导入" : `导入图片（${paths.length}/4）`}
           </button>
+          {error && <p className="try-on-url-error" role="alert">{error}</p>}
         </div>
       )}
     </section>
@@ -151,6 +154,7 @@ export function TryOn() {
   const [ratio, setRatio] = useState("2:3");
   const [consented, setConsented] = useState(false);
   const [uploading, setUploading] = useState<"person" | "garment" | "">("");
+  const [importErrors, setImportErrors] = useState({ person: "", garment: "" });
   const [jobs, setJobs] = useState<TryOnJob[]>([]);
   const [historyTotal, setHistoryTotal] = useState(0);
   const [historyPage, setHistoryPage] = useState(1);
@@ -233,6 +237,7 @@ export function TryOn() {
     navigate("/try-on");
     setPersonPaths([]);
     setGarmentPaths([]);
+    setImportErrors({ person: "", garment: "" });
     setGenerationMode("combined");
     setInstructions("");
     setRatio("2:3");
@@ -241,6 +246,7 @@ export function TryOn() {
 
   async function upload(slot: "person" | "garment") {
     beginDraft();
+    setImportErrors((errors) => ({ ...errors, [slot]: "" }));
     setError("");
     setUploading(slot);
     try {
@@ -256,6 +262,7 @@ export function TryOn() {
 
   async function importUrl(slot: "person" | "garment", url: string) {
     beginDraft();
+    setImportErrors((errors) => ({ ...errors, [slot]: "" }));
     setError("");
     setUploading(slot);
     try {
@@ -263,7 +270,10 @@ export function TryOn() {
       if (slot === "person") setPersonPaths((paths) => [...paths, path]);
       else setGarmentPaths((paths) => [...paths, path]);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "图片链接导入失败");
+      setImportErrors((errors) => ({
+        ...errors,
+        [slot]: reason instanceof Error ? reason.message : "图片链接导入失败",
+      }));
     } finally {
       setUploading("");
     }
@@ -571,6 +581,7 @@ export function TryOn() {
             hint="清晰、全身的人像效果最佳"
             paths={personPaths}
             loading={uploading === "person"}
+            error={importErrors.person}
             onUpload={() => void upload("person")}
             onImport={(url) => void importUrl("person", url)}
             onRemove={(path) => removeReference("person", path)}
@@ -580,6 +591,7 @@ export function TryOn() {
             hint="平铺或挂拍的单件服装"
             paths={garmentPaths}
             loading={uploading === "garment"}
+            error={importErrors.garment}
             onUpload={() => void upload("garment")}
             onImport={(url) => void importUrl("garment", url)}
             onRemove={(path) => removeReference("garment", path)}

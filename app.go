@@ -20,7 +20,11 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const maxUploadBytes = 15 << 20
+const (
+	maxUploadBytes         = 15 << 20
+	imageImportTimeout     = 300 * time.Second
+	imageImportMaxAttempts = 3
+)
 
 type Studio struct {
 	ctx        context.Context
@@ -271,30 +275,81 @@ func (s *Studio) ImportURL(rawURL string) (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	client := &http.Client{
-		Timeout: 30 * time.Second,
-		CheckRedirect: func(request *http.Request, _ []*http.Request) error {
-			_, err := publicImageURL(request.URL.String())
-			return err
-		},
-	}
-	response, err := client.Get(rawURL)
-	if err != nil {
-		return nil, fmt.Errorf("下载图片失败: %w", err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return nil, fmt.Errorf("下载图片失败: HTTP %d", response.StatusCode)
-	}
-	data, err := io.ReadAll(io.LimitReader(response.Body, maxUploadBytes+1))
+	data, contentType, err := s.downloadPublicImage(rawURL)
 	if err != nil {
 		return nil, err
 	}
 	ext := filepath.Ext(u.Path)
 	if ext == "" {
-		ext = extensionFor(response.Header.Get("Content-Type"))
+		ext = extensionFor(contentType)
 	}
-	return s.Upload("import"+ext, response.Header.Get("Content-Type"), data)
+	return s.Upload("import"+ext, contentType, data)
+}
+
+func (s *Studio) downloadPublicImage(rawURL string) ([]byte, string, error) {
+	baseClient := s.httpClient
+	if baseClient == nil {
+		baseClient = http.DefaultClient
+	}
+	client := *baseClient
+	client.Timeout = imageImportTimeout
+	client.CheckRedirect = func(request *http.Request, _ []*http.Request) error {
+		_, err := publicImageURL(request.URL.String())
+		return err
+	}
+
+	var lastErr error
+	for attempt := 0; attempt < imageImportMaxAttempts; attempt++ {
+		request, err := http.NewRequest(http.MethodGet, rawURL, nil)
+		if err != nil {
+			return nil, "", fmt.Errorf("下载图片失败: %w", err)
+		}
+		request.Header.Set("User-Agent", "Ecom Visual Studio/1.0")
+		response, err := client.Do(request)
+		if err == nil && response.StatusCode >= http.StatusOK && response.StatusCode < http.StatusMultipleChoices {
+			data, readErr := io.ReadAll(io.LimitReader(response.Body, maxUploadBytes+1))
+			response.Body.Close()
+			if readErr == nil {
+				return data, response.Header.Get("Content-Type"), nil
+			}
+			err = readErr
+		} else if err == nil {
+			response.Body.Close()
+			err = fmt.Errorf("下载图片失败: HTTP %d", response.StatusCode)
+		}
+
+		lastErr = err
+		if !retryableImageImportError(err) || attempt == imageImportMaxAttempts-1 {
+			break
+		}
+		time.Sleep(time.Duration(attempt+1) * 250 * time.Millisecond)
+	}
+	if isImageImportTimeout(lastErr) {
+		return nil, "", errors.New("图片下载超时，请稍后重新导入")
+	}
+	return nil, "", lastErr
+}
+
+func retryableImageImportError(err error) bool {
+	if isImageImportTimeout(err) {
+		return true
+	}
+	if errors.Is(err, io.ErrUnexpectedEOF) {
+		return true
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) {
+		return true
+	}
+	return strings.Contains(err.Error(), "HTTP 408") || strings.Contains(err.Error(), "HTTP 429") || strings.Contains(err.Error(), "HTTP 5")
+}
+
+func isImageImportTimeout(err error) bool {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	var netErr net.Error
+	return errors.As(err, &netErr) && netErr.Timeout()
 }
 
 func publicImageURL(rawURL string) (*url.URL, error) {

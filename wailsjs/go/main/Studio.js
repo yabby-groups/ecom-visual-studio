@@ -10,8 +10,8 @@ export function Analyze(arg1) {
   return window['go']['main']['Studio']['Analyze'](arg1);
 }
 
-export function Chat(arg1) {
-  return window['go']['main']['Studio']['Chat'](arg1);
+export function Chat(arg1, arg2) {
+  return window['go']['main']['Studio']['Chat'](arg1, arg2);
 }
 
 export function CreatePack(arg1, arg2) {
