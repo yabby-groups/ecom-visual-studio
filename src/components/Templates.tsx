@@ -19,62 +19,62 @@ export function Templates() {
   });
   const guide: Record<string, [string, string, string]> = {
     "hero-image": [
-      "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?auto=format&fit=crop&w=900&q=80",
+      "/template-previews/hero-image.jpg",
       "为商品建立清晰、可信的第一印象。",
       "白底或纯色背景，突出外观、材质与完整轮廓。",
     ],
     "lifestyle-scene": [
-      "https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?auto=format&fit=crop&w=900&q=80",
+      "/template-previews/lifestyle-scene.jpg",
       "让商品进入真实的生活与使用场景。",
       "空间氛围、人物行为或使用瞬间，适合讲述使用价值。",
     ],
     "detail-macro": [
-      "https://images.unsplash.com/photo-1618220179428-22790b461013?auto=format&fit=crop&w=900&q=80",
+      "/template-previews/detail-macro.jpg",
       "放大材质、做工和关键功能细节。",
       "近景构图与质感光线，帮助用户确认产品品质。",
     ],
     "poster-banner": [
-      "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=900&q=80",
+      "/template-previews/poster-banner.jpg",
       "用于促销节点、投放和品牌活动传播。",
       "商品焦点、活动氛围、标题留白和明确的行动区域。",
     ],
     "social-media": [
-      "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=900&q=80",
+      "/template-previews/social-media.jpg",
       "构建适合社交平台停留与转发的画面。",
       "强视觉中心、自然构图与可承载短文案的留白。",
     ],
     "ugc-style": [
-      "https://images.unsplash.com/photo-1604014237800-1c9102c219da?auto=format&fit=crop&w=900&q=80",
+      "/template-previews/ugc-style.jpg",
       "营造真实用户记录和日常分享感。",
       "自然光、轻微不完美感与生活化视角，降低广告感。",
     ],
     infographic: [
-      "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=900&q=80",
+      "/template-previews/infographic.jpg",
       "把卖点、参数和购买理由组织成详情图。",
       "产品主体配合图标、标签、短文案与结构化信息区。",
     ],
     "size-spec": [
-      "https://images.unsplash.com/photo-1595515106969-1ce29566ff1c?auto=format&fit=crop&w=900&q=80",
+      "/template-previews/size-spec.jpg",
       "清楚表达尺寸、结构和适配空间。",
       "产品正侧视角、尺寸线和规格说明区域。",
     ],
     livestream: [
-      "https://images.unsplash.com/photo-1581368135153-a506cf13b1e1?auto=format&fit=crop&w=900&q=80",
+      "/template-previews/livestream.jpg",
       "搭建直播讲解与带货展示场景。",
       "产品陈列、镜头景别、互动区域和直播氛围。",
     ],
     packaging: [
-      "https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?auto=format&fit=crop&w=900&q=80",
+      "/template-previews/packaging.jpg",
       "呈现包装、开箱和礼赠体验。",
       "包装正面、内衬、配件和品牌细节的组合展示。",
     ],
     "multi-angle-grid": [
-      "https://images.unsplash.com/photo-1583847268964-b28dc8f51f92?auto=format&fit=crop&w=900&q=80",
+      "/template-previews/multi-angle-grid.jpg",
       "在一张图中交代多角度与完整结构。",
       "正面、侧面、细节与局部特写的有序网格。",
     ],
     "seasonal-campaign": [
-      "https://images.unsplash.com/photo-1512389142860-9c449e58a543?auto=format&fit=crop&w=900&q=80",
+      "/template-previews/seasonal-campaign.jpg",
       "围绕节日、季节和主题活动建立统一视觉。",
       "季节元素、品牌色与商品陈列，共同传达活动氛围。",
     ],
