@@ -178,6 +178,10 @@
   padding-left: 20px;
 }
 
+.settings-storage {
+  margin-top: 16px;
+}
+
 .settings-storage-action {
   display: flex;
   align-items: center;
