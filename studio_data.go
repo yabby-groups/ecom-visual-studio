@@ -112,7 +112,7 @@ func (s *Studio) CreateProject(input ProjectInput) (map[string]string, error) {
 		return nil, err
 	}
 	id := newID("project")
-	_, err = s.db.Exec("insert into projects(id,user_id,name,product,description,benefits,color,reference,created_at) values(?,?,?,?,?,?,?,?,?)", id, user.ID, input.Name, input.Product, input.Description, input.Benefits, input.Color, input.Reference, time.Now().Unix())
+	_, err = s.execDataWrite("insert into projects(id,user_id,name,product,description,benefits,color,reference,created_at) values(?,?,?,?,?,?,?,?,?)", id, user.ID, input.Name, input.Product, input.Description, input.Benefits, input.Color, input.Reference, time.Now().Unix())
 	if err != nil {
 		return nil, err
 	}
@@ -127,6 +127,11 @@ func (s *Studio) DeleteProject(id string) (map[string]bool, error) {
 	if _, err = s.projectOwned(id, user.ID); err != nil {
 		return nil, err
 	}
+	done, err := s.beginDataWrite()
+	if err != nil {
+		return nil, err
+	}
+	defer done()
 	tx, err := s.db.Begin()
 	if err != nil {
 		return nil, err
@@ -163,7 +168,7 @@ func (s *Studio) UpdateAsset(id string, patch AssetPatch) (map[string]bool, erro
 	if err := validateAssetPatch(patch); err != nil {
 		return nil, err
 	}
-	_, err = s.db.Exec("update assets set title=case when ?='' then title else ? end,template=case when ?='' then template else ? end,ratio=case when ?='' then ratio else ? end,prompt=case when ?='' then prompt else ? end where id=?", patch.Title, patch.Title, patch.Template, patch.Template, patch.Ratio, patch.Ratio, patch.Prompt, patch.Prompt, id)
+	_, err = s.execDataWrite("update assets set title=case when ?='' then title else ? end,template=case when ?='' then template else ? end,ratio=case when ?='' then ratio else ? end,prompt=case when ?='' then prompt else ? end where id=?", patch.Title, patch.Title, patch.Template, patch.Template, patch.Ratio, patch.Ratio, patch.Prompt, patch.Prompt, id)
 	if err != nil {
 		return nil, err
 	}
@@ -199,7 +204,7 @@ func (s *Studio) AddTemplate(input TemplateInput) (map[string]string, error) {
 		return nil, err
 	}
 	id := newID("template")
-	_, err = s.db.Exec("insert into custom_templates values(?,?,?,?,?,?)", id, user.ID, input.Name, input.Ratio, input.Direction, time.Now().Unix())
+	_, err = s.execDataWrite("insert into custom_templates values(?,?,?,?,?,?)", id, user.ID, input.Name, input.Ratio, input.Direction, time.Now().Unix())
 	if err != nil {
 		return nil, err
 	}
@@ -210,7 +215,7 @@ func (s *Studio) DeleteTemplate(id string) (map[string]bool, error) {
 	if err != nil {
 		return nil, err
 	}
-	result, err := s.db.Exec("delete from custom_templates where id=? and user_id=?", id, user.ID)
+	result, err := s.execDataWrite("delete from custom_templates where id=? and user_id=?", id, user.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -269,6 +274,11 @@ func (s *Studio) CreatePack(projectID string, input PackInput) (map[string]bool,
 			items = []item{{"H1", "商品主图", "hero-image", "1:1", "A clean hero shot on #FFFFFF, product occupies 38%, with clear price-overlay whitespace."}, {"H2", "核心细节", "detail-macro", "1:1", "A macro close-up of material, texture and construction."}, {"H3", "使用场景", "lifestyle-scene", "1:1", "The product naturally used in a believable everyday setting."}, {"D1", "核心卖点", "poster-banner", "2:3", "A benefit-led product poster with reserved copy space."}}
 		}
 	}
+	done, err := s.beginDataWrite()
+	if err != nil {
+		return nil, err
+	}
+	defer done()
 	tx, err := s.db.Begin()
 	if err != nil {
 		return nil, err
@@ -316,7 +326,7 @@ func (s *Studio) ResetPrompt(id string) (map[string]string, error) {
 		}
 	}
 	prompt := makePrompt(project, title, direction)
-	_, err = s.db.Exec("update assets set prompt=? where id=?", prompt, id)
+	_, err = s.execDataWrite("update assets set prompt=? where id=?", prompt, id)
 	if err != nil {
 		return nil, err
 	}

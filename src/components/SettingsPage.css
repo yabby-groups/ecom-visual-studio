@@ -69,6 +69,11 @@
   color: #ffc7bf;
 }
 
+.settings-card-icon-storage {
+  background: rgba(255, 202, 94, 0.2);
+  color: #ffe1a0;
+}
+
 .settings-card h2 {
   margin: 1px 0 5px;
   color: #fff;
@@ -173,6 +178,52 @@
   padding-left: 20px;
 }
 
+.settings-storage-action {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.settings-storage-path {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: #dce3f5;
+  font-size: 12px;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-storage-button {
+  min-height: 42px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid rgba(255, 202, 94, 0.62);
+  border-radius: 12px;
+  padding: 9px 14px;
+  background: rgba(255, 202, 94, 0.13);
+  color: #ffe1a0;
+  font-weight: 800;
+}
+
+.settings-storage-button:hover:not(:disabled) {
+  background: rgba(255, 202, 94, 0.23);
+}
+
+.settings-storage-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.settings-storage-restart {
+  margin-top: 14px !important;
+  color: #ffe1a0 !important;
+}
+
 .settings-logout {
   display: flex;
   align-items: center;
@@ -216,6 +267,20 @@
     align-items: stretch;
     flex-direction: column;
     gap: 18px;
+  }
+
+  .settings-storage-action {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .settings-storage-path {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .settings-storage-button {
+    width: 100%;
   }
 
   .settings-logout-button {

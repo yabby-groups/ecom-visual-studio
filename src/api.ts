@@ -1,4 +1,4 @@
-import type { Asset, LatestCreation, Model, Project, Template, TokenSettings, TryOnJob, TryOnPage, User } from "./types";
+import type { Asset, LatestCreation, Model, Project, StorageLocation, Template, TokenSettings, TryOnJob, TryOnPage, User } from "./types";
 import { studio, uploadFile } from "./desktop";
 import { EventsOff, EventsOn } from "../wailsjs/runtime/runtime";
 
@@ -77,4 +77,6 @@ export const client = {
   tokenSettings: () => call<TokenSettings>("TokenSettings"),
   models: () => call<{ models: Model[] }>("Models"),
   saveSettings: (body: { token_id: string; image_model: string; text_model: string; chat_model: string }) => call("SaveSettings", body),
+  storageLocation: () => call<StorageLocation>("StorageLocation"),
+  chooseStorageDirectory: () => call<StorageLocation>("ChooseStorageDirectory"),
 };

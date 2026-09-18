@@ -14,6 +14,10 @@ export function Chat(arg1, arg2) {
   return window['go']['main']['Studio']['Chat'](arg1, arg2);
 }
 
+export function ChooseStorageDirectory() {
+  return window['go']['main']['Studio']['ChooseStorageDirectory']();
+}
+
 export function CreatePack(arg1, arg2) {
   return window['go']['main']['Studio']['CreatePack'](arg1, arg2);
 }
@@ -96,6 +100,10 @@ export function ResetPrompt(arg1) {
 
 export function SaveSettings(arg1) {
   return window['go']['main']['Studio']['SaveSettings'](arg1);
+}
+
+export function StorageLocation() {
+  return window['go']['main']['Studio']['StorageLocation']();
 }
 
 export function Templates() {

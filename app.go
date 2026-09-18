@@ -27,14 +27,16 @@ const (
 )
 
 type Studio struct {
-	ctx        context.Context
-	db         *sql.DB
-	dataDir    string
-	masterKey  []byte
-	httpClient *http.Client
-	mu         sync.RWMutex
-	dbWriteMu  sync.Mutex
-	user       *User
+	ctx              context.Context
+	db               *sql.DB
+	dataDir          string
+	masterKey        []byte
+	httpClient       *http.Client
+	mu               sync.RWMutex
+	dbWriteMu        sync.Mutex
+	storageMu        sync.RWMutex
+	migrationPending bool
+	user             *User
 }
 
 type User struct {
@@ -56,15 +58,14 @@ type SettingsInput struct {
 }
 
 func NewStudio() (*Studio, error) {
-	root, err := os.UserConfigDir()
+	dataDir, location, err := configuredDataDir()
 	if err != nil {
-		return nil, fmt.Errorf("find application data directory: %w", err)
-	}
-	dataDir := filepath.Join(root, "EcomVisualStudio")
-	if err := os.MkdirAll(filepath.Join(dataDir, "storage", "uploads"), 0o700); err != nil {
 		return nil, err
 	}
-	if err := os.MkdirAll(filepath.Join(dataDir, "storage", "generated"), 0o700); err != nil {
+	if err := verifyMigrationTarget(dataDir, location); err != nil {
+		return nil, err
+	}
+	if err := ensureDataDir(dataDir); err != nil {
 		return nil, err
 	}
 	db, err := sql.Open("sqlite", sqliteDSN(filepath.Join(dataDir, "studio.db")))
@@ -85,6 +86,13 @@ func NewStudio() (*Studio, error) {
 		db.Close()
 		return nil, err
 	}
+	if location.CleanupPath != "" && filepath.Clean(location.CleanupPath) != filepath.Clean(dataDir) {
+		// The new root has opened successfully; remove only application-owned entries
+		// from the previous user-selected directory, leaving unrelated user files intact.
+		if err := removeManagedData(location.CleanupPath); err == nil {
+			_ = writeDataLocation(dataLocation{ActivePath: dataDir})
+		}
+	}
 	return studio, nil
 }
 
@@ -99,6 +107,11 @@ func sqliteDSN(path string) string {
 
 // Generation writes are short and serialized locally; provider requests never hold this lock.
 func (s *Studio) writeTransaction(fn func(*sql.Tx) error) error {
+	done, err := s.beginDataWrite()
+	if err != nil {
+		return err
+	}
+	defer done()
 	s.dbWriteMu.Lock()
 	defer s.dbWriteMu.Unlock()
 	tx, err := s.db.Begin()
@@ -110,6 +123,15 @@ func (s *Studio) writeTransaction(fn func(*sql.Tx) error) error {
 		return err
 	}
 	return tx.Commit()
+}
+
+func (s *Studio) execDataWrite(query string, args ...any) (sql.Result, error) {
+	done, err := s.beginDataWrite()
+	if err != nil {
+		return nil, err
+	}
+	defer done()
+	return s.db.Exec(query, args...)
 }
 
 func (s *Studio) startup(ctx context.Context) { s.ctx = ctx }
@@ -166,11 +188,14 @@ func (s *Studio) restoreLogin() error {
 }
 
 func (s *Studio) persistLogin(userID string) error {
-	_, err := s.db.Exec("insert into desktop_session(singleton,user_id) values(1,?) on conflict(singleton) do update set user_id=excluded.user_id", userID)
+	_, err := s.execDataWrite("insert into desktop_session(singleton,user_id) values(1,?) on conflict(singleton) do update set user_id=excluded.user_id", userID)
 	return err
 }
 
 func (s *Studio) currentUser() (User, error) {
+	if err := s.dataWriteAllowed(); err != nil {
+		return User{}, err
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.user == nil {
@@ -190,13 +215,19 @@ func (s *Studio) Me() map[string]any {
 }
 
 func (s *Studio) Login(name, password, totpCode string) (map[string]any, error) {
+	if err := s.dataWriteAllowed(); err != nil {
+		return nil, err
+	}
 	return s.loginHuabot(name, password, totpCode)
 }
 
 func (s *Studio) Logout() map[string]bool {
+	if s.dataWriteAllowed() != nil {
+		return map[string]bool{"ok": false}
+	}
 	// Logout deliberately removes only the login marker. Project and generated
 	// data stay in the desktop database for the account's next login.
-	_, _ = s.db.Exec("delete from desktop_session where singleton=1")
+	_, _ = s.execDataWrite("delete from desktop_session where singleton=1")
 	s.mu.Lock()
 	s.user = nil
 	s.mu.Unlock()
@@ -212,6 +243,9 @@ func (s *Studio) Models() (map[string]any, error) {
 }
 
 func (s *Studio) SaveSettings(input SettingsInput) (map[string]bool, error) {
+	if err := s.dataWriteAllowed(); err != nil {
+		return nil, err
+	}
 	return s.saveSettings(input)
 }
 
@@ -250,6 +284,11 @@ func (s *Studio) PickImage() (map[string]string, error) {
 }
 
 func (s *Studio) storeUpload(name, contentType string, data []byte) (map[string]string, error) {
+	done, err := s.beginDataWrite()
+	if err != nil {
+		return nil, err
+	}
+	defer done()
 	if len(data) == 0 || len(data) > maxUploadBytes {
 		return nil, errors.New("图片大小必须在 15MB 以内")
 	}

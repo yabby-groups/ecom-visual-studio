@@ -511,7 +511,7 @@ func (s *Studio) RegenerateTryOn(id string) (map[string]bool, error) {
 	if err != nil {
 		return nil, err
 	}
-	result, err := s.db.Exec("update try_on_jobs set status='queued',generation_started_at=null where id=? and user_id=?", id, user.ID)
+	result, err := s.execDataWrite("update try_on_jobs set status='queued',generation_started_at=null where id=? and user_id=?", id, user.ID)
 	if err != nil {
 		return nil, err
 	}

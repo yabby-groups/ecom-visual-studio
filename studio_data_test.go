@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/openai/openai-go/v3"
 	_ "modernc.org/sqlite"
@@ -38,6 +39,158 @@ func TestSQLiteDSNEnablesWALAndBusyTimeout(t *testing.T) {
 	}
 	if journalMode != "wal" {
 		t.Fatalf("journal_mode = %q, want wal", journalMode)
+	}
+}
+
+func TestExportStorageCopiesConsistentDatabaseAndFiles(t *testing.T) {
+	source := t.TempDir()
+	if err := ensureDataDir(source); err != nil {
+		t.Fatal(err)
+	}
+	db, err := sql.Open("sqlite", sqliteDSN(filepath.Join(source, "studio.db")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	studio := &Studio{db: db, dataDir: source}
+	if err := studio.migrate(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("insert into users values('alice','alice',1,'Alice','')"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "token.key"), make([]byte, 32), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "storage", "uploads", "reference.png"), []byte("reference"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(source, "storage", "generated", "alice"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "storage", "generated", "alice", "result.png"), []byte("result"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	target := t.TempDir()
+	if err := studio.exportStorage(target); err != nil {
+		t.Fatal(err)
+	}
+	copyDB, err := sql.Open("sqlite", sqliteDSN(filepath.Join(target, "studio.db")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer copyDB.Close()
+	var users int
+	if err := copyDB.QueryRow("select count(*) from users where id='alice'").Scan(&users); err != nil {
+		t.Fatal(err)
+	}
+	if users != 1 {
+		t.Fatalf("copied users = %d, want 1", users)
+	}
+	if err := sameTree(filepath.Join(source, "storage"), filepath.Join(target, "storage")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(target, "token.key")); err != nil {
+		t.Fatalf("copied token key: %v", err)
+	}
+}
+
+func TestVerifyMigrationTargetRejectsMissingOrChangedCopy(t *testing.T) {
+	dir := t.TempDir()
+	if err := ensureDataDir(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "studio.db"), []byte("database"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "token.key"), []byte("secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	digest, err := managedDataDigest(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	location := dataLocation{CleanupPath: t.TempDir(), MigrationDigest: digest}
+	if err := verifyMigrationTarget(dir, location); err != nil {
+		t.Fatalf("valid migration rejected: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "storage", "uploads", "changed.png"), []byte("changed"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := verifyMigrationTarget(dir, location); err == nil {
+		t.Fatal("changed migration target was accepted")
+	}
+	if err := os.Remove(filepath.Join(dir, "studio.db")); err != nil {
+		t.Fatal(err)
+	}
+	if err := verifyMigrationTarget(dir, location); err == nil {
+		t.Fatal("missing migrated database was accepted")
+	}
+}
+
+func TestStorageTargetCannotBeInsideCurrentStorage(t *testing.T) {
+	root := t.TempDir()
+	if err := ensureDataDir(root); err != nil {
+		t.Fatal(err)
+	}
+	if !isWithin(filepath.Join(root, "storage"), filepath.Join(root, "storage", "nested")) {
+		t.Fatal("storage child was not recognized")
+	}
+	if isWithin(filepath.Join(root, "storage"), filepath.Join(root, "other")) {
+		t.Fatal("sibling was incorrectly recognized as storage child")
+	}
+}
+
+func TestStorageTargetSymlinkCannotResolveInsideCurrentStorage(t *testing.T) {
+	root := t.TempDir()
+	if err := ensureDataDir(root); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(t.TempDir(), "storage-link")
+	if err := os.Symlink(filepath.Join(root, "storage", "uploads"), target); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	studio := &Studio{dataDir: root}
+	if _, err := studio.migrateStorageDirectory(target); err == nil || !strings.Contains(err.Error(), "不能选择当前存储目录的子目录") {
+		t.Fatalf("migration error = %v, want current-storage rejection", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "storage", "uploads", "studio.db")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("migration wrote into current storage through symlink: %v", err)
+	}
+}
+
+func TestStorageMigrationWaitsForInFlightWrite(t *testing.T) {
+	studio := &Studio{}
+	writeDone, err := studio.beginDataWrite()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	migrationStarted := make(chan struct{})
+	migrationAcquired := make(chan struct{})
+	go func() {
+		close(migrationStarted)
+		studio.storageMu.Lock()
+		studio.migrationPending = true
+		close(migrationAcquired)
+		studio.storageMu.Unlock()
+	}()
+	<-migrationStarted
+	select {
+	case <-migrationAcquired:
+		t.Fatal("migration acquired exclusive access while a write was still active")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	writeDone()
+	select {
+	case <-migrationAcquired:
+	case <-time.After(time.Second):
+		t.Fatal("migration did not proceed after the active write completed")
+	}
+	if _, err := studio.beginDataWrite(); err == nil {
+		t.Fatal("new write was allowed after migration became pending")
 	}
 }
 

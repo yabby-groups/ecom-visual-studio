@@ -235,6 +235,11 @@ func (s *Studio) loginHuabot(name, password, totp string) (map[string]any, error
 }
 
 func (s *Studio) syncAccount(user User, tokens []providerToken, models []providerModel) error {
+	done, err := s.beginDataWrite()
+	if err != nil {
+		return err
+	}
+	defer done()
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
@@ -343,6 +348,11 @@ func (s *Studio) models() (map[string]any, error) {
 }
 
 func (s *Studio) refreshModels(userID string, models []providerModel) error {
+	done, err := s.beginDataWrite()
+	if err != nil {
+		return err
+	}
+	defer done()
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
@@ -397,7 +407,7 @@ func (s *Studio) saveSettings(input SettingsInput) (map[string]bool, error) {
 			return nil, errors.New("请选择当前账号可用的模型")
 		}
 	}
-	_, err = s.db.Exec("insert into settings(user_id,token_id,image_model,text_model,chat_model) values(?,?,?,?,?) on conflict(user_id) do update set token_id=excluded.token_id,image_model=excluded.image_model,text_model=excluded.text_model,chat_model=excluded.chat_model", user.ID, input.TokenID, input.ImageModel, input.TextModel, input.ChatModel)
+	_, err = s.execDataWrite("insert into settings(user_id,token_id,image_model,text_model,chat_model) values(?,?,?,?,?) on conflict(user_id) do update set token_id=excluded.token_id,image_model=excluded.image_model,text_model=excluded.text_model,chat_model=excluded.chat_model", user.ID, input.TokenID, input.ImageModel, input.TextModel, input.ChatModel)
 	return map[string]bool{"ok": err == nil}, err
 }
 

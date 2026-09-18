@@ -2,12 +2,14 @@ import { useEffect, useState } from "react";
 import {
   LoaderCircle,
   LogOut,
+  Database,
+  FolderOpen,
   Settings,
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
 import { client } from "../api";
-import type { TokenSettings } from "../types";
+import type { StorageLocation, TokenSettings } from "../types";
 import { LogoutButton } from "./LogoutButton";
 import { Notice } from "./Notice";
 import { Shell } from "./Shell";
@@ -53,6 +55,8 @@ export function SettingsPage() {
   const [values, setValues] = useState<SettingsValues | null>(null);
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
+  const [storage, setStorage] = useState<StorageLocation | null>(null);
+  const [migratingStorage, setMigratingStorage] = useState(false);
   const imageModels = models.filter((model) =>
     model.id.startsWith("gpt-image-"),
   );
@@ -100,6 +104,11 @@ export function SettingsPage() {
     return () => {
       active = false;
     };
+  }, []);
+  useEffect(() => {
+    void client.storageLocation().then(setStorage).catch(() => {
+      // Storage selection is supplementary; do not block account settings if its bridge is unavailable.
+    });
   }, []);
   if (loading)
     return (
@@ -207,6 +216,42 @@ export function SettingsPage() {
             保存配置
           </button>
         </form>
+        <section className="settings-storage settings-card">
+          <div className="settings-card-heading">
+            <span className="settings-card-icon settings-card-icon-storage" aria-hidden="true">
+              <Database size={19} />
+            </span>
+            <div>
+              <h2>本地存储</h2>
+              <p>项目、登录信息、上传参考图和生成图片均保存在此目录。切换时会自动迁移全部数据。</p>
+            </div>
+          </div>
+          <div className="settings-storage-action">
+            <code className="settings-storage-path">{storage?.pending_path ?? storage?.current_path ?? "正在读取存储位置..."}</code>
+            <button
+              className="settings-storage-button"
+              type="button"
+              disabled={migratingStorage || storage?.restart_required}
+              onClick={async () => {
+                setMigratingStorage(true);
+                try {
+                  const result = await client.chooseStorageDirectory();
+                  if (result.cancelled) return;
+                  setStorage(result);
+                  setNotice("数据已迁移完成，请重启应用后使用新目录。");
+                } catch (error) {
+                  setNotice(error instanceof Error ? error.message : "迁移存储目录失败");
+                } finally {
+                  setMigratingStorage(false);
+                }
+              }}
+            >
+              {migratingStorage ? <LoaderCircle className="spin" size={17} /> : <FolderOpen size={17} />}
+              {migratingStorage ? "正在迁移..." : "选择目录并迁移"}
+            </button>
+          </div>
+          {storage?.restart_required && <p className="settings-storage-restart">迁移完成，请重启应用后生效。</p>}
+        </section>
         <section className="settings-logout settings-card">
           <div className="settings-card-heading">
             <span

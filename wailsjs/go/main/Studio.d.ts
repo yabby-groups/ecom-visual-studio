@@ -8,6 +8,8 @@ export function Analyze(arg1:Record<string, string>):Promise<Record<string, any>
 
 export function Chat(arg1:string,arg2:Array<Record<string, string>>):Promise<Record<string, string>>;
 
+export function ChooseStorageDirectory():Promise<Record<string, any>>;
+
 export function CreatePack(arg1:string,arg2:main.PackInput):Promise<Record<string, boolean>>;
 
 export function CreateProject(arg1:main.ProjectInput):Promise<Record<string, string>>;
@@ -49,6 +51,8 @@ export function RegenerateTryOn(arg1:string):Promise<Record<string, boolean>>;
 export function ResetPrompt(arg1:string):Promise<Record<string, string>>;
 
 export function SaveSettings(arg1:main.SettingsInput):Promise<Record<string, boolean>>;
+
+export function StorageLocation():Promise<Record<string, any>>;
 
 export function Templates():Promise<Array<Record<string, any>>>;
 

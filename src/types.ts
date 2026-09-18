@@ -67,6 +67,12 @@ export type TokenSettings = {
   text_model: string;
   chat_model: string;
 };
+export type StorageLocation = {
+  current_path: string;
+  pending_path?: string;
+  restart_required: boolean;
+  cancelled?: boolean;
+};
 export type TryOnJob = {
   id: string;
   user_id: string;
