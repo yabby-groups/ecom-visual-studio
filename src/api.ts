@@ -64,6 +64,8 @@ export const client = {
     id: string,
     body: { kind: string; scene_template_ids: string[]; template_id?: string },
   ) => call("CreatePack", id, body),
+  addAsset: (projectId: string, templateId: string) =>
+    call<{ id: string }>("AddAsset", projectId, templateId),
   deleteProject: (id: string) => call("DeleteProject", id),
   updateAsset: (id: string, body: Partial<Asset>) =>
     call("UpdateAsset", id, body),

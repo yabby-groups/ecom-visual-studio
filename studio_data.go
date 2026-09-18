@@ -287,6 +287,39 @@ func (s *Studio) CreatePack(projectID string, input PackInput) (map[string]bool,
 	return map[string]bool{"ok": true}, nil
 }
 
+func (s *Studio) AddAsset(projectID, templateID string) (map[string]string, error) {
+	project, err := s.localProject(projectID)
+	if err != nil {
+		return nil, err
+	}
+	templates, err := s.Templates()
+	if err != nil {
+		return nil, err
+	}
+	var selected map[string]any
+	for _, template := range templates {
+		if template["id"] == templateID {
+			selected = template
+			break
+		}
+	}
+	if selected == nil {
+		return nil, errors.New("模板不存在")
+	}
+	ratio := selected["ratio"].(string)
+	if _, err := imageSize(ratio); err != nil {
+		return nil, err
+	}
+	id := newID("asset")
+	title := selected["name"].(string)
+	prompt := makePrompt(project, title, selected["direction"].(string))
+	_, err = s.execDataWrite("insert into assets(id,project_id,title,template,ratio,prompt,status,file_path,created_at) values(?,?,?,?,?,?,?,?,?)", id, projectID, title, templateID, ratio, prompt, "draft", nil, time.Now().Unix())
+	if err != nil {
+		return nil, err
+	}
+	return map[string]string{"id": id}, nil
+}
+
 func (s *Studio) ResetPrompt(id string) (map[string]string, error) {
 	var projectID, title, template string
 	err := s.db.QueryRow("select a.project_id,a.title,a.template from assets a join projects p on p.id=a.project_id where a.id=?", id).Scan(&projectID, &title, &template)

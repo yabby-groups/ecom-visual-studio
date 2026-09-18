@@ -235,6 +235,54 @@ func TestCreatePackMatchesPythonPackageConstruction(t *testing.T) {
 	}
 }
 
+func TestAddAssetAppendsTemplateFrameWithoutReplacingExistingAssets(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	studio := &Studio{db: db}
+	if err := studio.migrate(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("insert into projects(id,user_id,name,product,created_at) values('project-1',?,'Local','Desk',1)", localWorkspaceID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("insert into assets(id,project_id,title,template,ratio,prompt,status,file_path,created_at) values('asset-existing','project-1','Existing','hero-image','1:1','existing prompt','ready','generated/existing.png',1)"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("insert into asset_versions(id,asset_id,file_path,created_at) values('version-existing','asset-existing','generated/existing.png',1)"); err != nil {
+		t.Fatal(err)
+	}
+	result, err := studio.AddAsset("project-1", "detail-macro")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var title, template, ratio, prompt, status string
+	if err := db.QueryRow("select title,template,ratio,prompt,status from assets where id=?", result["id"]).Scan(&title, &template, &ratio, &prompt, &status); err != nil {
+		t.Fatal(err)
+	}
+	if title != "核心细节" || template != "detail-macro" || ratio != "2:3" || status != "draft" || !strings.Contains(prompt, "Purpose: 核心细节") {
+		t.Fatalf("added asset = %q|%q|%q|%q|%q", title, template, ratio, prompt, status)
+	}
+	var assets, versions int
+	if err := db.QueryRow("select count(*) from assets where project_id='project-1'").Scan(&assets); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow("select count(*) from asset_versions where asset_id='asset-existing'").Scan(&versions); err != nil {
+		t.Fatal(err)
+	}
+	if assets != 2 || versions != 1 {
+		t.Fatalf("assets=%d versions=%d, want 2 and 1", assets, versions)
+	}
+	if _, err := studio.AddAsset("missing-project", "detail-macro"); err == nil {
+		t.Fatal("AddAsset() missing project succeeded")
+	}
+	if _, err := studio.AddAsset("project-1", "missing-template"); err == nil {
+		t.Fatal("AddAsset() missing template succeeded")
+	}
+}
+
 func TestExportStorageCopiesConsistentDatabaseAndFiles(t *testing.T) {
 	source := t.TempDir()
 	if err := ensureDataDir(source); err != nil {

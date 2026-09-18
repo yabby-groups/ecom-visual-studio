@@ -6,6 +6,7 @@ import {
   Eye,
   ImagePlus,
   LoaderCircle,
+  Plus,
   Sparkles,
   WandSparkles,
   X,
@@ -43,6 +44,9 @@ export function Workspace() {
   const [loadError, setLoadError] = useState("");
   const [originalOpen, setOriginalOpen] = useState(false);
   const [referenceOpen, setReferenceOpen] = useState(false);
+  const [addAssetOpen, setAddAssetOpen] = useState(false);
+  const [templateId, setTemplateId] = useState("");
+  const [addingAsset, setAddingAsset] = useState(false);
   const [selectedVersionPath, setSelectedVersionPath] = useState<string | null>(
     null,
   );
@@ -52,15 +56,18 @@ export function Workspace() {
   function showNotice(text: string, autoCloseMs?: number | null) {
     setNotice({ text, autoCloseMs });
   }
-  async function load() {
+  async function load(selectedAssetId?: string) {
     try {
       const next = await client.project(id);
       setProject(next);
       setLoadError("");
       setAssetId((current) =>
-        next.assets?.some((asset) => asset.id === current)
-          ? current
-          : next.assets?.[0]?.id || "",
+        selectedAssetId &&
+        next.assets?.some((asset) => asset.id === selectedAssetId)
+          ? selectedAssetId
+          : next.assets?.some((asset) => asset.id === current)
+            ? current
+            : next.assets?.[0]?.id || "",
       );
     } catch (reason) {
       setLoadError(
@@ -215,6 +222,27 @@ export function Workspace() {
       showNotice(reason instanceof Error ? reason.message : "导出失败", null);
     }
   }
+  function openAddAsset() {
+    setTemplateId(templates[0]?.id ?? "");
+    setAddAssetOpen(true);
+  }
+  async function addAsset() {
+    if (!templateId) return;
+    setAddingAsset(true);
+    try {
+      const result = await client.addAsset(currentProject.id, templateId);
+      await load(result.id);
+      setAddAssetOpen(false);
+      showNotice("已添加画面", 2000);
+    } catch (reason) {
+      showNotice(
+        reason instanceof Error ? reason.message : "添加画面失败",
+        null,
+      );
+    } finally {
+      setAddingAsset(false);
+    }
+  }
   return (
     <Shell>
       <div className="workspace-header">
@@ -239,7 +267,18 @@ export function Workspace() {
         <aside className="sequence">
           <div className="sequence-head">
             <span>画面序列</span>
-            <small>{project.assets?.length || 0} 张</small>
+            <div>
+              <small>{project.assets?.length || 0} 张</small>
+              <button
+                className="sequence-add"
+                type="button"
+                onClick={openAddAsset}
+                aria-label="添加画面"
+                title="添加画面"
+              >
+                <Plus size={14} />
+              </button>
+            </div>
           </div>
           {project.assets?.map((item, index) => (
             <button
@@ -492,6 +531,70 @@ export function Workspace() {
           </>
         ) : null}
       </div>
+      {addAssetOpen && (
+        <div
+          className="add-asset-backdrop"
+          role="presentation"
+          onClick={() => !addingAsset && setAddAssetOpen(false)}
+        >
+          <section
+            className="add-asset-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="add-asset-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="add-asset-dialog-head">
+              <div>
+                <span className="eyebrow">NEW FRAME</span>
+                <h2 id="add-asset-title">添加画面</h2>
+              </div>
+              <button
+                className="icon-button"
+                type="button"
+                onClick={() => setAddAssetOpen(false)}
+                disabled={addingAsset}
+                aria-label="关闭"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <label>
+              选择场景模板
+              <select
+                value={templateId}
+                onChange={(event) => setTemplateId(event.target.value)}
+              >
+                {templates.map((item) => (
+                  <option value={item.id} key={item.id}>
+                    {item.name} · {item.ratio}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p>画面将追加到序列末尾，随后可编辑提示词并单独生成。</p>
+            <div className="add-asset-actions">
+              <button
+                className="button secondary"
+                type="button"
+                onClick={() => setAddAssetOpen(false)}
+                disabled={addingAsset}
+              >
+                取消
+              </button>
+              <button
+                className="button primary"
+                type="button"
+                onClick={() => void addAsset()}
+                disabled={!templateId || addingAsset}
+              >
+                {addingAsset && <LoaderCircle className="spin" size={16} />}
+                确认添加
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
       {originalOpen && asset && displayedPath && (
         <div
           className="original-preview-backdrop"

@@ -49,6 +49,26 @@
   color: #c1cae0;
   font-weight: 400;
 }
+.sequence-head > div {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.sequence-add {
+  display: grid;
+  width: 23px;
+  height: 23px;
+  place-items: center;
+  border: 1px solid rgba(159, 240, 217, 0.5);
+  border-radius: 8px;
+  background: rgba(68, 221, 183, 0.12);
+  color: #9ff0d9;
+  cursor: pointer;
+}
+.sequence-add:hover,
+.sequence-add:focus-visible {
+  background: rgba(68, 221, 183, 0.26);
+}
 .sequence-item {
   width: 100%;
   display: grid;
@@ -87,6 +107,61 @@
   border-radius: 10px;
   background: #121629;
   object-fit: cover;
+}
+.add-asset-backdrop {
+  position: fixed;
+  z-index: 20;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(5, 8, 24, 0.65);
+  backdrop-filter: blur(5px);
+}
+.add-asset-dialog {
+  width: min(100%, 420px);
+  padding: 23px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 20px;
+  background: #202941;
+  color: #f7f8fb;
+  box-shadow: 0 24px 70px rgba(3, 5, 20, 0.4);
+}
+.add-asset-dialog-head,
+.add-asset-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.add-asset-dialog h2 {
+  margin: 4px 0 0;
+  font-size: 20px;
+}
+.add-asset-dialog label {
+  display: grid;
+  gap: 8px;
+  margin-top: 22px;
+  color: #dbe8ed;
+  font-size: 13px;
+}
+.add-asset-dialog select {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid #4f5c74;
+  border-radius: 11px;
+  padding: 0 11px;
+  background: #30394b;
+  color: #f7f8fb;
+}
+.add-asset-dialog p {
+  margin: 13px 0 22px;
+  color: #c1cae0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.add-asset-actions {
+  justify-content: flex-end;
 }
 .stage {
   min-height: 0;
