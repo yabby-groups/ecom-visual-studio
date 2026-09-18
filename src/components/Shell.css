@@ -27,13 +27,8 @@
 .brand-mark {
   width: 38px;
   height: 38px;
-  display: grid;
-  place-items: center;
-  border: 1px solid #6e817d;
-  border-radius: 5px;
-  color: #fff;
-  font-size: 18px;
-  font-weight: 700;
+  display: block;
+  border-radius: 10px;
 }
 .sidebar nav {
   width: 100%;
@@ -122,10 +117,7 @@
   width: 46px;
   height: 46px;
   margin-bottom: 34px;
-  border: 0;
   border-radius: 16px;
-  background: var(--accent);
-  color: #06271f;
   box-shadow: 0 8px 24px rgba(68, 221, 183, 0.28);
 }
 .rail .nav-link {
@@ -253,8 +245,13 @@
     height: 38px;
     margin: 0;
     border-radius: 12px;
-    background: var(--accent);
-    color: #06271f;
+  }
+
+  .mobile-bar .brand > span:last-child {
+    max-width: min(45vw, 150px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .mobile-nav {
     position: fixed;

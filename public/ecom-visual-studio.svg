@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title description">
+  <title id="title">Ecom Visual Studio</title>
+  <desc id="description">AI 电商视觉创作标志</desc>
+  <rect x="8" y="8" width="240" height="240" rx="60" fill="#0c1021"/>
+  <rect x="9" y="9" width="238" height="238" rx="59" fill="none" stroke="#ffffff" stroke-opacity="0.12" stroke-width="2"/>
+  <path d="M150 54H80c-15 0-26 11-26 26v96c0 15 11 26 26 26h96c15 0 26-11 26-26v-50" fill="none" stroke="#44ddb7" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="m72 174 36-43 26 29 26-34 25 48H72Z" fill="#44ddb7" fill-opacity="0.82"/>
+  <circle cx="96" cy="99" r="13" fill="#f7faf9"/>
+  <path d="M183 42c3 20 13 30 33 33-20 3-30 13-33 33-3-20-13-30-33-33 20-3 30-13 33-33Z" fill="#f7faf9"/>
+</svg>

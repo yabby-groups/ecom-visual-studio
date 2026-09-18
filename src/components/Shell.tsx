@@ -23,9 +23,14 @@ export function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="app-shell shell">
       <aside className="rail sidebar">
-        <Link className="brand" to="/">
-          <span className="brand-mark">F</span>
-          <span>Frameboard</span>
+        <Link className="brand" to="/" aria-label="Ecom Visual Studio 首页">
+          <img
+            className="brand-mark"
+            src="/ecom-visual-studio.svg"
+            alt=""
+            aria-hidden="true"
+          />
+          <span>Ecom Visual Studio</span>
         </Link>
         <nav>
           <Nav to="/" icon={<LayoutGrid />} label="创作台" />
@@ -39,9 +44,14 @@ export function Shell({ children }: { children: React.ReactNode }) {
       </aside>
       <main className="app-main">
         <header className="mobile-bar">
-          <Link className="brand" to="/">
-            <span className="brand-mark">F</span>
-            <span>Frameboard</span>
+          <Link className="brand" to="/" aria-label="Ecom Visual Studio 首页">
+            <img
+              className="brand-mark"
+              src="/ecom-visual-studio.svg"
+              alt=""
+              aria-hidden="true"
+            />
+            <span>Ecom Visual Studio</span>
           </Link>
         </header>
         {children}

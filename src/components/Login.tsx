@@ -60,7 +60,10 @@ export function Login() {
           <ArrowLeft size={15} />
           暂不登录
         </button>
-        <span className="eyebrow">FRAMEBOARD × HUABOT</span>
+        <div className="auth-brand">
+          <img src="/ecom-visual-studio.svg" alt="" aria-hidden="true" />
+          <span className="eyebrow">ECOM VISUAL STUDIO × HUABOT</span>
+        </div>
         <h1>登录以启用 AI 能力</h1>
         <p>
           登录后自动读取或创建你账号下的 Token Base

@@ -16,11 +16,40 @@
   background: #121936;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
 }
+.auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.auth-brand img {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  border-radius: 13px;
+  box-shadow: 0 8px 24px rgba(68, 221, 183, 0.22);
+}
+.auth-brand .eyebrow {
+  line-height: 1.4;
+}
 .auth-panel h1 {
-  margin: 6px 0 12px;
+  margin: 16px 0 12px;
   color: #fff;
   font-size: 28px;
   line-height: 1.25;
+}
+
+@media (max-width: 480px) {
+  .auth-panel {
+    padding: 26px 22px;
+  }
+  .auth-brand img {
+    width: 40px;
+    height: 40px;
+  }
+  .auth-brand .eyebrow {
+    font-size: 10px;
+    letter-spacing: 0.08em;
+  }
 }
 .auth-panel > p {
   margin: 0;
