@@ -3,6 +3,19 @@ export type User = {
   username: string;
   profile: { nick_name: string; avatar_url: string };
 };
+export type DeviceAuthorization = {
+  device_code: string;
+  user_code: string;
+  verification_uri: string;
+  verification_uri_complete: string;
+  expires_in: number;
+  interval: number;
+};
+export type DeviceAuthorizationPoll = {
+  status:
+    "authorization_pending" | "slow_down" | "authorized" | "denied" | "expired";
+  user?: User;
+};
 export type AssetStatus =
   "draft" | "queued" | "prompting" | "generating" | "ready" | string;
 export type AssetVersion = {

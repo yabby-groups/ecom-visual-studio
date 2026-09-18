@@ -110,6 +110,27 @@ export namespace main {
 	        this.ratio = source["ratio"];
 	    }
 	}
+	export class deviceAuthorization {
+	    device_code: string;
+	    user_code: string;
+	    verification_uri: string;
+	    verification_uri_complete: string;
+	    expires_in: number;
+	    interval: number;
+
+	    static createFrom(source: any = {}) {
+	        return new deviceAuthorization(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.device_code = source["device_code"];
+	        this.user_code = source["user_code"];
+	        this.verification_uri = source["verification_uri"];
+	        this.verification_uri_complete = source["verification_uri_complete"];
+	        this.expires_in = source["expires_in"];
+	        this.interval = source["interval"];
+	    }
+	}
 
 }
-

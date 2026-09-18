@@ -42,6 +42,8 @@ export function NotifyGeneration(arg1:string,arg2:string):Promise<void>;
 
 export function PickImage():Promise<Record<string, string>>;
 
+export function PollHuabotAuthorization(arg1:string):Promise<Record<string, any>>;
+
 export function Project(arg1:string):Promise<Record<string, any>>;
 
 export function Projects():Promise<Array<Record<string, any>>>;
@@ -51,6 +53,8 @@ export function RegenerateTryOn(arg1:string):Promise<Record<string, boolean>>;
 export function ResetPrompt(arg1:string):Promise<Record<string, string>>;
 
 export function SaveSettings(arg1:main.SettingsInput):Promise<Record<string, boolean>>;
+
+export function StartHuabotAuthorization():Promise<main.deviceAuthorization>;
 
 export function StorageLocation():Promise<Record<string, any>>;
 

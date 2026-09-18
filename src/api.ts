@@ -1,4 +1,17 @@
-import type { Asset, LatestCreation, Model, Project, StorageLocation, Template, TokenSettings, TryOnJob, TryOnPage, User } from "./types";
+import type {
+  Asset,
+  DeviceAuthorization,
+  DeviceAuthorizationPoll,
+  LatestCreation,
+  Model,
+  Project,
+  StorageLocation,
+  Template,
+  TokenSettings,
+  TryOnJob,
+  TryOnPage,
+  User,
+} from "./types";
 import { studio, uploadFile } from "./desktop";
 import { EventsOff, EventsOn } from "../wailsjs/runtime/runtime";
 
@@ -33,31 +46,55 @@ function nextChatRequestID() {
 
 export const client = {
   me: () => call<{ user: User | null }>("Me"),
-  login: (body: { name: string; password: string; totp_code: string }) => call<{ user: User }>("Login", body.name, body.password, body.totp_code),
+  login: (body: { name: string; password: string; totp_code: string }) =>
+    call<{ user: User }>("Login", body.name, body.password, body.totp_code),
+  startHuabotAuthorization: () =>
+    call<DeviceAuthorization>("StartHuabotAuthorization"),
+  pollHuabotAuthorization: (deviceCode: string) =>
+    call<DeviceAuthorizationPoll>("PollHuabotAuthorization", deviceCode),
   logout: () => call("Logout"),
   projects: () => call<Project[]>("Projects"),
-  latestCreation: () => call<{ creation: LatestCreation | null }>("LatestCreation"),
+  latestCreation: () =>
+    call<{ creation: LatestCreation | null }>("LatestCreation"),
   project: (id: string) => call<Project>("Project", id),
-  createProject: (body: Omit<Project, "id" | "user_id" | "created_at" | "assets">) => call<{ id: string }>("CreateProject", body),
-  createPack: (id: string, body: { kind: string; scene_template_ids: string[]; template_id?: string }) => call("CreatePack", id, body),
+  createProject: (
+    body: Omit<Project, "id" | "user_id" | "created_at" | "assets">,
+  ) => call<{ id: string }>("CreateProject", body),
+  createPack: (
+    id: string,
+    body: { kind: string; scene_template_ids: string[]; template_id?: string },
+  ) => call("CreatePack", id, body),
   deleteProject: (id: string) => call("DeleteProject", id),
-  updateAsset: (id: string, body: Partial<Asset>) => call("UpdateAsset", id, body),
+  updateAsset: (id: string, body: Partial<Asset>) =>
+    call("UpdateAsset", id, body),
   resetPrompt: (id: string) => call<{ prompt: string }>("ResetPrompt", id),
   generateAsset: (id: string) => call("GenerateAsset", id),
   generatePack: (id: string) => call("GeneratePack", id),
   templates: () => call<Template[]>("Templates"),
-  addTemplate: (body: { name: string; ratio: string; direction: string }) => call("AddTemplate", body),
+  addTemplate: (body: { name: string; ratio: string; direction: string }) =>
+    call("AddTemplate", body),
   deleteTemplate: (id: string) => call("DeleteTemplate", id),
   upload: uploadFile,
   pickImage: () => call<{ path: string }>("PickImage"),
   importUrl: (url: string) => call<{ path: string }>("ImportURL", url),
-  tryOnJobs: (limit = 12, offset = 0) => call<TryOnPage>("TryOnJobs", limit, offset),
+  tryOnJobs: (limit = 12, offset = 0) =>
+    call<TryOnPage>("TryOnJobs", limit, offset),
   tryOnJob: (id: string) => call<TryOnJob>("TryOnJob", id),
-  createTryOn: (body: { person_paths: string[]; garment_paths: string[]; generation_mode: "combined" | "combinations"; instructions: string; ratio: string }) => call<{ id: string; ids: string[] }>("CreateTryOn", body),
+  createTryOn: (body: {
+    person_paths: string[];
+    garment_paths: string[];
+    generation_mode: "combined" | "combinations";
+    instructions: string;
+    ratio: string;
+  }) => call<{ id: string; ids: string[] }>("CreateTryOn", body),
   regenerateTryOn: (id: string) => call("RegenerateTryOn", id),
   deleteTryOn: (id: string) => call("DeleteTryOn", id),
-  analyze: (body: { mode: string; product: string; reference: string }) => call<{ description: string; benefits: string[] }>("Analyze", body),
-  chat: async (messages: { role: string; content: string }[], onDelta: (delta: string) => void) => {
+  analyze: (body: { mode: string; product: string; reference: string }) =>
+    call<{ description: string; benefits: string[] }>("Analyze", body),
+  chat: async (
+    messages: { role: string; content: string }[],
+    onDelta: (delta: string) => void,
+  ) => {
     const requestID = nextChatRequestID();
     const eventName = `chat:delta:${requestID}`;
     let receivedDelta = false;
@@ -76,7 +113,12 @@ export const client = {
   },
   tokenSettings: () => call<TokenSettings>("TokenSettings"),
   models: () => call<{ models: Model[] }>("Models"),
-  saveSettings: (body: { token_id: string; image_model: string; text_model: string; chat_model: string }) => call("SaveSettings", body),
+  saveSettings: (body: {
+    token_id: string;
+    image_model: string;
+    text_model: string;
+    chat_model: string;
+  }) => call("SaveSettings", body),
   storageLocation: () => call<StorageLocation>("StorageLocation"),
   chooseStorageDirectory: () => call<StorageLocation>("ChooseStorageDirectory"),
 };

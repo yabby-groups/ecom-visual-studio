@@ -236,6 +236,17 @@ func (s *Studio) Login(name, password, totpCode string) (map[string]any, error) 
 	return s.loginHuabot(name, password, totpCode)
 }
 
+func (s *Studio) StartHuabotAuthorization() (deviceAuthorization, error) {
+	return s.startHuabotAuthorization()
+}
+
+func (s *Studio) PollHuabotAuthorization(deviceCode string) (map[string]any, error) {
+	if err := s.dataWriteAllowed(); err != nil {
+		return nil, err
+	}
+	return s.pollHuabotAuthorization(deviceCode)
+}
+
 func (s *Studio) Logout() (map[string]bool, error) {
 	user, err := s.currentUser()
 	if err != nil {

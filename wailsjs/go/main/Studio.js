@@ -82,6 +82,10 @@ export function PickImage() {
   return window['go']['main']['Studio']['PickImage']();
 }
 
+export function PollHuabotAuthorization(arg1) {
+  return window['go']['main']['Studio']['PollHuabotAuthorization'](arg1);
+}
+
 export function Project(arg1) {
   return window['go']['main']['Studio']['Project'](arg1);
 }
@@ -100,6 +104,10 @@ export function ResetPrompt(arg1) {
 
 export function SaveSettings(arg1) {
   return window['go']['main']['Studio']['SaveSettings'](arg1);
+}
+
+export function StartHuabotAuthorization() {
+  return window['go']['main']['Studio']['StartHuabotAuthorization']();
 }
 
 export function StorageLocation() {

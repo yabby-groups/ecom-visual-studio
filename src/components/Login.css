@@ -92,3 +92,33 @@
   color: #ffb4b4;
   font-size: 13px;
 }
+.oauth-start {
+  width: 100%;
+  margin-top: 26px;
+}
+.oauth-card {
+  display: grid;
+  gap: 14px;
+  margin-top: 24px;
+  padding: 18px;
+  border: 1px solid rgba(138, 245, 214, 0.3);
+  border-radius: 8px;
+  background: rgba(8, 37, 31, 0.35);
+  text-align: center;
+  color: #d8fdf2;
+}
+.oauth-card strong {
+  font-size: 24px;
+  letter-spacing: 0.15em;
+}
+.password-toggle,
+.text-button {
+  border: 0;
+  background: transparent;
+  color: #9beed8;
+  cursor: pointer;
+}
+.password-toggle {
+  display: block;
+  margin: 18px auto 0;
+}

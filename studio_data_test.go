@@ -442,6 +442,76 @@ func TestHuabotLoginUsesWebBaseAndEncryptsToken(t *testing.T) {
 	}
 }
 
+func TestHuabotDeviceAuthorizationPollsAndSyncsAccount(t *testing.T) {
+	tokenPolls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/oauth/device/code":
+			if err := r.ParseForm(); err != nil {
+				t.Fatal(err)
+			}
+			if r.Form.Get("client_id") != "desktop-client" || r.Form.Get("scope") != "profile:read token_base:read token_base:write" {
+				t.Fatalf("device form = %#v", r.Form)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"device_code": "device-secret", "user_code": "ABCD-EFGH", "verification_uri": serverURL(r) + "/oauth/device", "verification_uri_complete": serverURL(r) + "/oauth/device?user_code=ABCD-EFGH", "expires_in": 600, "interval": 3})
+		case "/oauth/token":
+			tokenPolls++
+			if tokenPolls == 1 {
+				w.WriteHeader(http.StatusBadRequest)
+				_ = json.NewEncoder(w).Encode(map[string]any{"error": "authorization_pending"})
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"access_token": "myna_oauth_access", "token_type": "Bearer", "expires_in": 3600, "scope": "profile:read token_base:read token_base:write"})
+		case "/api/user/me/":
+			if r.Header.Get("Authorization") != "Bearer myna_oauth_access" {
+				t.Fatalf("authorization = %q", r.Header.Get("Authorization"))
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"user": map[string]any{"name": "alice", "profile": map[string]any{"nick_name": "Alice"}}})
+		case "/api/token_base/token/my/list/":
+			_ = json.NewEncoder(w).Encode(map[string]any{"tokens": []map[string]any{{"id": "token-1", "token_name": "Primary", "token_key": "sk-secret", "status": 1}}})
+		case "/api/token_base/model/list/":
+			_ = json.NewEncoder(w).Encode(map[string]any{"models": []map[string]any{{"id": "image", "alias": "gpt-image-2", "title": "Image"}, {"id": "chat", "alias": "gpt-5.6-luna", "title": "Chat"}}})
+		default:
+			t.Fatalf("unexpected URL %s", r.URL.String())
+		}
+	}))
+	defer server.Close()
+	t.Setenv("HUABOT_WEB_BASE_URL", server.URL)
+	t.Setenv("HUABOT_OAUTH_CLIENT_ID", "desktop-client")
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	studio := &Studio{db: db, dataDir: t.TempDir(), httpClient: server.Client(), masterKey: make([]byte, 32)}
+	if err := studio.migrate(); err != nil {
+		t.Fatal(err)
+	}
+	authorization, err := studio.StartHuabotAuthorization()
+	if err != nil || authorization.UserCode != "ABCD-EFGH" {
+		t.Fatalf("StartHuabotAuthorization() = %#v, %v", authorization, err)
+	}
+	pending, err := studio.PollHuabotAuthorization(authorization.DeviceCode)
+	if err != nil || pending["status"] != "authorization_pending" {
+		t.Fatalf("pending poll = %#v, %v", pending, err)
+	}
+	completed, err := studio.PollHuabotAuthorization(authorization.DeviceCode)
+	if err != nil || completed["status"] != "authorized" {
+		t.Fatalf("completed poll = %#v, %v", completed, err)
+	}
+	var stored string
+	if err := db.QueryRow("select secret from tokens where id='token-1'").Scan(&stored); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(stored, "sk-secret") {
+		t.Fatal("raw provider token was stored in SQLite")
+	}
+}
+
+func serverURL(r *http.Request) string {
+	return "http://" + r.Host
+}
+
 func TestSaveSettingsPersistsModelsForCurrentUser(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")
 	if err != nil {

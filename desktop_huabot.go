@@ -24,6 +24,25 @@ type providerToken struct {
 }
 type providerModel struct{ ID, Name, Alias string }
 
+const oauthDeviceGrantType = "urn:ietf:params:oauth:grant-type:device_code"
+
+type deviceAuthorization struct {
+	DeviceCode              string `json:"device_code"`
+	UserCode                string `json:"user_code"`
+	VerificationURI         string `json:"verification_uri"`
+	VerificationURIComplete string `json:"verification_uri_complete"`
+	ExpiresIn               int    `json:"expires_in"`
+	Interval                int    `json:"interval"`
+}
+
+func (s *Studio) oauthClientID() string {
+	clientID := strings.TrimSpace(desktopEnv(s.dataDir)["HUABOT_OAUTH_CLIENT_ID"])
+	if clientID == "" {
+		clientID = "nd2J618basw_bkoJjLj3YIFEhjw_4khV"
+	}
+	return clientID
+}
+
 func desktopEnv(dataDir string) map[string]string {
 	values := map[string]string{}
 	for _, entry := range os.Environ() {
@@ -171,6 +190,14 @@ func (s *Studio) loginHuabot(name, password, totp string) (map[string]any, error
 	if bearer == "" {
 		return nil, errors.New("huabot 未返回会话令牌")
 	}
+	if account, ok := login["user"].(map[string]any); ok && stringValue(account["name"]) == "" {
+		account["name"] = name
+	}
+	return s.completeHuabotLogin(bearer, login)
+}
+
+func (s *Studio) completeHuabotLogin(bearer string, login map[string]any) (map[string]any, error) {
+	config := s.huabotConfig()
 	var listed map[string]any
 	if err := s.webRequest(http.MethodGet, config.WebBase+"/api/token_base/token/my/list/", bearer, nil, &listed); err != nil {
 		return nil, err
@@ -213,10 +240,15 @@ func (s *Studio) loginHuabot(name, password, totp string) (map[string]any, error
 		return nil, err
 	}
 	profile := map[string]any{}
+	name := ""
 	if account, ok := login["user"].(map[string]any); ok {
+		name = stringValue(first(account, "name", "username"))
 		if value, ok := account["profile"].(map[string]any); ok {
 			profile = value
 		}
+	}
+	if name == "" {
+		return nil, errors.New("huabot 未返回用户资料")
 	}
 	user := User{ID: stableID(name), Username: name, Profile: Profile{NickName: stringValue(profile["nick_name"]), AvatarURL: stringValue(profile["avatar_url"])}}
 	if user.Profile.NickName == "" {
@@ -233,6 +265,62 @@ func (s *Studio) loginHuabot(name, password, totp string) (map[string]any, error
 	s.huabotBearer = bearer
 	s.mu.Unlock()
 	return map[string]any{"user": user}, nil
+}
+
+func (s *Studio) startHuabotAuthorization() (deviceAuthorization, error) {
+	config := s.huabotConfig()
+	form := url.Values{
+		"client_id": {s.oauthClientID()},
+		"scope":     {"profile:read token_base:read token_base:write"},
+	}
+	var authorization deviceAuthorization
+	if err := s.webRequest(http.MethodPost, config.WebBase+"/oauth/device/code", "", form, &authorization); err != nil {
+		return deviceAuthorization{}, err
+	}
+	if authorization.DeviceCode == "" || authorization.VerificationURIComplete == "" {
+		return deviceAuthorization{}, errors.New("huabot 未返回有效授权请求")
+	}
+	return authorization, nil
+}
+
+func (s *Studio) pollHuabotAuthorization(deviceCode string) (map[string]any, error) {
+	deviceCode = strings.TrimSpace(deviceCode)
+	if deviceCode == "" {
+		return nil, errors.New("设备授权码不能为空")
+	}
+	config := s.huabotConfig()
+	form := url.Values{
+		"grant_type":  {oauthDeviceGrantType},
+		"client_id":   {s.oauthClientID()},
+		"device_code": {deviceCode},
+	}
+	var exchanged map[string]any
+	if err := s.webRequest(http.MethodPost, config.WebBase+"/oauth/token", "", form, &exchanged); err != nil {
+		switch err.Error() {
+		case "authorization_pending", "slow_down":
+			return map[string]any{"status": err.Error()}, nil
+		case "access_denied":
+			return map[string]any{"status": "denied"}, nil
+		case "expired_token":
+			return map[string]any{"status": "expired"}, nil
+		default:
+			return nil, err
+		}
+	}
+	bearer := stringValue(exchanged["access_token"])
+	if bearer == "" {
+		return nil, errors.New("huabot 未返回访问令牌")
+	}
+	var login map[string]any
+	if err := s.webRequest(http.MethodGet, config.WebBase+"/api/user/me/", bearer, nil, &login); err != nil {
+		return nil, err
+	}
+	result, err := s.completeHuabotLogin(bearer, login)
+	if err != nil {
+		return nil, err
+	}
+	result["status"] = "authorized"
+	return result, nil
 }
 
 func (s *Studio) syncAccount(user User, tokens []providerToken, models []providerModel) error {
