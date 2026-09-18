@@ -1,26 +1,26 @@
 .workspace-header {
   display: grid;
-  grid-template-columns: 100px 1fr auto;
+  grid-template-columns: 84px 1fr auto;
   align-items: center;
-  gap: 15px;
-  padding: 21px 72px;
+  gap: 12px;
+  padding: 12px 40px;
   color: #f7f8fb;
 }
 .workspace-header .back-link {
   margin: 0;
 }
 .workspace-header h1 {
-  font-size: 19px;
+  font-size: 18px;
 }
 .workspace-header .eyebrow {
   margin-bottom: 4px;
 }
 .workspace {
-  height: calc(100dvh - 188px);
+  height: calc(100dvh - 134px);
   min-height: 0;
   display: grid;
   grid-template-columns: 230px minmax(400px, 1fr) 284px;
-  margin: 0 72px 44px;
+  margin: 0 40px 24px;
   border: 1px solid rgba(255, 255, 255, 0.17);
   border-radius: 28px;
   background: rgba(255, 255, 255, 0.09);
@@ -55,12 +55,16 @@
   gap: 7px;
 }
 .sequence-add {
-  display: grid;
+  display: inline-flex;
   width: 23px;
   height: 23px;
-  place-items: center;
-  border: 1px solid rgba(159, 240, 217, 0.5);
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(113, 222, 196, 0.62);
   border-radius: 8px;
+  padding: 0;
+  line-height: 0;
   background: rgba(68, 221, 183, 0.12);
   color: #9ff0d9;
   cursor: pointer;
@@ -115,17 +119,17 @@
   display: grid;
   place-items: center;
   padding: 20px;
-  background: rgba(5, 8, 24, 0.65);
-  backdrop-filter: blur(5px);
+  background: rgba(4, 6, 10, 0.78);
+  backdrop-filter: blur(8px);
 }
 .add-asset-dialog {
   width: min(100%, 420px);
   padding: 23px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 20px;
-  background: #202941;
-  color: #f7f8fb;
-  box-shadow: 0 24px 70px rgba(3, 5, 20, 0.4);
+  border: 1px solid #3d4859;
+  border-radius: 18px;
+  background: #1b212b;
+  color: #f3f5f7;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.52);
 }
 .add-asset-dialog-head,
 .add-asset-actions {
@@ -138,30 +142,51 @@
   margin: 4px 0 0;
   font-size: 20px;
 }
+.add-asset-dialog .eyebrow {
+  color: #7ee4cd;
+}
+.add-asset-dialog .icon-button {
+  border-color: #465266;
+  background: #293240;
+  color: #d5ddea;
+}
+.add-asset-dialog .icon-button:hover:not(:disabled) {
+  border-color: #6b7c95;
+  background: #344052;
+}
 .add-asset-dialog label {
   display: grid;
   gap: 8px;
   margin-top: 22px;
-  color: #dbe8ed;
+  color: #dce3ec;
   font-size: 13px;
 }
 .add-asset-dialog select {
   width: 100%;
   min-height: 42px;
-  border: 1px solid #4f5c74;
+  border: 1px solid #526176;
   border-radius: 11px;
   padding: 0 11px;
-  background: #30394b;
-  color: #f7f8fb;
+  background: #293240;
+  color: #f3f5f7;
 }
 .add-asset-dialog p {
   margin: 13px 0 22px;
-  color: #c1cae0;
+  color: #bfc9d8;
   font-size: 12px;
   line-height: 1.6;
 }
 .add-asset-actions {
   justify-content: flex-end;
+}
+.add-asset-dialog .button.secondary {
+  border-color: #526176;
+  background: #293240;
+  color: #edf2f7;
+}
+.add-asset-dialog .button.secondary:hover:not(:disabled) {
+  border-color: #71839c;
+  background: #354153;
 }
 .stage {
   min-height: 0;
@@ -508,16 +533,16 @@
 
 /* Keep the workspace title clear of the fixed global navigation. */
 .shell:has(.workspace) .workspace-header {
-  margin-top: 62px;
+  margin-top: 54px;
 }
 
 @media (max-width: 1100px) {
   .workspace-header {
-    padding: 20px 34px;
+    padding: 12px 24px;
   }
   .workspace {
     grid-template-columns: 190px minmax(0, 1fr) 284px;
-    margin: 0 34px 34px;
+    margin: 0 24px 24px;
   }
 }
 
@@ -542,6 +567,7 @@
     grid-row: 2;
   }
   .workspace {
+    height: calc(100dvh - 188px);
     display: flex;
     flex-direction: column;
     margin: 0 18px 28px;

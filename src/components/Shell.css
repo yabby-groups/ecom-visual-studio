@@ -155,11 +155,11 @@
 .shell-actions {
   position: fixed;
   z-index: 10;
-  top: 20px;
-  right: 42px;
+  top: 12px;
+  right: 28px;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 .shell-actions .text-button {
   display: inline-flex;
@@ -171,8 +171,8 @@
   font-weight: 800;
 }
 .logout-avatar {
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   flex: 0 0 auto;
   border-radius: 50%;
   object-fit: cover;
@@ -185,10 +185,10 @@
   font-size: 12px;
 }
 .chat-toggle {
-  min-height: 42px;
+  min-height: 36px;
   border: 1px solid rgba(78, 159, 141, 0.68);
-  border-radius: 15px;
-  padding: 0 14px;
+  border-radius: 12px;
+  padding: 0 12px;
   background: rgba(37, 143, 123, 0.18);
   color: #d9f5ec;
   font-weight: 800;
@@ -205,6 +205,10 @@
   color: #fff;
 }
 .shell-actions .create-button {
+  min-height: 36px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  font-size: 13px;
   border: 1px solid #258f7b;
   background: #258f7b;
   color: #f4fffb;
