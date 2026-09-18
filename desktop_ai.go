@@ -19,6 +19,7 @@ import (
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
 	"github.com/openai/openai-go/v3/responses"
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 var imageSizes = map[string][2]int{"1:1": {1024, 1024}, "3:2": {1536, 1024}, "2:3": {1024, 1536}, "16:9": {1536, 864}}
@@ -327,14 +328,8 @@ func (s *Studio) CreateTryOn(input TryOnInput) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(input.PersonPaths) == 0 || len(input.GarmentPaths) == 0 || len(input.PersonPaths) > 4 || len(input.GarmentPaths) > 4 {
-		return nil, errors.New("人物照片和服装图片最多各添加 4 张，且不能为空")
-	}
-	if _, err = imageSize(input.Ratio); err != nil {
+	if err = validateTryOnInput(input); err != nil {
 		return nil, err
-	}
-	if input.GenerationMode != "combined" && input.GenerationMode != "combinations" {
-		return nil, errors.New("换装生成模式无效")
 	}
 	for _, p := range append(append([]string{}, input.PersonPaths...), input.GarmentPaths...) {
 		f, e := safeUpload(s.dataDir, p)
@@ -636,30 +631,46 @@ func (s *Studio) Analyze(input map[string]string) (map[string]any, error) {
 	}
 	return parsed, nil
 }
-func (s *Studio) Chat(messages []map[string]string) (map[string]string, error) {
+func (s *Studio) Chat(requestID string, messages []map[string]string) (map[string]string, error) {
 	user, err := s.currentUser()
 	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(requestID) == "" || len(requestID) > 80 {
+		return nil, errors.New("对话请求标识无效")
+	}
+	if err := validateChatMessages(messages); err != nil {
 		return nil, err
 	}
 	config, key, _, _, chat, err := s.activeProvider(user.ID)
 	if err != nil {
 		return nil, err
 	}
-	if len(messages) == 0 || messages[len(messages)-1]["role"] != "user" {
-		return nil, errors.New("请输入消息")
-	}
 	input := make(responses.ResponseInputParam, 0, len(messages))
 	for _, message := range messages {
 		input = append(input, responses.ResponseInputItemParamOfMessage(message["content"], responses.EasyInputMessageRole(message["role"])))
 	}
 	client := s.openAIClient(config, key)
-	response, err := client.Responses.New(context.Background(), responses.ResponseNewParams{
+	stream := client.Responses.NewStreaming(context.Background(), responses.ResponseNewParams{
 		Model:        chat,
 		Instructions: openai.String("You are a helpful Chinese e-commerce creative assistant. Return copy-ready, accurate answers."),
 		Input:        responses.ResponseNewParamsInputUnion{OfInputItemList: input},
 	})
-	if err != nil {
+	defer stream.Close()
+	var text strings.Builder
+	for stream.Next() {
+		event := stream.Current()
+		if event.Type != "response.output_text.delta" || event.Delta == "" {
+			continue
+		}
+		delta := event.Delta
+		text.WriteString(delta)
+		if s.ctx != nil {
+			runtime.EventsEmit(s.ctx, "chat:delta:"+requestID, delta)
+		}
+	}
+	if err := stream.Err(); err != nil {
 		return nil, fmt.Errorf("AI 对话请求失败（模型 %s，地址 %s）: %w", chat, config.APIBase, err)
 	}
-	return map[string]string{"text": response.OutputText()}, nil
+	return map[string]string{"text": text.String()}, nil
 }

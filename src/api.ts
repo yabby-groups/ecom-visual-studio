@@ -1,5 +1,6 @@
 import type { Asset, LatestCreation, Model, Project, Template, TokenSettings, TryOnJob, TryOnPage, User } from "./types";
 import { studio, uploadFile } from "./desktop";
+import { EventsOff, EventsOn } from "../wailsjs/runtime/runtime";
 
 export class ApiError extends Error {}
 
@@ -21,6 +22,13 @@ async function call<T>(method: string, ...args: unknown[]): Promise<T> {
   } catch (reason) {
     throw new ApiError(errorMessage(reason));
   }
+}
+
+let chatRequestSequence = 0;
+
+function nextChatRequestID() {
+  chatRequestSequence += 1;
+  return `chat-${Date.now()}-${chatRequestSequence}`;
 }
 
 export const client = {
@@ -50,8 +58,21 @@ export const client = {
   deleteTryOn: (id: string) => call("DeleteTryOn", id),
   analyze: (body: { mode: string; product: string; reference: string }) => call<{ description: string; benefits: string[] }>("Analyze", body),
   chat: async (messages: { role: string; content: string }[], onDelta: (delta: string) => void) => {
-    const result = await call<{ text: string }>("Chat", messages);
-    if (result.text) onDelta(result.text);
+    const requestID = nextChatRequestID();
+    const eventName = `chat:delta:${requestID}`;
+    let receivedDelta = false;
+    EventsOn(eventName, (delta: unknown) => {
+      if (typeof delta === "string" && delta) {
+        receivedDelta = true;
+        onDelta(delta);
+      }
+    });
+    try {
+      const result = await call<{ text: string }>("Chat", requestID, messages);
+      if (!receivedDelta && result.text) onDelta(result.text);
+    } finally {
+      EventsOff(eventName);
+    }
   },
   tokenSettings: () => call<TokenSettings>("TokenSettings"),
   models: () => call<{ models: Model[] }>("Models"),

@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 )
 
@@ -109,8 +108,8 @@ func (s *Studio) CreateProject(input ProjectInput) (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	if strings.TrimSpace(input.Name) == "" || strings.TrimSpace(input.Product) == "" {
-		return nil, errors.New("请填写项目名称和商品名称")
+	if err := validateProjectInput(input); err != nil {
+		return nil, err
 	}
 	id := newID("project")
 	_, err = s.db.Exec("insert into projects(id,user_id,name,product,description,benefits,color,reference,created_at) values(?,?,?,?,?,?,?,?,?)", id, user.ID, input.Name, input.Product, input.Description, input.Benefits, input.Color, input.Reference, time.Now().Unix())
@@ -161,6 +160,9 @@ func (s *Studio) UpdateAsset(id string, patch AssetPatch) (map[string]bool, erro
 	if owned == 0 {
 		return nil, errors.New("画面不存在")
 	}
+	if err := validateAssetPatch(patch); err != nil {
+		return nil, err
+	}
 	_, err = s.db.Exec("update assets set title=case when ?='' then title else ? end,template=case when ?='' then template else ? end,ratio=case when ?='' then ratio else ? end,prompt=case when ?='' then prompt else ? end where id=?", patch.Title, patch.Title, patch.Template, patch.Template, patch.Ratio, patch.Ratio, patch.Prompt, patch.Prompt, id)
 	if err != nil {
 		return nil, err
@@ -193,8 +195,8 @@ func (s *Studio) AddTemplate(input TemplateInput) (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	if strings.TrimSpace(input.Name) == "" || strings.TrimSpace(input.Ratio) == "" {
-		return nil, errors.New("请填写模板名称和比例")
+	if err := validateTemplateInput(input); err != nil {
+		return nil, err
 	}
 	id := newID("template")
 	_, err = s.db.Exec("insert into custom_templates values(?,?,?,?,?,?)", id, user.ID, input.Name, input.Ratio, input.Direction, time.Now().Unix())
