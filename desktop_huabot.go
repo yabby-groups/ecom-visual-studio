@@ -230,6 +230,7 @@ func (s *Studio) loginHuabot(name, password, totp string) (map[string]any, error
 	}
 	s.mu.Lock()
 	s.user = &user
+	s.huabotBearer = bearer
 	s.mu.Unlock()
 	return map[string]any{"user": user}, nil
 }
@@ -293,6 +294,14 @@ func (s *Studio) tokenSettings() (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	s.mu.RLock()
+	bearer := s.huabotBearer
+	s.mu.RUnlock()
+	if bearer != "" {
+		// Usage refresh is best-effort: opening settings must still work with the
+		// last locally cached values when Huabot is temporarily unavailable.
+		_ = s.refreshTokenUsage(user.ID, bearer)
+	}
 	result := map[string]any{"tokens": []map[string]any{}, "active_token_id": "", "image_model": "", "text_model": "", "chat_model": ""}
 	rows, err := s.db.Query("select id,name,masked,status,today_cost,total_cost from tokens where user_id=? order by name", user.ID)
 	if err != nil {
@@ -316,6 +325,42 @@ func (s *Studio) tokenSettings() (map[string]any, error) {
 		return nil, err
 	}
 	return result, nil
+}
+
+func (s *Studio) refreshTokenUsage(userID, bearer string) error {
+	config := s.huabotConfig()
+	var listed map[string]any
+	if err := s.webRequest(http.MethodGet, config.WebBase+"/api/token_base/token/my/list/", bearer, nil, &listed); err != nil {
+		return err
+	}
+	rawTokens, _ := listed["tokens"].([]any)
+	return s.writeTransaction(func(tx *sql.Tx) error {
+		for _, item := range rawTokens {
+			value, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			id := stringValue(first(value, "id", "uuid"))
+			if id == "" {
+				continue
+			}
+			status := 1
+			if number, ok := value["status"].(float64); ok {
+				status = int(number)
+			}
+			if _, err := tx.Exec(
+				"update tokens set status=?,today_cost=?,total_cost=? where id=? and user_id=?",
+				status,
+				stringValue(value["today_used_cost"]),
+				stringValue(value["total_used_cost"]),
+				id,
+				userID,
+			); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func (s *Studio) models() (map[string]any, error) {

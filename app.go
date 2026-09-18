@@ -24,6 +24,7 @@ const (
 	maxUploadBytes         = 15 << 20
 	imageImportTimeout     = 300 * time.Second
 	imageImportMaxAttempts = 3
+	localWorkspaceID       = "desktop-workspace"
 )
 
 type Studio struct {
@@ -37,6 +38,7 @@ type Studio struct {
 	storageMu        sync.RWMutex
 	migrationPending bool
 	user             *User
+	huabotBearer     string
 }
 
 type User struct {
@@ -162,6 +164,18 @@ func (s *Studio) migrate() error {
 			return err
 		}
 	}
+	// Local creations belong to this desktop installation, not to the Huabot
+	// account that happens to provide AI credentials. Collapse records from
+	// earlier account-scoped builds into the single local workspace.
+	for _, statement := range []string{
+		"update projects set user_id='" + localWorkspaceID + "' where user_id<>'" + localWorkspaceID + "'",
+		"update custom_templates set user_id='" + localWorkspaceID + "' where user_id<>'" + localWorkspaceID + "'",
+		"update try_on_jobs set user_id='" + localWorkspaceID + "' where user_id<>'" + localWorkspaceID + "'",
+	} {
+		if _, err := s.db.Exec(statement); err != nil {
+			return err
+		}
+	}
 	// Early desktop builds did not persist the selected provider token.
 	if _, err := s.db.Exec("alter table settings add column token_id text not null default ''"); err != nil && !strings.Contains(err.Error(), "duplicate column") {
 		return err
@@ -221,17 +235,31 @@ func (s *Studio) Login(name, password, totpCode string) (map[string]any, error) 
 	return s.loginHuabot(name, password, totpCode)
 }
 
-func (s *Studio) Logout() map[string]bool {
-	if s.dataWriteAllowed() != nil {
-		return map[string]bool{"ok": false}
+func (s *Studio) Logout() (map[string]bool, error) {
+	user, err := s.currentUser()
+	if err != nil {
+		return nil, err
 	}
-	// Logout deliberately removes only the login marker. Project and generated
-	// data stay in the desktop database for the account's next login.
-	_, _ = s.execDataWrite("delete from desktop_session where singleton=1")
+	if err := s.writeTransaction(func(tx *sql.Tx) error {
+		if _, err := tx.Exec("delete from desktop_session where singleton=1"); err != nil {
+			return err
+		}
+		if _, err := tx.Exec("delete from settings where user_id=?", user.ID); err != nil {
+			return err
+		}
+		if _, err := tx.Exec("delete from tokens where user_id=?", user.ID); err != nil {
+			return err
+		}
+		_, err := tx.Exec("delete from models where user_id=?", user.ID)
+		return err
+	}); err != nil {
+		return nil, err
+	}
 	s.mu.Lock()
 	s.user = nil
+	s.huabotBearer = ""
 	s.mu.Unlock()
-	return map[string]bool{"ok": true}
+	return map[string]bool{"ok": true}, nil
 }
 
 func (s *Studio) TokenSettings() (map[string]any, error) {
@@ -250,16 +278,10 @@ func (s *Studio) SaveSettings(input SettingsInput) (map[string]bool, error) {
 }
 
 func (s *Studio) Upload(name, contentType string, data []byte) (map[string]string, error) {
-	if _, err := s.currentUser(); err != nil {
-		return nil, err
-	}
 	return s.storeUpload(name, contentType, data)
 }
 
 func (s *Studio) PickImage() (map[string]string, error) {
-	if _, err := s.currentUser(); err != nil {
-		return nil, err
-	}
 	if s.ctx == nil {
 		return nil, errors.New("桌面窗口尚未就绪")
 	}
@@ -307,9 +329,6 @@ func (s *Studio) storeUpload(name, contentType string, data []byte) (map[string]
 }
 
 func (s *Studio) ImportURL(rawURL string) (map[string]string, error) {
-	if _, err := s.currentUser(); err != nil {
-		return nil, err
-	}
 	u, err := publicImageURL(rawURL)
 	if err != nil {
 		return nil, err

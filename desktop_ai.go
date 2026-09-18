@@ -72,11 +72,14 @@ func (s *Studio) GenerateAsset(id string) (map[string]bool, error) {
 		return nil, err
 	}
 	var owned int
-	if err = s.db.QueryRow("select count(*) from assets a join projects p on p.id=a.project_id where a.id=? and p.user_id=?", id, user.ID).Scan(&owned); err != nil {
+	if err = s.db.QueryRow("select count(*) from assets where id=?", id).Scan(&owned); err != nil {
 		return nil, err
 	}
 	if owned == 0 {
 		return nil, errors.New("画面不存在")
+	}
+	if _, _, _, _, _, err = s.activeProvider(user.ID); err != nil {
+		return nil, err
 	}
 	if err = s.writeTransaction(func(tx *sql.Tx) error {
 		_, err := tx.Exec("update assets set status='queued',generation_started_at=null where id=?", id)
@@ -84,7 +87,7 @@ func (s *Studio) GenerateAsset(id string) (map[string]bool, error) {
 	}); err != nil {
 		return nil, err
 	}
-	go s.generateAsset(id)
+	go s.generateAsset(id, user.ID)
 	return map[string]bool{"ok": true}, nil
 }
 func (s *Studio) GeneratePack(id string) (map[string]bool, error) {
@@ -92,7 +95,10 @@ func (s *Studio) GeneratePack(id string) (map[string]bool, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, err = s.projectOwned(id, user.ID); err != nil {
+	if _, err = s.localProject(id); err != nil {
+		return nil, err
+	}
+	if _, _, _, _, _, err = s.activeProvider(user.ID); err != nil {
 		return nil, err
 	}
 	rows, err := s.db.Query("select id from assets where project_id=?", id)
@@ -125,13 +131,13 @@ func (s *Studio) GeneratePack(id string) (map[string]bool, error) {
 		return nil, err
 	}
 	for _, asset := range assets {
-		go s.generateAsset(asset)
+		go s.generateAsset(asset, user.ID)
 	}
 	return map[string]bool{"ok": true}, nil
 }
-func (s *Studio) generateAsset(id string) {
-	var userID, projectID, prompt, ratio, reference string
-	if err := s.db.QueryRow("select p.user_id,a.project_id,a.prompt,a.ratio,p.reference from assets a join projects p on p.id=a.project_id where a.id=?", id).Scan(&userID, &projectID, &prompt, &ratio, &reference); err != nil {
+func (s *Studio) generateAsset(id, providerUserID string) {
+	var projectID, prompt, ratio, reference string
+	if err := s.db.QueryRow("select a.project_id,a.prompt,a.ratio,p.reference from assets a join projects p on p.id=a.project_id where a.id=?", id).Scan(&projectID, &prompt, &ratio, &reference); err != nil {
 		return
 	}
 	if err := s.writeTransaction(func(tx *sql.Tx) error {
@@ -141,7 +147,7 @@ func (s *Studio) generateAsset(id string) {
 		return
 	}
 	s.NotifyGeneration(id, "generating")
-	config, key, image, _, _, err := s.activeProvider(userID)
+	config, key, image, _, _, err := s.activeProvider(providerUserID)
 	if err == nil {
 		size, sizeErr := imageSize(ratio)
 		if sizeErr != nil {
@@ -331,6 +337,9 @@ func (s *Studio) CreateTryOn(input TryOnInput) (map[string]any, error) {
 	if err = validateTryOnInput(input); err != nil {
 		return nil, err
 	}
+	if _, _, _, _, _, err = s.activeProvider(user.ID); err != nil {
+		return nil, err
+	}
 	for _, p := range append(append([]string{}, input.PersonPaths...), input.GarmentPaths...) {
 		f, e := safeUpload(s.dataDir, p)
 		if e != nil {
@@ -353,7 +362,7 @@ func (s *Studio) CreateTryOn(input TryOnInput) (map[string]any, error) {
 			pp, _ := json.Marshal(pair[0])
 			gg, _ := json.Marshal(pair[1])
 			id := newID("tryon")
-			if _, err := tx.Exec("insert into try_on_jobs(id,user_id,person_paths,garment_paths,generation_mode,instructions,ratio,status,created_at) values(?,?,?,?,?,?,?,?,?)", id, user.ID, string(pp), string(gg), input.GenerationMode, input.Instructions, input.Ratio, "queued", time.Now().Unix()); err != nil {
+			if _, err := tx.Exec("insert into try_on_jobs(id,user_id,person_paths,garment_paths,generation_mode,instructions,ratio,status,created_at) values(?,?,?,?,?,?,?,?,?)", id, localWorkspaceID, string(pp), string(gg), input.GenerationMode, input.Instructions, input.Ratio, "queued", time.Now().Unix()); err != nil {
 				return err
 			}
 			ids = append(ids, id)
@@ -363,13 +372,13 @@ func (s *Studio) CreateTryOn(input TryOnInput) (map[string]any, error) {
 		return nil, err
 	}
 	for _, id := range ids {
-		go s.generateTryOn(id)
+		go s.generateTryOn(id, user.ID)
 	}
 	return map[string]any{"id": ids[0], "ids": ids}, nil
 }
-func (s *Studio) generateTryOn(id string) {
-	var user, persons, garments, instructions, ratio string
-	if err := s.db.QueryRow("select user_id,person_paths,garment_paths,instructions,ratio from try_on_jobs where id=?", id).Scan(&user, &persons, &garments, &instructions, &ratio); err != nil {
+func (s *Studio) generateTryOn(id, providerUserID string) {
+	var persons, garments, instructions, ratio string
+	if err := s.db.QueryRow("select person_paths,garment_paths,instructions,ratio from try_on_jobs where id=?", id).Scan(&persons, &garments, &instructions, &ratio); err != nil {
 		return
 	}
 	if err := s.writeTransaction(func(tx *sql.Tx) error {
@@ -381,7 +390,7 @@ func (s *Studio) generateTryOn(id string) {
 	var pp, gg []string
 	_ = json.Unmarshal([]byte(persons), &pp)
 	_ = json.Unmarshal([]byte(garments), &gg)
-	config, key, image, _, _, err := s.activeProvider(user)
+	config, key, image, _, _, err := s.activeProvider(providerUserID)
 	if err == nil {
 		size, e := imageSize(ratio)
 		if e != nil {
@@ -394,7 +403,7 @@ func (s *Studio) generateTryOn(id string) {
 			raw, requestErr := s.imageEdit(requestContext, client, image, prompt, size, append(pp, gg...))
 			err = requestErr
 			if err == nil {
-				err = s.saveImageResponse(raw, filepath.Join("try-on", user), id, size, "try_on_versions", "job_id")
+				err = s.saveImageResponse(raw, filepath.Join("try-on", localWorkspaceID), id, size, "try_on_versions", "job_id")
 			}
 		}
 	}
@@ -412,18 +421,14 @@ func truncate(value string) string {
 	return value
 }
 func (s *Studio) TryOnJobs(limit, offset int) (map[string]any, error) {
-	user, err := s.currentUser()
-	if err != nil {
-		return nil, err
-	}
 	if limit < 1 || limit > 48 || offset < 0 {
 		return nil, errors.New("分页参数无效")
 	}
 	var total int
-	if err = s.db.QueryRow("select count(*) from try_on_jobs where user_id=?", user.ID).Scan(&total); err != nil {
+	if err := s.db.QueryRow("select count(*) from try_on_jobs").Scan(&total); err != nil {
 		return nil, err
 	}
-	rows, err := s.db.Query("select id,person_paths,garment_paths,generation_mode,instructions,ratio,status,file_path,generation_started_at,created_at from try_on_jobs where user_id=? order by created_at desc, id desc limit ? offset ?", user.ID, limit, offset)
+	rows, err := s.db.Query("select id,person_paths,garment_paths,generation_mode,instructions,ratio,status,file_path,generation_started_at,created_at from try_on_jobs order by created_at desc, id desc limit ? offset ?", limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -499,11 +504,7 @@ func (s *Studio) scanTryOn(row rowScanner) (map[string]any, error) {
 	return job, nil
 }
 func (s *Studio) TryOnJob(id string) (map[string]any, error) {
-	user, err := s.currentUser()
-	if err != nil {
-		return nil, err
-	}
-	row := s.db.QueryRow("select id,person_paths,garment_paths,generation_mode,instructions,ratio,status,file_path,generation_started_at,created_at from try_on_jobs where id=? and user_id=?", id, user.ID)
+	row := s.db.QueryRow("select id,person_paths,garment_paths,generation_mode,instructions,ratio,status,file_path,generation_started_at,created_at from try_on_jobs where id=?", id)
 	return s.scanTryOn(row)
 }
 func (s *Studio) RegenerateTryOn(id string) (map[string]bool, error) {
@@ -511,7 +512,10 @@ func (s *Studio) RegenerateTryOn(id string) (map[string]bool, error) {
 	if err != nil {
 		return nil, err
 	}
-	result, err := s.execDataWrite("update try_on_jobs set status='queued',generation_started_at=null where id=? and user_id=?", id, user.ID)
+	if _, _, _, _, _, err = s.activeProvider(user.ID); err != nil {
+		return nil, err
+	}
+	result, err := s.execDataWrite("update try_on_jobs set status='queued',generation_started_at=null where id=?", id)
 	if err != nil {
 		return nil, err
 	}
@@ -519,19 +523,15 @@ func (s *Studio) RegenerateTryOn(id string) (map[string]bool, error) {
 	if n == 0 {
 		return nil, errors.New("换装记录不存在")
 	}
-	go s.generateTryOn(id)
+	go s.generateTryOn(id, user.ID)
 	return map[string]bool{"ok": true}, nil
 }
 func (s *Studio) DeleteTryOn(id string) (map[string]bool, error) {
-	user, err := s.currentUser()
-	if err != nil {
-		return nil, err
-	}
 	paths := []string{}
-	err = s.writeTransaction(func(tx *sql.Tx) error {
+	err := s.writeTransaction(func(tx *sql.Tx) error {
 		var status string
 		var currentPath sql.NullString
-		if err := tx.QueryRow("select status,file_path from try_on_jobs where id=? and user_id=?", id, user.ID).Scan(&status, &currentPath); err != nil {
+		if err := tx.QueryRow("select status,file_path from try_on_jobs where id=?", id).Scan(&status, &currentPath); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return errors.New("换装记录不存在")
 			}
@@ -564,18 +564,18 @@ func (s *Studio) DeleteTryOn(id string) (map[string]bool, error) {
 		if _, err = tx.Exec("delete from try_on_versions where job_id=?", id); err != nil {
 			return err
 		}
-		_, err = tx.Exec("delete from try_on_jobs where id=? and user_id=?", id, user.ID)
+		_, err = tx.Exec("delete from try_on_jobs where id=?", id)
 		return err
 	})
 	if err != nil {
 		return nil, err
 	}
-	s.removeTryOnFiles(user.ID, paths)
+	s.removeTryOnFiles(paths)
 	return map[string]bool{"ok": true}, nil
 }
 
-func (s *Studio) removeTryOnFiles(userID string, paths []string) {
-	allowed := filepath.Join(s.dataDir, "storage", "generated", "try-on", userID)
+func (s *Studio) removeTryOnFiles(paths []string) {
+	allowed := filepath.Join(s.dataDir, "storage", "generated", "try-on")
 	for _, path := range paths {
 		relativePath := filepath.Clean(filepath.FromSlash(path))
 		if filepath.IsAbs(relativePath) {

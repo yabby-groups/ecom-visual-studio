@@ -15,6 +15,7 @@ import {
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { client } from "../api";
+import { useRequireAiAuth } from "../auth";
 import type { TryOnJob } from "../types";
 import { fileUrl, isPending, statusText } from "../utils/assets";
 import { Shell } from "./Shell";
@@ -23,6 +24,24 @@ import "./Workspace.css";
 
 const HISTORY_PAGE_SIZE = 12;
 const GENERATION_ESTIMATE_SECONDS = 300;
+const TRY_ON_DRAFT = "frameboard:try-on-draft";
+
+type TryOnDraft = {
+  personPaths: string[];
+  garmentPaths: string[];
+  generationMode: "combined" | "combinations";
+  instructions: string;
+  ratio: string;
+  consented: boolean;
+};
+
+function loadDraft(): TryOnDraft | null {
+  try {
+    return JSON.parse(sessionStorage.getItem(TRY_ON_DRAFT) || "null");
+  } catch {
+    return null;
+  }
+}
 
 function formatDuration(seconds: number) {
   const minutes = Math.floor(seconds / 60);
@@ -137,7 +156,11 @@ function ReferenceSlot({
             )}
             {error ? "重新导入" : `导入图片（${paths.length}/4）`}
           </button>
-          {error && <p className="try-on-url-error" role="alert">{error}</p>}
+          {error && (
+            <p className="try-on-url-error" role="alert">
+              {error}
+            </p>
+          )}
         </div>
       )}
     </section>
@@ -145,14 +168,22 @@ function ReferenceSlot({
 }
 
 export function TryOn() {
+  const [draft] = useState(loadDraft);
   const navigate = useNavigate();
+  const requireAiAuth = useRequireAiAuth();
   const { id: selectedJobId } = useParams<{ id: string }>();
-  const [personPaths, setPersonPaths] = useState<string[]>([]);
-  const [garmentPaths, setGarmentPaths] = useState<string[]>([]);
-  const [generationMode, setGenerationMode] = useState<"combined" | "combinations">("combined");
-  const [instructions, setInstructions] = useState("");
-  const [ratio, setRatio] = useState("2:3");
-  const [consented, setConsented] = useState(false);
+  const [personPaths, setPersonPaths] = useState<string[]>(
+    draft?.personPaths ?? [],
+  );
+  const [garmentPaths, setGarmentPaths] = useState<string[]>(
+    draft?.garmentPaths ?? [],
+  );
+  const [generationMode, setGenerationMode] = useState<
+    "combined" | "combinations"
+  >(draft?.generationMode ?? "combined");
+  const [instructions, setInstructions] = useState(draft?.instructions ?? "");
+  const [ratio, setRatio] = useState(draft?.ratio ?? "2:3");
+  const [consented, setConsented] = useState(draft?.consented ?? false);
   const [uploading, setUploading] = useState<"person" | "garment" | "">("");
   const [importErrors, setImportErrors] = useState({ person: "", garment: "" });
   const [jobs, setJobs] = useState<TryOnJob[]>([]);
@@ -183,7 +214,8 @@ export function TryOn() {
   const selectedJob = selectedJobId
     ? jobs.find((job) => job.id === selectedJobId)
     : undefined;
-  const pendingJob = selectedJob && isPending(selectedJob.status) ? selectedJob : null;
+  const pendingJob =
+    selectedJob && isPending(selectedJob.status) ? selectedJob : null;
   useEffect(() => {
     void load();
   }, [historyPage]);
@@ -209,7 +241,10 @@ export function TryOn() {
       .tryOnJob(selectedJobId)
       .then((job) => {
         if (!active) return;
-        setJobs((current) => [job, ...current.filter((item) => item.id !== job.id)]);
+        setJobs((current) => [
+          job,
+          ...current.filter((item) => item.id !== job.id),
+        ]);
       })
       .catch((reason) => {
         if (!active) return;
@@ -281,6 +316,20 @@ export function TryOn() {
 
   async function create() {
     setError("");
+    if (!requireAiAuth()) {
+      sessionStorage.setItem(
+        TRY_ON_DRAFT,
+        JSON.stringify({
+          personPaths,
+          garmentPaths,
+          generationMode,
+          instructions,
+          ratio,
+          consented,
+        }),
+      );
+      return;
+    }
     setCreating(true);
     try {
       const { id } = await client.createTryOn({
@@ -291,6 +340,7 @@ export function TryOn() {
         ratio,
       });
       setInstructions("");
+      sessionStorage.removeItem(TRY_ON_DRAFT);
       setHistoryPage(1);
       await load(1);
       navigate(`/try-on/${id}`);
@@ -303,6 +353,7 @@ export function TryOn() {
 
   async function regenerate(id: string) {
     setError("");
+    if (!requireAiAuth()) return;
     try {
       setSelectedVersionPath(null);
       await client.regenerateTryOn(id);
@@ -313,7 +364,8 @@ export function TryOn() {
   }
 
   async function deleteJob(job: TryOnJob) {
-    if (!window.confirm("删除该换装记录及其生成图片？原始参考图会保留。")) return;
+    if (!window.confirm("删除该换装记录及其生成图片？原始参考图会保留。"))
+      return;
     setError("");
     setDeletingId(job.id);
     try {
@@ -330,12 +382,17 @@ export function TryOn() {
 
   function removeReference(slot: "person" | "garment", path: string) {
     beginDraft();
-    if (slot === "person") setPersonPaths((paths) => paths.filter((item) => item !== path));
+    if (slot === "person")
+      setPersonPaths((paths) => paths.filter((item) => item !== path));
     else setGarmentPaths((paths) => paths.filter((item) => item !== path));
   }
 
   const canCreate =
-    personPaths.length > 0 && garmentPaths.length > 0 && consented && !uploading && !creating;
+    personPaths.length > 0 &&
+    garmentPaths.length > 0 &&
+    consented &&
+    !uploading &&
+    !creating;
   useEffect(() => {
     setSelectedVersionPath(null);
   }, [selectedJobId]);
@@ -349,13 +406,13 @@ export function TryOn() {
   const displayedPath = selectedVersionPath ?? selectedJob?.file_path ?? null;
   const referencePersonPaths = selectedJob?.person_paths ?? personPaths;
   const referenceGarmentPaths = selectedJob?.garment_paths ?? garmentPaths;
-  const hasOriginals = referencePersonPaths.length > 0 && referenceGarmentPaths.length > 0;
+  const hasOriginals =
+    referencePersonPaths.length > 0 && referenceGarmentPaths.length > 0;
   const combinationCount = personPaths.length * garmentPaths.length;
   const totalPages = Math.max(1, Math.ceil(historyTotal / HISTORY_PAGE_SIZE));
-  const elapsedSeconds =
-    pendingJob?.generation_started_at
-      ? Math.max(0, Math.floor(now / 1000 - pendingJob.generation_started_at))
-      : null;
+  const elapsedSeconds = pendingJob?.generation_started_at
+    ? Math.max(0, Math.floor(now / 1000 - pendingJob.generation_started_at))
+    : null;
   const remainingSeconds =
     elapsedSeconds === null
       ? null
@@ -411,15 +468,60 @@ export function TryOn() {
           </button>
           {jobs.map((job, index) => (
             <div className="try-on-sequence-row" key={job.id}>
-              <button className={`sequence-item ${job.id === selectedJobId ? "active" : ""}`} onClick={() => navigate(`/try-on/${job.id}`)}>
-                <b>{String((historyPage - 1) * HISTORY_PAGE_SIZE + index + 1).padStart(2, "0")}</b>
-                <span><strong>{job.ratio} 全身试穿</strong><small>{statusText(job.status)}</small></span>
-                {job.file_path ? <img src={fileUrl(job.file_path)} alt="" /> : <i />}
+              <button
+                className={`sequence-item ${job.id === selectedJobId ? "active" : ""}`}
+                onClick={() => navigate(`/try-on/${job.id}`)}
+              >
+                <b>
+                  {String(
+                    (historyPage - 1) * HISTORY_PAGE_SIZE + index + 1,
+                  ).padStart(2, "0")}
+                </b>
+                <span>
+                  <strong>{job.ratio} 全身试穿</strong>
+                  <small>{statusText(job.status)}</small>
+                </span>
+                {job.file_path ? (
+                  <img src={fileUrl(job.file_path)} alt="" />
+                ) : (
+                  <i />
+                )}
               </button>
-              <button className="try-on-delete" type="button" disabled={isPending(job.status) || deletingId === job.id} onClick={() => void deleteJob(job)} aria-label="删除换装记录" title={isPending(job.status) ? "生成中不能删除" : "删除换装记录"}><Trash2 size={14} /></button>
+              <button
+                className="try-on-delete"
+                type="button"
+                disabled={isPending(job.status) || deletingId === job.id}
+                onClick={() => void deleteJob(job)}
+                aria-label="删除换装记录"
+                title={
+                  isPending(job.status) ? "生成中不能删除" : "删除换装记录"
+                }
+              >
+                <Trash2 size={14} />
+              </button>
             </div>
           ))}
-          {historyTotal > HISTORY_PAGE_SIZE && <div className="try-on-pagination"><button type="button" disabled={historyPage === 1} onClick={() => setHistoryPage((page) => page - 1)}>上一页</button><span>{historyPage} / {totalPages}</span><button type="button" disabled={historyPage >= totalPages} onClick={() => setHistoryPage((page) => page + 1)}>下一页</button></div>}
+          {historyTotal > HISTORY_PAGE_SIZE && (
+            <div className="try-on-pagination">
+              <button
+                type="button"
+                disabled={historyPage === 1}
+                onClick={() => setHistoryPage((page) => page - 1)}
+              >
+                上一页
+              </button>
+              <span>
+                {historyPage} / {totalPages}
+              </span>
+              <button
+                type="button"
+                disabled={historyPage >= totalPages}
+                onClick={() => setHistoryPage((page) => page + 1)}
+              >
+                下一页
+              </button>
+            </div>
+          )}
         </aside>
         <section className="stage try-on-stage">
           <header>
@@ -507,7 +609,8 @@ export function TryOn() {
                   <i style={{ transform: `scaleX(${cycleProgress})` }} />
                 </div>
                 <p className="generation-timing">
-                  生成中 · 预计剩余 {formatDuration(remainingSeconds)} · 已用时 {elapsedSeconds} 秒
+                  生成中 · 预计剩余 {formatDuration(remainingSeconds)} · 已用时{" "}
+                  {elapsedSeconds} 秒
                 </p>
               </div>
             ) : !displayedPath ? (
@@ -557,7 +660,11 @@ export function TryOn() {
                       aria-label={`查看${current ? "当前" : `历史 ${selectedJob.versions.length - index}`}版本`}
                     >
                       <img src={fileUrl(version.file_path)} alt="" />
-                      <b>{current ? "当前" : `v${selectedJob.versions.length - index}`}</b>
+                      <b>
+                        {current
+                          ? "当前"
+                          : `v${selectedJob.versions.length - index}`}
+                      </b>
                     </button>
                   );
                 })}
@@ -689,7 +796,9 @@ export function TryOn() {
             ) : (
               <Sparkles size={17} />
             )}
-            {generationMode === "combinations" ? `生成 ${combinationCount} 个组合` : "保存并生成试穿"}
+            {generationMode === "combinations"
+              ? `生成 ${combinationCount} 个组合`
+              : "保存并生成试穿"}
           </button>
         </aside>
       </div>
@@ -724,13 +833,19 @@ export function TryOn() {
               {referencePersonPaths.map((path, index) => (
                 <figure key={path}>
                   <img src={fileUrl(path)} alt={`人物原图 ${index + 1}`} />
-                  <figcaption>人物原图 {index + 1}{index === 0 ? "（主图）" : ""}</figcaption>
+                  <figcaption>
+                    人物原图 {index + 1}
+                    {index === 0 ? "（主图）" : ""}
+                  </figcaption>
                 </figure>
               ))}
               {referenceGarmentPaths.map((path, index) => (
                 <figure key={path}>
                   <img src={fileUrl(path)} alt={`服装原图 ${index + 1}`} />
-                  <figcaption>服装原图 {index + 1}{index === 0 ? "（主图）" : ""}</figcaption>
+                  <figcaption>
+                    服装原图 {index + 1}
+                    {index === 0 ? "（主图）" : ""}
+                  </figcaption>
                 </figure>
               ))}
             </div>

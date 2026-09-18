@@ -8,16 +8,18 @@ import {
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAppStore } from "../store";
+import { useRequireAiAuth } from "../auth";
 import { Chat } from "./Chat";
 import { LogoutButton } from "./LogoutButton";
 import { Nav } from "./Nav";
 import "./Shell.css";
 
 export function Shell({ children }: { children: React.ReactNode }) {
-  const user = useAppStore((state) => state.user)!;
+  const user = useAppStore((state) => state.user);
   const navigate = useNavigate();
+  const requireAiAuth = useRequireAiAuth();
   const [chatOpen, setChatOpen] = useState(false);
-  const displayName = user.profile.nick_name || user.username;
+  const displayName = user ? user.profile.nick_name || user.username : "";
   return (
     <div className="app-shell shell">
       <aside className="rail sidebar">
@@ -52,23 +54,31 @@ export function Shell({ children }: { children: React.ReactNode }) {
         <Nav to="/settings" icon={<Settings />} label="设置" />
       </nav>
       <div className="shell-actions">
-        <LogoutButton className="text-button">
-          {user.profile.avatar_url ? (
-            <img
-              className="logout-avatar"
-              src={user.profile.avatar_url}
-              alt=""
-            />
-          ) : (
-            <span className="logout-avatar logout-avatar-fallback">
-              {displayName.slice(0, 1).toUpperCase()}
-            </span>
-          )}
-          <span>{displayName} · 退出</span>
-        </LogoutButton>
+        {user ? (
+          <LogoutButton className="text-button">
+            {user.profile.avatar_url ? (
+              <img
+                className="logout-avatar"
+                src={user.profile.avatar_url}
+                alt=""
+              />
+            ) : (
+              <span className="logout-avatar logout-avatar-fallback">
+                {displayName.slice(0, 1).toUpperCase()}
+              </span>
+            )}
+            <span>{displayName} · 退出</span>
+          </LogoutButton>
+        ) : (
+          <button className="text-button" onClick={() => requireAiAuth()}>
+            登录以使用 AI
+          </button>
+        )}
         <button
           className="chat-toggle"
-          onClick={() => setChatOpen((open) => !open)}
+          onClick={() => {
+            if (requireAiAuth()) setChatOpen((open) => !open);
+          }}
           aria-label="打开 AI 聊天"
         >
           AI 对话

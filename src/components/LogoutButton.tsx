@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { client } from "../api";
 import { useAppStore } from "../store";
-import { useNavigate } from "react-router-dom";
 import { ConfirmDialog } from "./ConfirmDialog";
 
 type LogoutButtonProps = {
@@ -11,7 +10,6 @@ type LogoutButtonProps = {
 
 export function LogoutButton({ className, children }: LogoutButtonProps) {
   const setUser = useAppStore((state) => state.setUser);
-  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
@@ -22,7 +20,7 @@ export function LogoutButton({ className, children }: LogoutButtonProps) {
     try {
       await client.logout();
       setUser(null);
-      navigate("/");
+      setOpen(false);
     } catch (logoutError) {
       setError(
         logoutError instanceof Error
@@ -49,7 +47,7 @@ export function LogoutButton({ className, children }: LogoutButtonProps) {
       {open && (
         <ConfirmDialog
           title="确认退出登录？"
-          message="退出后需要重新登录才能继续使用创作台。"
+          message="退出后 AI 能力将停用，本地项目和素材仍可继续使用。"
           confirmLabel="确认退出"
           error={error}
           loading={pending}

@@ -42,6 +42,69 @@ func TestSQLiteDSNEnablesWALAndBusyTimeout(t *testing.T) {
 	}
 }
 
+func TestLocalWorkspaceMigrationKeepsDataAvailableWithoutLogin(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	studio := &Studio{db: db}
+	if err := studio.migrate(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("insert into projects(id,user_id,name,product,created_at) values('legacy-project','alice','Legacy','Desk',1)"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("insert into custom_templates(id,user_id,name,ratio,direction,created_at) values('legacy-template','bob','Legacy template','1:1','Clean',1)"); err != nil {
+		t.Fatal(err)
+	}
+	if err := studio.migrate(); err != nil {
+		t.Fatal(err)
+	}
+	projects, err := studio.Projects()
+	if err != nil || len(projects) != 1 {
+		t.Fatalf("Projects() = %#v, %v", projects, err)
+	}
+	if projects[0]["user_id"] != localWorkspaceID {
+		t.Fatalf("project owner = %v, want %q", projects[0]["user_id"], localWorkspaceID)
+	}
+	templates, err := studio.Templates()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(templates) != len(builtInTemplates)+1 {
+		t.Fatalf("Templates() count = %d, want %d", len(templates), len(builtInTemplates)+1)
+	}
+}
+
+func TestGenerateAssetRequiresLoginBeforeQueueing(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	studio := &Studio{db: db}
+	if err := studio.migrate(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("insert into projects(id,user_id,name,product,created_at) values('project-1',?,'Local','Desk',1)", localWorkspaceID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("insert into assets(id,project_id,title,template,ratio,status,created_at) values('asset-1','project-1','Hero','hero-image','1:1','draft',1)"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := studio.GenerateAsset("asset-1"); err == nil || !strings.Contains(err.Error(), "登录") {
+		t.Fatalf("GenerateAsset() error = %v, want login requirement", err)
+	}
+	var status string
+	if err := db.QueryRow("select status from assets where id='asset-1'").Scan(&status); err != nil {
+		t.Fatal(err)
+	}
+	if status != "draft" {
+		t.Fatalf("asset status = %q, want draft", status)
+	}
+}
+
 func TestExportStorageCopiesConsistentDatabaseAndFiles(t *testing.T) {
 	source := t.TempDir()
 	if err := ensureDataDir(source); err != nil {
@@ -272,7 +335,52 @@ func TestDesktopLoginPersistsAndRestoresWithoutCredentials(t *testing.T) {
 	}
 }
 
+func TestLogoutDeletesProviderCredentialsButKeepsLocalProjects(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	studio := &Studio{db: db, user: &User{ID: "user-1", Username: "alice"}}
+	if err := studio.migrate(); err != nil {
+		t.Fatal(err)
+	}
+	statements := []string{
+		"insert into users values('user-1','alice',1,'Alice','')",
+		"insert into desktop_session values(1,'user-1')",
+		"insert into tokens(id,user_id,name,secret,status) values('token-1','user-1','Primary','encrypted',1)",
+		"insert into models(id,user_id,name,alias) values('model-1','user-1','Image','gpt-image-2')",
+		"insert into settings(user_id,token_id,image_model,text_model,chat_model) values('user-1','token-1','gpt-image-2','text','chat')",
+		"insert into projects(id,user_id,name,product,created_at) values('project-1','desktop-workspace','Local','Desk',1)",
+	}
+	for _, statement := range statements {
+		if _, err := db.Exec(statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := studio.Logout(); err != nil {
+		t.Fatal(err)
+	}
+	for _, table := range []string{"desktop_session", "tokens", "models", "settings"} {
+		var count int
+		if err := db.QueryRow("select count(*) from " + table).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		if count != 0 {
+			t.Fatalf("%s count after logout = %d, want 0", table, count)
+		}
+	}
+	var projects int
+	if err := db.QueryRow("select count(*) from projects").Scan(&projects); err != nil {
+		t.Fatal(err)
+	}
+	if projects != 1 {
+		t.Fatalf("local projects after logout = %d, want 1", projects)
+	}
+}
+
 func TestHuabotLoginUsesWebBaseAndEncryptsToken(t *testing.T) {
+	listRequests := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/signin/":
@@ -284,10 +392,15 @@ func TestHuabotLoginUsesWebBaseAndEncryptsToken(t *testing.T) {
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"token": "session", "user": map[string]any{"profile": map[string]any{"nick_name": "Alice"}}})
 		case "/api/token_base/token/my/list/":
+			listRequests++
 			if r.Header.Get("Authorization") != "Bearer session" {
 				t.Fatalf("authorization = %q", r.Header.Get("Authorization"))
 			}
-			_ = json.NewEncoder(w).Encode(map[string]any{"tokens": []map[string]any{{"id": "token-1", "token_name": "Primary", "token_key": "sk-secret", "token_key_masked": "sk-...", "status": 1}}})
+			todayCost, totalCost := "0", "0"
+			if listRequests > 1 {
+				todayCost, totalCost = "12", "34"
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"tokens": []map[string]any{{"id": "token-1", "token_name": "Primary", "token_key": "sk-secret", "token_key_masked": "sk-...", "status": 1, "today_used_cost": todayCost, "total_used_cost": totalCost}}})
 		case "/api/token_base/model/list/":
 			_ = json.NewEncoder(w).Encode(map[string]any{"models": []map[string]any{{"id": "image", "alias": "gpt-image-2", "title": "Image"}, {"id": "chat", "alias": "gpt-5.6-luna", "title": "Chat"}}})
 		default:
@@ -306,7 +419,7 @@ func TestHuabotLoginUsesWebBaseAndEncryptsToken(t *testing.T) {
 	if err := studio.migrate(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := studio.Login("alice", "secret", "123456"); err != nil {
+	if _, err := studio.Login(" alice ", " secret ", "123456"); err != nil {
 		t.Fatal(err)
 	}
 	var stored string
@@ -322,6 +435,10 @@ func TestHuabotLoginUsesWebBaseAndEncryptsToken(t *testing.T) {
 	}
 	if len(settings["tokens"].([]map[string]any)) != 1 {
 		t.Fatalf("tokens = %#v", settings)
+	}
+	refreshed := settings["tokens"].([]map[string]any)[0]
+	if refreshed["today_cost"] != "12" || refreshed["total_cost"] != "34" {
+		t.Fatalf("refreshed usage = %#v", refreshed)
 	}
 }
 
@@ -597,7 +714,7 @@ func (f roundTripperFunc) RoundTrip(request *http.Request) (*http.Response, erro
 	return f(request)
 }
 
-func TestDeleteTryOnDoesNotDeleteAnotherUsersVersions(t *testing.T) {
+func TestDeleteTryOnTreatsLegacyAccountRecordsAsLocalWorkspaceData(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")
 	if err != nil {
 		t.Fatal(err)
@@ -613,15 +730,15 @@ func TestDeleteTryOnDoesNotDeleteAnotherUsersVersions(t *testing.T) {
 	if _, err := db.Exec("insert into try_on_versions(id,job_id,file_path,created_at) values('version-bob','job-bob','generated/bob.png',1)"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := studio.DeleteTryOn("job-bob"); err == nil {
-		t.Fatal("DeleteTryOn() unexpectedly deleted another user's job")
+	if _, err := studio.DeleteTryOn("job-bob"); err != nil {
+		t.Fatalf("DeleteTryOn() error = %v", err)
 	}
 	var versions int
 	if err := db.QueryRow("select count(*) from try_on_versions where job_id='job-bob'").Scan(&versions); err != nil {
 		t.Fatal(err)
 	}
-	if versions != 1 {
-		t.Fatalf("versions after rejected delete = %d, want 1", versions)
+	if versions != 0 {
+		t.Fatalf("versions after delete = %d, want 0", versions)
 	}
 }
 

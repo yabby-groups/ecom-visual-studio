@@ -49,11 +49,7 @@ func stableID(value string) string {
 func newID(kind string) string { return stableID(fmt.Sprintf("%s-%d", kind, time.Now().UnixNano())) }
 
 func (s *Studio) Projects() ([]map[string]any, error) {
-	user, err := s.currentUser()
-	if err != nil {
-		return nil, err
-	}
-	rows, err := s.db.Query("select p.id,p.user_id,p.name,p.product,p.description,p.benefits,p.color,p.reference,p.created_at,count(a.id) from projects p left join assets a on a.project_id=p.id where p.user_id=? group by p.id order by p.created_at desc", user.ID)
+	rows, err := s.db.Query("select p.id,p.user_id,p.name,p.product,p.description,p.benefits,p.color,p.reference,p.created_at,count(a.id) from projects p left join assets a on a.project_id=p.id group by p.id order by p.created_at desc")
 	if err != nil {
 		return nil, err
 	}
@@ -71,11 +67,7 @@ func (s *Studio) Projects() ([]map[string]any, error) {
 }
 
 func (s *Studio) Project(id string) (map[string]any, error) {
-	user, err := s.currentUser()
-	if err != nil {
-		return nil, err
-	}
-	project, err := s.projectOwned(id, user.ID)
+	project, err := s.localProject(id)
 	if err != nil {
 		return nil, err
 	}
@@ -104,15 +96,11 @@ func (s *Studio) Project(id string) (map[string]any, error) {
 }
 
 func (s *Studio) CreateProject(input ProjectInput) (map[string]string, error) {
-	user, err := s.currentUser()
-	if err != nil {
-		return nil, err
-	}
 	if err := validateProjectInput(input); err != nil {
 		return nil, err
 	}
 	id := newID("project")
-	_, err = s.execDataWrite("insert into projects(id,user_id,name,product,description,benefits,color,reference,created_at) values(?,?,?,?,?,?,?,?,?)", id, user.ID, input.Name, input.Product, input.Description, input.Benefits, input.Color, input.Reference, time.Now().Unix())
+	_, err := s.execDataWrite("insert into projects(id,user_id,name,product,description,benefits,color,reference,created_at) values(?,?,?,?,?,?,?,?,?)", id, localWorkspaceID, input.Name, input.Product, input.Description, input.Benefits, input.Color, input.Reference, time.Now().Unix())
 	if err != nil {
 		return nil, err
 	}
@@ -120,11 +108,7 @@ func (s *Studio) CreateProject(input ProjectInput) (map[string]string, error) {
 }
 
 func (s *Studio) DeleteProject(id string) (map[string]bool, error) {
-	user, err := s.currentUser()
-	if err != nil {
-		return nil, err
-	}
-	if _, err = s.projectOwned(id, user.ID); err != nil {
+	if _, err := s.localProject(id); err != nil {
 		return nil, err
 	}
 	done, err := s.beginDataWrite()
@@ -143,7 +127,7 @@ func (s *Studio) DeleteProject(id string) (map[string]bool, error) {
 	if _, err = tx.Exec("delete from assets where project_id=?", id); err != nil {
 		return nil, err
 	}
-	if _, err = tx.Exec("delete from projects where id=? and user_id=?", id, user.ID); err != nil {
+	if _, err = tx.Exec("delete from projects where id=?", id); err != nil {
 		return nil, err
 	}
 	if err = tx.Commit(); err != nil {
@@ -153,12 +137,8 @@ func (s *Studio) DeleteProject(id string) (map[string]bool, error) {
 }
 
 func (s *Studio) UpdateAsset(id string, patch AssetPatch) (map[string]bool, error) {
-	user, err := s.currentUser()
-	if err != nil {
-		return nil, err
-	}
 	var owned int
-	err = s.db.QueryRow("select count(*) from assets a join projects p on p.id=a.project_id where a.id=? and p.user_id=?", id, user.ID).Scan(&owned)
+	err := s.db.QueryRow("select count(*) from assets where id=?", id).Scan(&owned)
 	if err != nil {
 		return nil, err
 	}
@@ -176,11 +156,7 @@ func (s *Studio) UpdateAsset(id string, patch AssetPatch) (map[string]bool, erro
 }
 
 func (s *Studio) Templates() ([]map[string]any, error) {
-	user, err := s.currentUser()
-	if err != nil {
-		return nil, err
-	}
-	rows, err := s.db.Query("select id,name,ratio,direction from custom_templates where user_id=? order by created_at desc", user.ID)
+	rows, err := s.db.Query("select id,name,ratio,direction from custom_templates order by created_at desc")
 	if err != nil {
 		return nil, err
 	}
@@ -196,26 +172,18 @@ func (s *Studio) Templates() ([]map[string]any, error) {
 	return result, rows.Err()
 }
 func (s *Studio) AddTemplate(input TemplateInput) (map[string]string, error) {
-	user, err := s.currentUser()
-	if err != nil {
-		return nil, err
-	}
 	if err := validateTemplateInput(input); err != nil {
 		return nil, err
 	}
 	id := newID("template")
-	_, err = s.execDataWrite("insert into custom_templates values(?,?,?,?,?,?)", id, user.ID, input.Name, input.Ratio, input.Direction, time.Now().Unix())
+	_, err := s.execDataWrite("insert into custom_templates values(?,?,?,?,?,?)", id, localWorkspaceID, input.Name, input.Ratio, input.Direction, time.Now().Unix())
 	if err != nil {
 		return nil, err
 	}
 	return map[string]string{"id": id}, nil
 }
 func (s *Studio) DeleteTemplate(id string) (map[string]bool, error) {
-	user, err := s.currentUser()
-	if err != nil {
-		return nil, err
-	}
-	result, err := s.execDataWrite("delete from custom_templates where id=? and user_id=?", id, user.ID)
+	result, err := s.execDataWrite("delete from custom_templates where id=?", id)
 	if err != nil {
 		return nil, err
 	}
@@ -227,13 +195,9 @@ func (s *Studio) DeleteTemplate(id string) (map[string]bool, error) {
 }
 
 func (s *Studio) LatestCreation() (map[string]any, error) {
-	user, err := s.currentUser()
-	if err != nil {
-		return nil, err
-	}
 	var projectID, title, path string
 	var created int64
-	err = s.db.QueryRow("select p.id,a.title,av.file_path,av.created_at from asset_versions av join assets a on a.id=av.asset_id join projects p on p.id=a.project_id where p.user_id=? order by av.created_at desc,av.id desc limit 1", user.ID).Scan(&projectID, &title, &path, &created)
+	err := s.db.QueryRow("select p.id,a.title,av.file_path,av.created_at from asset_versions av join assets a on a.id=av.asset_id join projects p on p.id=a.project_id order by av.created_at desc,av.id desc limit 1").Scan(&projectID, &title, &path, &created)
 	if errors.Is(err, sql.ErrNoRows) {
 		return map[string]any{"creation": nil}, nil
 	}
@@ -244,11 +208,7 @@ func (s *Studio) LatestCreation() (map[string]any, error) {
 }
 
 func (s *Studio) CreatePack(projectID string, input PackInput) (map[string]bool, error) {
-	user, err := s.currentUser()
-	if err != nil {
-		return nil, err
-	}
-	project, err := s.projectOwned(projectID, user.ID)
+	project, err := s.localProject(projectID)
 	if err != nil {
 		return nil, err
 	}
@@ -303,19 +263,15 @@ func (s *Studio) CreatePack(projectID string, input PackInput) (map[string]bool,
 }
 
 func (s *Studio) ResetPrompt(id string) (map[string]string, error) {
-	user, err := s.currentUser()
-	if err != nil {
-		return nil, err
-	}
 	var projectID, title, template string
-	err = s.db.QueryRow("select a.project_id,a.title,a.template from assets a join projects p on p.id=a.project_id where a.id=? and p.user_id=?", id, user.ID).Scan(&projectID, &title, &template)
+	err := s.db.QueryRow("select a.project_id,a.title,a.template from assets a join projects p on p.id=a.project_id where a.id=?", id).Scan(&projectID, &title, &template)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, errors.New("画面不存在")
 	}
 	if err != nil {
 		return nil, err
 	}
-	project, err := s.projectOwned(projectID, user.ID)
+	project, err := s.localProject(projectID)
 	if err != nil {
 		return nil, err
 	}
@@ -336,10 +292,10 @@ func makePrompt(project map[string]any, title, direction string) string {
 	return fmt.Sprintf("E-commerce commercial image. Purpose: %s. Art direction: %s. Product: %v. Description: %v. Benefits: %v. Campaign Style Lock: brand accent %v, premium commercial lighting, clean composition and conversion focus. Preserve exact product identity from the supplied reference. Leave intentional whitespace. No watermark, unrelated products, fake logo or unreadable extra text.", title, direction, project["product"], project["description"], project["benefits"], project["color"])
 }
 
-func (s *Studio) projectOwned(id, userID string) (map[string]any, error) {
+func (s *Studio) localProject(id string) (map[string]any, error) {
 	var pid, uid, name, product, description, benefits, color, reference string
 	var created int64
-	err := s.db.QueryRow("select id,user_id,name,product,description,benefits,color,reference,created_at from projects where id=? and user_id=?", id, userID).Scan(&pid, &uid, &name, &product, &description, &benefits, &color, &reference, &created)
+	err := s.db.QueryRow("select id,user_id,name,product,description,benefits,color,reference,created_at from projects where id=?", id).Scan(&pid, &uid, &name, &product, &description, &benefits, &color, &reference, &created)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, errors.New("项目不存在")
 	}

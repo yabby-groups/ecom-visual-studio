@@ -1,7 +1,8 @@
-import { type FormEvent, useRef, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { ArrowLeft, LoaderCircle } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { client } from "../api";
+import { useRequireAiAuth } from "../auth";
 import {
   AiProductAnalysis,
   type ProductAnalysisMode,
@@ -13,18 +14,44 @@ import { useAppStore } from "../store";
 import { fileUrl } from "../utils/assets";
 import "./NewProject.css";
 
+const NEW_PROJECT_DRAFT = "frameboard:new-project-draft";
+
+type NewProjectDraft = {
+  fields: Record<string, string>;
+  kind: string;
+  reference: string;
+  selectedTemplates: string[];
+  brandColor: string;
+};
+
+function loadDraft(): NewProjectDraft | null {
+  try {
+    return JSON.parse(sessionStorage.getItem(NEW_PROJECT_DRAFT) || "null");
+  } catch {
+    return null;
+  }
+}
+
 export function NewProject() {
+  const [draft] = useState(loadDraft);
   const templates = useAppStore((state) => state.templates);
   const refreshProjects = useAppStore((state) => state.refreshProjects);
   const navigate = useNavigate();
+  const requireAiAuth = useRequireAiAuth();
   const [searchParams] = useSearchParams();
   const selectedTemplate = templates.find(
     (template) => template.id === searchParams.get("template"),
   );
-  const [kind, setKind] = useState(selectedTemplate ? "custom" : "amazon");
-  const [reference, setReference] = useState("");
-  const [preview, setPreview] = useState("");
-  const [selectedTemplates, setSelectedTemplates] = useState<string[]>([]);
+  const [kind, setKind] = useState(
+    draft?.kind ?? (selectedTemplate ? "custom" : "amazon"),
+  );
+  const [reference, setReference] = useState(draft?.reference ?? "");
+  const [preview, setPreview] = useState(
+    draft?.reference ? fileUrl(draft.reference) : "",
+  );
+  const [selectedTemplates, setSelectedTemplates] = useState<string[]>(
+    draft?.selectedTemplates ?? [],
+  );
   const [error, setError] = useState("");
   const [referenceError, setReferenceError] = useState("");
   const [referenceBusy, setReferenceBusy] = useState(false);
@@ -32,9 +59,44 @@ export function NewProject() {
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisStatus, setAnalysisStatus] = useState("");
   const [analysisMode, setAnalysisMode] = useState<ProductAnalysisMode>(null);
-  const [brandColor, setBrandColor] = useState("#137a65");
-  const [pickerColor, setPickerColor] = useState("#137a65");
+  const [brandColor, setBrandColor] = useState(draft?.brandColor ?? "#137a65");
+  const [pickerColor, setPickerColor] = useState(
+    draft?.brandColor ?? "#137a65",
+  );
   const formRef = useRef<HTMLFormElement>(null);
+
+  useEffect(() => {
+    if (!draft || !formRef.current) return;
+    for (const [name, value] of Object.entries(draft.fields)) {
+      const field = formRef.current.elements.namedItem(name);
+      if (
+        field instanceof HTMLInputElement ||
+        field instanceof HTMLTextAreaElement
+      ) {
+        field.value = value;
+      }
+    }
+  }, [draft]);
+
+  function saveDraft() {
+    if (!formRef.current) return;
+    const fields = Object.fromEntries(
+      [...new FormData(formRef.current).entries()].map(([name, value]) => [
+        name,
+        String(value),
+      ]),
+    );
+    sessionStorage.setItem(
+      NEW_PROJECT_DRAFT,
+      JSON.stringify({
+        fields,
+        kind,
+        reference,
+        selectedTemplates,
+        brandColor,
+      }),
+    );
+  }
 
   async function upload() {
     setReferenceBusy(true);
@@ -73,6 +135,10 @@ export function NewProject() {
     }
     if (mode === "image" && !reference) {
       setError("请先上传或导入一张商品图片");
+      return;
+    }
+    if (!requireAiAuth()) {
+      saveDraft();
       return;
     }
     setAnalyzing(true);
@@ -127,6 +193,7 @@ export function NewProject() {
         template_id: kind === "custom" ? selectedTemplate?.id : undefined,
       });
       await refreshProjects();
+      sessionStorage.removeItem(NEW_PROJECT_DRAFT);
       navigate(`/projects/${project.id}`);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "创建失败");

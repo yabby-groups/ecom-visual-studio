@@ -19,17 +19,18 @@ export const useAppStore = create<AppState>((set) => ({
   templates: [],
   initializing: true,
   async initialize() {
-    try {
-      const { user } = await client.me();
-      if (!user) return set({ user: null, initializing: false });
-      const [projects, templates] = await Promise.all([
-        client.projects(),
-        client.templates(),
-      ]);
-      set({ user, projects, templates, initializing: false });
-    } catch {
-      set({ user: null, initializing: false });
-    }
+    const [session, projectResult, templateResult] = await Promise.allSettled([
+      client.me(),
+      client.projects(),
+      client.templates(),
+    ]);
+    set({
+      user: session.status === "fulfilled" ? session.value.user : null,
+      projects: projectResult.status === "fulfilled" ? projectResult.value : [],
+      templates:
+        templateResult.status === "fulfilled" ? templateResult.value : [],
+      initializing: false,
+    });
   },
   async refreshProjects() {
     set({ projects: await client.projects() });
@@ -38,6 +39,6 @@ export const useAppStore = create<AppState>((set) => ({
     set({ templates: await client.templates() });
   },
   setUser(user) {
-    set({ user, projects: [], templates: [] });
+    set({ user });
   },
 }));

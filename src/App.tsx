@@ -11,7 +11,6 @@ import { Workspace } from "./components/Workspace";
 import { useAppStore } from "./store";
 
 export function App() {
-  const user = useAppStore((state) => state.user);
   const initializing = useAppStore((state) => state.initializing);
   if (initializing)
     return (
@@ -19,7 +18,6 @@ export function App() {
         <LoaderCircle className="spin" size={28} />
       </div>
     );
-  if (!user) return <Login />;
   return (
     <Routes>
       <Route path="/" element={<Home />} />
@@ -30,6 +28,7 @@ export function App() {
       <Route path="/try-on" element={<TryOn />} />
       <Route path="/try-on/:id" element={<TryOn />} />
       <Route path="/settings" element={<SettingsPage />} />
+      <Route path="/login" element={<Login />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

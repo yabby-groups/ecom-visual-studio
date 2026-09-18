@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { client } from "../api";
+import { useRequireAiAuth } from "../auth";
 import { nativeImageRatios } from "../constants/imageSizes";
 import { Notice } from "./Notice";
 import { Shell } from "./Shell";
@@ -30,6 +31,7 @@ function formatDuration(seconds: number) {
 export function Workspace() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
+  const requireAiAuth = useRequireAiAuth();
   const templates = useAppStore((state) => state.templates);
   const [project, setProject] = useState<Project | null>(null);
   const [assetId, setAssetId] = useState("");
@@ -179,6 +181,7 @@ export function Workspace() {
     await load();
   }
   async function generate(one = true) {
+    if (!requireAiAuth()) return;
     try {
       if (one) setSelectedVersionPath(null);
       if (one && asset) await client.generateAsset(asset.id);
@@ -528,7 +531,10 @@ export function Workspace() {
             aria-label={`${project.name} 参考原图预览`}
             onClick={(event) => event.stopPropagation()}
           >
-            <img src={fileUrl(project.reference)} alt={`${project.name} 参考原图`} />
+            <img
+              src={fileUrl(project.reference)}
+              alt={`${project.name} 参考原图`}
+            />
             <button
               className="icon-button original-preview-close"
               type="button"
