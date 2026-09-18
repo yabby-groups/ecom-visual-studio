@@ -42,6 +42,47 @@ func TestSQLiteDSNEnablesWALAndBusyTimeout(t *testing.T) {
 	}
 }
 
+func TestSQLiteDSNUsesAbsoluteWindowsFileURI(t *testing.T) {
+	if got := sqliteDSNForOS("C:/Users/Alice/AppData/Roaming/EcomVisualStudio/studio.db", true); !strings.HasPrefix(got, "file:///C:/Users/Alice/") {
+		t.Fatalf("Windows DSN = %q, want absolute file URI", got)
+	}
+	if got := sqliteDSNForOS("//server/share/EcomVisualStudio/studio.db", true); !strings.HasPrefix(got, "file://server/share/") {
+		t.Fatalf("UNC DSN = %q, want UNC file URI", got)
+	}
+}
+
+func TestNewIDIsUniqueWithinOneClockTick(t *testing.T) {
+	const timestamp = int64(1726656000000000000)
+	first := newIDAt("asset", timestamp, 1)
+	second := newIDAt("asset", timestamp, 2)
+	if first == second {
+		t.Fatalf("asset IDs collide at one clock tick: %q", first)
+	}
+}
+
+func TestWriteDataLocationFileReplacesExistingRecord(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nested", dataLocationFile)
+	first := dataLocation{ActivePath: filepath.Join(t.TempDir(), "first")}
+	second := dataLocation{ActivePath: filepath.Join(t.TempDir(), "second"), CleanupPath: "old"}
+	if err := writeDataLocationFile(path, first); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeDataLocationFile(path, second); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got dataLocation
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got != second {
+		t.Fatalf("location = %#v, want %#v", got, second)
+	}
+}
+
 func TestLocalWorkspaceMigrationKeepsDataAvailableWithoutLogin(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")
 	if err != nil {
@@ -202,6 +243,30 @@ func TestStorageTargetCannotBeInsideCurrentStorage(t *testing.T) {
 	}
 	if isWithin(filepath.Join(root, "storage"), filepath.Join(root, "other")) {
 		t.Fatal("sibling was incorrectly recognized as storage child")
+	}
+}
+
+func TestServeFileUsesNativePathAndRejectsTraversal(t *testing.T) {
+	dataDir := t.TempDir()
+	file := filepath.Join(dataDir, "storage", "uploads", "sample.png")
+	if err := os.MkdirAll(filepath.Dir(file), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(file, []byte("image"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	studio := &Studio{dataDir: dataDir}
+	request := httptest.NewRequest(http.MethodGet, "/files/uploads/sample.png", nil)
+	response := httptest.NewRecorder()
+	studio.serveFile(response, request)
+	if response.Code != http.StatusOK || response.Body.String() != "image" {
+		t.Fatalf("served response = %d %q", response.Code, response.Body.String())
+	}
+	request = httptest.NewRequest(http.MethodGet, "/files/%2e%2e/studio.db", nil)
+	response = httptest.NewRecorder()
+	studio.serveFile(response, request)
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("traversal status = %d, want %d", response.Code, http.StatusNotFound)
 	}
 }
 

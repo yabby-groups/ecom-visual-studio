@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	goruntime "runtime"
 	"strings"
 	"sync"
 	"time"
@@ -100,7 +101,28 @@ func NewStudio() (*Studio, error) {
 }
 
 func sqliteDSN(path string) string {
-	databaseURL := &url.URL{Scheme: "file", Path: filepath.ToSlash(path)}
+	return sqliteDSNForOS(filepath.ToSlash(path), goruntime.GOOS == "windows")
+}
+
+func sqliteDSNForOS(path string, windows bool) string {
+	// SQLite interprets file:C:/... as a relative URI. Windows local absolute
+	// paths require the leading slash: file:///C:/... . UNC paths already begin
+	// with //, but their server belongs in the URI host.
+	databaseURL := &url.URL{Scheme: "file"}
+	if windows && strings.HasPrefix(path, "//") {
+		unc := strings.SplitN(strings.TrimPrefix(path, "//"), "/", 2)
+		if len(unc) == 2 && unc[0] != "" {
+			databaseURL.Host = unc[0]
+			databaseURL.Path = "/" + unc[1]
+		} else {
+			databaseURL.Path = path
+		}
+	} else {
+		if windows && !strings.HasPrefix(path, "/") {
+			path = "/" + path
+		}
+		databaseURL.Path = path
+	}
 	query := databaseURL.Query()
 	query.Add("_pragma", "busy_timeout(5000)")
 	query.Add("_pragma", "journal_mode(WAL)")
@@ -463,13 +485,14 @@ func (s *Studio) serveFile(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write(index)
 		return
 	}
-	rel := filepath.Clean(strings.TrimPrefix(r.URL.Path, "/files/"))
+	rel := filepath.Clean(filepath.FromSlash(strings.TrimPrefix(r.URL.Path, "/files/")))
 	if rel == "." || strings.HasPrefix(rel, "..") {
 		http.NotFound(w, r)
 		return
 	}
-	file := filepath.Join(s.dataDir, "storage", rel)
-	if !strings.HasPrefix(file, filepath.Join(s.dataDir, "storage")+string(os.PathSeparator)) {
+	storageRoot := filepath.Join(s.dataDir, "storage")
+	file := filepath.Join(storageRoot, rel)
+	if !isWithin(storageRoot, file) {
 		http.NotFound(w, r)
 		return
 	}

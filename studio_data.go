@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"time"
 )
 
@@ -42,11 +43,20 @@ var builtInTemplates = []map[string]any{
 	{"id": "poster-banner", "name": "卖点海报", "group": "场景展示", "ratio": "2:3", "direction": "突出商品，留出信息排版空间，适用于促销和传播。", "custom": false},
 }
 
+var idSequence atomic.Uint64
+
 func stableID(value string) string {
 	sum := sha256.Sum256([]byte(value))
 	return hex.EncodeToString(sum[:16])
 }
-func newID(kind string) string { return stableID(fmt.Sprintf("%s-%d", kind, time.Now().UnixNano())) }
+
+func newID(kind string) string {
+	return newIDAt(kind, time.Now().UnixNano(), idSequence.Add(1))
+}
+
+func newIDAt(kind string, timestamp int64, sequence uint64) string {
+	return stableID(fmt.Sprintf("%s-%d-%d", kind, timestamp, sequence))
+}
 
 func (s *Studio) Projects() ([]map[string]any, error) {
 	rows, err := s.db.Query("select p.id,p.user_id,p.name,p.product,p.description,p.benefits,p.color,p.reference,p.created_at,count(a.id) from projects p left join assets a on a.project_id=p.id group by p.id order by p.created_at desc")

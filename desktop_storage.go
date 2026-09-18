@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	goruntime "runtime"
 	"sort"
 	"strings"
 
@@ -79,8 +80,15 @@ func writeDataLocation(location dataLocation) error {
 	if err != nil {
 		return err
 	}
+	return writeDataLocationFile(path, location)
+}
+
+func writeDataLocationFile(path string, location dataLocation) error {
 	raw, err := json.Marshal(location)
 	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
 	tmp, err := os.CreateTemp(filepath.Dir(path), ".ecom-location-*")
@@ -89,15 +97,18 @@ func writeDataLocation(location dataLocation) error {
 	}
 	tmpName := tmp.Name()
 	defer os.Remove(tmpName)
-	if err := tmp.Chmod(0o600); err == nil {
-		_, err = tmp.Write(raw)
-	}
-	if closeErr := tmp.Close(); err == nil {
-		err = closeErr
-	}
-	if err != nil {
+	// Windows does not implement POSIX modes. A best-effort permission change
+	// must not prevent the location record from being written there.
+	_ = tmp.Chmod(0o600)
+	if _, err = tmp.Write(raw); err != nil {
+		_ = tmp.Close()
 		return err
 	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	// os.Rename replaces a file destination on Windows as well as Unix. Keeping
+	// both files in this directory also avoids cross-volume move restrictions.
 	return os.Rename(tmpName, path)
 }
 
@@ -329,7 +340,7 @@ func (s *Studio) migrateStorageDirectory(target string) (map[string]any, error) 
 	if err != nil {
 		return nil, fmt.Errorf("无法解析当前素材目录: %w", err)
 	}
-	if filepath.Clean(target) == filepath.Clean(current) {
+	if samePath(target, current) {
 		return nil, errors.New("所选目录已是当前存储目录")
 	}
 	if isWithin(storageRoot, target) {
@@ -428,6 +439,18 @@ func (s *Studio) beginDataWrite() (func(), error) {
 }
 
 func isWithin(parent, child string) bool {
-	rel, err := filepath.Rel(parent, child)
+	rel, err := filepath.Rel(comparisonPath(parent), comparisonPath(child))
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
+}
+
+func samePath(left, right string) bool {
+	return comparisonPath(left) == comparisonPath(right)
+}
+
+func comparisonPath(path string) string {
+	path = filepath.Clean(path)
+	if goruntime.GOOS == "windows" {
+		return strings.ToLower(path)
+	}
+	return path
 }
