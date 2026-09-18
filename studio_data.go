@@ -41,6 +41,7 @@ var builtInTemplates = []map[string]any{
 	{"id": "lifestyle-scene", "name": "生活场景", "group": "场景展示", "ratio": "2:3", "direction": "将商品置于真实使用环境，体现尺度、氛围和使用价值。", "custom": false},
 	{"id": "detail-macro", "name": "核心细节", "group": "场景展示", "ratio": "2:3", "direction": "特写呈现材质、结构、纹理和标志性细节。", "custom": false},
 	{"id": "poster-banner", "name": "卖点海报", "group": "场景展示", "ratio": "2:3", "direction": "突出商品，留出信息排版空间，适用于促销和传播。", "custom": false},
+	{"id": "multi-angle-grid", "name": "多角度展示", "group": "商品展示", "ratio": "1:1", "direction": "An orderly product grid showing useful angles and silhouette.", "custom": false},
 }
 
 var idSequence atomic.Uint64
@@ -241,7 +242,21 @@ func (s *Studio) CreatePack(projectID string, input PackInput) (map[string]bool,
 		case "custom":
 			items = []item{{"H1", "商品主图", "hero-image", "1:1", "A clear ecommerce hero shot on a clean background, centered and fully visible."}}
 		default:
-			items = []item{{"H1", "商品主图", "hero-image", "1:1", "A clean hero shot on #FFFFFF, product occupies 38%, with clear price-overlay whitespace."}, {"H2", "核心细节", "detail-macro", "1:1", "A macro close-up of material, texture and construction."}, {"H3", "使用场景", "lifestyle-scene", "1:1", "The product naturally used in a believable everyday setting."}, {"D1", "核心卖点", "poster-banner", "2:3", "A benefit-led product poster with reserved copy space."}}
+			items = []item{{"H1", "商品主图", "hero-image", "1:1", "A clean hero shot on #FFFFFF, product occupies 38%, with clear price-overlay whitespace."}, {"H2", "核心细节", "detail-macro", "1:1", "A macro close-up of material, texture and construction."}, {"H3", "使用场景", "lifestyle-scene", "1:1", "The product naturally used in a believable everyday setting."}, {"H4", "多角度展示", "multi-angle-grid", "1:1", "An orderly product grid showing useful angles and silhouette."}, {"D1", "核心卖点", "poster-banner", "2:3", "A benefit-led product poster with reserved copy space."}, {"D2", "品质特写", "detail-macro", "2:3", "An elevated detail scene emphasizing material and purchase confidence."}, {"D3", "购买场景", "lifestyle-scene", "2:3", "A polished lifestyle scene showing daily value."}}
+		}
+		if input.Kind == "amazon" {
+			seen := map[string]bool{}
+			for index, id := range input.SceneTemplateIDs {
+				if seen[id] {
+					continue
+				}
+				seen[id] = true
+				template := byID[id]
+				if template == nil || template["custom"] != true {
+					continue
+				}
+				items = append(items, item{fmt.Sprintf("C%d", index+1), template["name"].(string), id, template["ratio"].(string), template["direction"].(string)})
+			}
 		}
 	}
 	done, err := s.beginDataWrite()

@@ -146,6 +146,95 @@ func TestGenerateAssetRequiresLoginBeforeQueueing(t *testing.T) {
 	}
 }
 
+func TestCreatePackMatchesPythonPackageConstruction(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	studio := &Studio{db: db}
+	if err := studio.migrate(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("insert into projects(id,user_id,name,product,created_at) values('project-1',?,'Local','Desk',1)", localWorkspaceID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("insert into custom_templates(id,user_id,name,ratio,direction,created_at) values('scene-1',?,'Custom scene','3:2','Custom direction',1)", localWorkspaceID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := studio.CreatePack("project-1", PackInput{Kind: "amazon", SceneTemplateIDs: []string{"hero-image", "scene-1", "missing", "scene-1"}}); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := db.Query("select title,template,ratio from assets where project_id=? order by rowid", "project-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var got []string
+	for rows.Next() {
+		var title, template, ratio string
+		if err := rows.Scan(&title, &template, &ratio); err != nil {
+			t.Fatal(err)
+		}
+		got = append(got, title+"|"+template+"|"+ratio)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"H1 · 商品主图|hero-image|1:1",
+		"H2 · 核心细节|detail-macro|1:1",
+		"H3 · 使用场景|lifestyle-scene|1:1",
+		"H4 · 多角度展示|multi-angle-grid|1:1",
+		"D1 · 核心卖点|poster-banner|2:3",
+		"D2 · 品质特写|detail-macro|2:3",
+		"D3 · 购买场景|lifestyle-scene|2:3",
+		"C2 · Custom scene|scene-1|3:2",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("CreatePack() assets = %#v, want %#v", got, want)
+	}
+	var h4ID string
+	if err := db.QueryRow("select id from assets where project_id=? and template='multi-angle-grid'", "project-1").Scan(&h4ID); err != nil {
+		t.Fatal(err)
+	}
+	reset, err := studio.ResetPrompt(h4ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(reset["prompt"], "Art direction: An orderly product grid showing useful angles and silhouette.") {
+		t.Fatalf("ResetPrompt() H4 prompt = %q", reset["prompt"])
+	}
+	if _, err := studio.CreatePack("project-1", PackInput{Kind: "amazon", TemplateID: "scene-1", SceneTemplateIDs: []string{"scene-1"}}); err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	var title, template string
+	if err := db.QueryRow("select count(*), min(title), min(template) from assets where project_id=?", "project-1").Scan(&count, &title, &template); err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 || title != "T1 · Custom scene" || template != "scene-1" {
+		t.Fatalf("selected template assets = count %d, title %q, template %q", count, title, template)
+	}
+	for _, test := range []struct {
+		kind string
+		want int
+	}{
+		{kind: "social", want: 3},
+		{kind: "custom", want: 1},
+	} {
+		if _, err := studio.CreatePack("project-1", PackInput{Kind: test.kind}); err != nil {
+			t.Fatalf("CreatePack(%q): %v", test.kind, err)
+		}
+		if err := db.QueryRow("select count(*) from assets where project_id=?", "project-1").Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		if count != test.want {
+			t.Fatalf("CreatePack(%q) asset count = %d, want %d", test.kind, count, test.want)
+		}
+	}
+}
+
 func TestExportStorageCopiesConsistentDatabaseAndFiles(t *testing.T) {
 	source := t.TempDir()
 	if err := ensureDataDir(source); err != nil {
