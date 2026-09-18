@@ -616,7 +616,7 @@ func (s *Studio) Analyze(input map[string]string) (map[string]any, error) {
 	client := s.openAIClient(config, key)
 	response, err := client.Responses.New(context.Background(), responses.ResponseNewParams{
 		Model:       text,
-		Temperature: openai.Float(0.35),
+		// Temperature: openai.Float(0.35),
 		Input: responses.ResponseNewParamsInputUnion{OfInputItemList: responses.ResponseInputParam{
 			responses.ResponseInputItemParamOfMessage(content, responses.EasyInputMessageRoleUser),
 		}},
