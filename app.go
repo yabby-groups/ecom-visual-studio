@@ -127,6 +127,9 @@ func (s *Studio) migrate() error {
 		"create table if not exists try_on_versions (id text primary key, job_id text not null, file_path text not null, created_at integer not null)",
 		"create index if not exists projects_user_created_idx on projects(user_id, created_at desc)",
 		"create index if not exists assets_project_idx on assets(project_id)",
+		"create index if not exists try_on_jobs_user_created_idx on try_on_jobs(user_id, created_at desc)",
+		"create unique index if not exists try_on_versions_job_file_idx on try_on_versions(job_id, file_path)",
+		"create index if not exists try_on_versions_job_created_idx on try_on_versions(job_id, created_at desc)",
 	}
 	for _, statement := range statements {
 		if _, err := s.db.Exec(statement); err != nil {

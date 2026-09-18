@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -384,5 +385,118 @@ func TestDeleteTryOnDoesNotDeleteAnotherUsersVersions(t *testing.T) {
 	}
 	if versions != 1 {
 		t.Fatalf("versions after rejected delete = %d, want 1", versions)
+	}
+}
+
+func TestTryOnJobsReturnVersionHistoryInStableOrder(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	studio := &Studio{db: db, user: &User{ID: "alice"}}
+	if err := studio.migrate(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("insert into try_on_jobs(id,user_id,person_paths,garment_paths,generation_mode,ratio,status,file_path,created_at) values('job-1','alice','[\"uploads/person.png\"]','[\"uploads/garment.png\"]','combined','2:3','ready','generated/try-on/alice/current.png',2)"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("insert into try_on_versions(id,job_id,file_path,created_at) values('version-old','job-1','generated/try-on/alice/old.png',1),('version-current','job-1','generated/try-on/alice/current.png',2)"); err != nil {
+		t.Fatal(err)
+	}
+
+	job, err := studio.TryOnJob("job-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	versions := job["versions"].([]map[string]any)
+	if len(versions) != 2 || versions[0]["file_path"] != "generated/try-on/alice/current.png" || versions[1]["file_path"] != "generated/try-on/alice/old.png" {
+		t.Fatalf("TryOnJob versions = %#v", versions)
+	}
+	page, err := studio.TryOnJobs(12, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	items := page["items"].([]map[string]any)
+	if len(items) != 1 || len(items[0]["versions"].([]map[string]any)) != 2 {
+		t.Fatalf("TryOnJobs items = %#v", items)
+	}
+}
+
+func TestDeleteTryOnRejectsPendingJobsAndRemovesGeneratedFiles(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	dataDir := t.TempDir()
+	studio := &Studio{db: db, dataDir: dataDir, user: &User{ID: "alice"}}
+	if err := studio.migrate(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("insert into try_on_jobs(id,user_id,person_paths,garment_paths,generation_mode,ratio,status,created_at) values('job-pending','alice','[\"uploads/person.png\"]','[\"uploads/garment.png\"]','combined','2:3','generating',1)"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := studio.DeleteTryOn("job-pending"); err == nil || err.Error() != "正在生成的换装任务不能删除" {
+		t.Fatalf("DeleteTryOn() error = %v, want pending rejection", err)
+	}
+
+	path := "generated/try-on/alice/result.png"
+	file := filepath.Join(dataDir, "storage", filepath.FromSlash(path))
+	if err := os.MkdirAll(filepath.Dir(file), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(file, []byte("image"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("insert into try_on_jobs(id,user_id,person_paths,garment_paths,generation_mode,ratio,status,file_path,created_at) values('job-ready','alice','[\"uploads/person.png\"]','[\"uploads/garment.png\"]','combined','2:3','ready',?,2)", path); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("insert into try_on_versions(id,job_id,file_path,created_at) values('version-ready','job-ready',?,2)", path); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := studio.DeleteTryOn("job-ready"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(file); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("generated file still exists: %v", err)
+	}
+	var jobs, versions int
+	if err := db.QueryRow("select count(*) from try_on_jobs where id='job-ready'").Scan(&jobs); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow("select count(*) from try_on_versions where job_id='job-ready'").Scan(&versions); err != nil {
+		t.Fatal(err)
+	}
+	if jobs != 0 || versions != 0 {
+		t.Fatalf("remaining records: jobs=%d versions=%d", jobs, versions)
+	}
+}
+
+func TestTryOnMigrationCreatesVersionIndexes(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	studio := &Studio{db: db}
+	if err := studio.migrate(); err != nil {
+		t.Fatal(err)
+	}
+	for _, check := range []struct {
+		table string
+		index string
+	}{
+		{"try_on_jobs", "try_on_jobs_user_created_idx"},
+		{"try_on_versions", "try_on_versions_job_file_idx"},
+		{"try_on_versions", "try_on_versions_job_created_idx"},
+	} {
+		var found int
+		if err := db.QueryRow("select count(*) from pragma_index_list(?) where name=?", check.table, check.index).Scan(&found); err != nil {
+			t.Fatal(err)
+		}
+		if found != 1 {
+			t.Fatalf("missing index %s", check.index)
+		}
 	}
 }
