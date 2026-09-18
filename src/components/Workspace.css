@@ -110,18 +110,6 @@
   color: #fff;
   font-size: 16px;
 }
-.stage header .eyebrow {
-  margin: 0 0 2px;
-  font-size: 8px;
-}
-.stage header > div:last-child {
-  display: flex;
-  gap: 7px;
-}
-.stage header .button {
-  min-height: 34px;
-  font-size: 11px;
-}
 .workspace .button.secondary {
   border-color: #4f5c74;
   border-radius: 13px;
@@ -350,6 +338,23 @@
   color: #67ead0;
   font-size: 10px;
 }
+.workspace-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+.workspace-actions .button {
+  width: 100%;
+  min-height: 34px;
+  padding: 8px 6px;
+  font-size: 11px;
+}
+.workspace-actions .workspace-generate-button {
+  grid-column: 1 / -1;
+}
+.workspace-actions > :nth-last-child(2):nth-child(odd) {
+  grid-column: 1 / -1;
+}
 .controls fieldset {
   margin: 0;
   padding: 0;
@@ -436,20 +441,8 @@
     padding: 20px 34px;
   }
   .workspace {
-    grid-template-columns: 210px minmax(0, 1fr);
-    height: auto;
-    min-height: 0;
+    grid-template-columns: 190px minmax(0, 1fr) 284px;
     margin: 0 34px 34px;
-  }
-  .controls {
-    grid-column: 1 / -1;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    border-top: 1px solid rgba(255, 255, 255, 0.17);
-    border-left: 0;
-  }
-  .controls-head,
-  .controls > button {
-    grid-column: 1 / -1;
   }
 }
 
@@ -507,17 +500,8 @@
     display: block;
   }
   .stage header {
-    align-items: flex-start;
-    flex-direction: column;
     min-height: 0;
     padding: 16px;
-  }
-  .stage header > div:last-child {
-    width: 100%;
-    flex-wrap: wrap;
-  }
-  .stage header .button {
-    flex: 1 1 auto;
   }
   .original-preview-backdrop {
     padding: 18px;

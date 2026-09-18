@@ -499,6 +499,64 @@ func (s *Studio) serveFile(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, file)
 }
 
+func (s *Studio) generatedAssetPath(path string) (string, error) {
+	rel := filepath.Clean(filepath.FromSlash(path))
+	generatedRoot := filepath.Join(s.dataDir, "storage", "generated")
+	file := filepath.Join(s.dataDir, "storage", rel)
+	if rel == "." || strings.HasPrefix(rel, "..") || !strings.HasPrefix(rel, "generated"+string(filepath.Separator)) || !isWithin(generatedRoot, file) {
+		return "", errors.New("图片文件无效")
+	}
+	info, err := os.Stat(file)
+	if err != nil {
+		return "", err
+	}
+	if !info.Mode().IsRegular() {
+		return "", errors.New("图片文件无效")
+	}
+	return file, nil
+}
+
+func (s *Studio) DownloadAsset(path string) (bool, error) {
+	source, err := s.generatedAssetPath(path)
+	if err != nil {
+		return false, err
+	}
+	destination, err := runtime.SaveFileDialog(s.ctx, runtime.SaveDialogOptions{
+		Title:                "导出生成图片",
+		DefaultFilename:      filepath.Base(source),
+		CanCreateDirectories: true,
+		Filters: []runtime.FileFilter{{
+			DisplayName: "图片文件",
+			Pattern:     "*.png;*.jpg;*.jpeg;*.webp",
+		}},
+	})
+	if err != nil || destination == "" {
+		return false, err
+	}
+
+	from, err := os.Open(source)
+	if err != nil {
+		return false, err
+	}
+	defer from.Close()
+	sourceInfo, err := from.Stat()
+	if err != nil {
+		return false, err
+	}
+	if existing, statErr := os.Stat(destination); statErr == nil && os.SameFile(existing, sourceInfo) {
+		return false, errors.New("不能覆盖原始图片")
+	}
+	to, err := os.OpenFile(destination, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	if err != nil {
+		return false, err
+	}
+	defer to.Close()
+	if _, err = io.Copy(to, from); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func extensionFor(contentType string) string {
 	if ext, _ := mime.ExtensionsByType(strings.Split(contentType, ";")[0]); len(ext) > 0 {
 		return ext[0]

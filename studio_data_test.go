@@ -359,6 +359,27 @@ func TestServeFileUsesNativePathAndRejectsTraversal(t *testing.T) {
 	}
 }
 
+func TestGeneratedAssetPathOnlyAllowsRegularGeneratedFiles(t *testing.T) {
+	dataDir := t.TempDir()
+	file := filepath.Join(dataDir, "storage", "generated", "project", "result.png")
+	if err := os.MkdirAll(filepath.Dir(file), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(file, []byte("image"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	studio := &Studio{dataDir: dataDir}
+	path, err := studio.generatedAssetPath("generated/project/result.png")
+	if err != nil || path != file {
+		t.Fatalf("generated path = %q, %v", path, err)
+	}
+	for _, invalid := range []string{"uploads/reference.png", "generated/../uploads/reference.png", "generated/project"} {
+		if _, err := studio.generatedAssetPath(invalid); err == nil {
+			t.Fatalf("invalid generated path %q was accepted", invalid)
+		}
+	}
+}
+
 func TestStorageTargetSymlinkCannotResolveInsideCurrentStorage(t *testing.T) {
 	root := t.TempDir()
 	if err := ensureDataDir(root); err != nil {

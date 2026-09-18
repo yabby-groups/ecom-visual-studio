@@ -205,6 +205,16 @@ export function Workspace() {
       );
     }
   }
+  async function downloadAsset() {
+    if (!displayedPath) return;
+    try {
+      if (await client.downloadAsset(displayedPath)) {
+        showNotice("图片已导出");
+      }
+    } catch (reason) {
+      showNotice(reason instanceof Error ? reason.message : "导出失败", null);
+    }
+  }
   return (
     <Shell>
       <div className="workspace-header">
@@ -258,67 +268,6 @@ export function Workspace() {
               <header>
                 <div>
                   <h2>{asset.title}</h2>
-                </div>
-                <div>
-                  <button
-                    className="button secondary original-preview-button"
-                    type="button"
-                    disabled={!displayedPath}
-                    onClick={() => setOriginalOpen(true)}
-                    aria-label="查看生成大图"
-                  >
-                    <Eye size={16} />
-                    原图
-                  </button>
-                  {displayedPath && (
-                    <a
-                      className="button secondary"
-                      href={fileUrl(displayedPath)}
-                      download
-                    >
-                      <Download size={16} />
-                      下载
-                    </a>
-                  )}
-                  <button
-                    className="button secondary"
-                    type="button"
-                    disabled={!project.reference}
-                    onClick={() => setReferenceOpen(true)}
-                  >
-                    <Eye size={16} />
-                    参考图
-                  </button>
-                  <button
-                    className="button secondary"
-                    onClick={() => void rebuildPrompt()}
-                  >
-                    <WandSparkles size={16} />
-                    生成提示词
-                  </button>
-                  <button
-                    className="button secondary"
-                    onClick={() =>
-                      showNotice(
-                        asset.prompt.trim().length >= 20
-                          ? "Prompt 检查完成"
-                          : "Prompt 内容过短，请先生成提示词",
-                      )
-                    }
-                  >
-                    Prompt 检查
-                  </button>
-                  <button
-                    className="button primary"
-                    type="button"
-                    disabled={isPending(asset.status)}
-                    onClick={() => void generate()}
-                  >
-                    {isPending(asset.status) && (
-                      <LoaderCircle className="spin" size={16} />
-                    )}
-                    {asset.status === "ready" ? "创建新版本" : "生成画面"}
-                  </button>
                 </div>
               </header>
               <div className={`artboard ${displayedPath ? "with-image" : ""}`}>
@@ -422,6 +371,57 @@ export function Workspace() {
               </div>
             </section>
             <aside className="controls">
+              <div className="workspace-actions" aria-label="画面操作">
+                {displayedPath && (
+                  <button
+                    className="button secondary"
+                    type="button"
+                    onClick={() => void downloadAsset()}
+                  >
+                    <Download size={16} />
+                    导出
+                  </button>
+                )}
+                <button
+                  className="button secondary"
+                  type="button"
+                  disabled={!project.reference}
+                  onClick={() => setReferenceOpen(true)}
+                >
+                  <Eye size={16} />
+                  参考图
+                </button>
+                <button
+                  className="button secondary"
+                  onClick={() => void rebuildPrompt()}
+                >
+                  <WandSparkles size={16} />
+                  生成提示词
+                </button>
+                <button
+                  className="button secondary"
+                  onClick={() =>
+                    showNotice(
+                      asset.prompt.trim().length >= 20
+                        ? "Prompt 检查完成"
+                        : "Prompt 内容过短，请先生成提示词",
+                    )
+                  }
+                >
+                  Prompt 检查
+                </button>
+                <button
+                  className="button primary workspace-generate-button"
+                  type="button"
+                  disabled={isPending(asset.status)}
+                  onClick={() => void generate()}
+                >
+                  {isPending(asset.status) && (
+                    <LoaderCircle className="spin" size={16} />
+                  )}
+                  {asset.status === "ready" ? "创建新版本" : "生成画面"}
+                </button>
+              </div>
               <div className="controls-head">
                 <b>创作控制</b>
                 <span>自动保存</span>

@@ -68,6 +68,7 @@ export const client = {
   updateAsset: (id: string, body: Partial<Asset>) =>
     call("UpdateAsset", id, body),
   resetPrompt: (id: string) => call<{ prompt: string }>("ResetPrompt", id),
+  downloadAsset: (path: string) => call<boolean>("DownloadAsset", path),
   generateAsset: (id: string) => call("GenerateAsset", id),
   generatePack: (id: string) => call("GeneratePack", id),
   templates: () => call<Template[]>("Templates"),

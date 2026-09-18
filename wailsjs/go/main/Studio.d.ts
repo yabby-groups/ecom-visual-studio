@@ -22,6 +22,8 @@ export function DeleteTemplate(arg1:string):Promise<Record<string, boolean>>;
 
 export function DeleteTryOn(arg1:string):Promise<Record<string, boolean>>;
 
+export function DownloadAsset(arg1:string):Promise<boolean>;
+
 export function GenerateAsset(arg1:string):Promise<Record<string, boolean>>;
 
 export function GeneratePack(arg1:string):Promise<Record<string, boolean>>;

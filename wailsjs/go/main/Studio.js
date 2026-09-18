@@ -42,6 +42,10 @@ export function DeleteTryOn(arg1) {
   return window['go']['main']['Studio']['DeleteTryOn'](arg1);
 }
 
+export function DownloadAsset(arg1) {
+  return window['go']['main']['Studio']['DownloadAsset'](arg1);
+}
+
 export function GenerateAsset(arg1) {
   return window['go']['main']['Studio']['GenerateAsset'](arg1);
 }
