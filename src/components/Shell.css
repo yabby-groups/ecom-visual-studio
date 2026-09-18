@@ -61,6 +61,12 @@
   gap: 8px;
   margin-top: auto;
 }
+.app-version {
+  color: rgba(195, 204, 223, 0.58);
+  font-size: 10px;
+  line-height: 1;
+  text-align: center;
+}
 .app-main {
   grid-column: 2;
   min-width: 0;
