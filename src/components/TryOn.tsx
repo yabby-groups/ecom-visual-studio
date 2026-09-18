@@ -363,6 +363,15 @@ export function TryOn() {
     }
   }
 
+  async function exportImage() {
+    if (!displayedPath) return;
+    try {
+      await client.downloadAsset(displayedPath);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "导出失败");
+    }
+  }
+
   async function deleteJob(job: TryOnJob) {
     if (!window.confirm("删除该换装记录及其生成图片？原始参考图会保留。"))
       return;
@@ -531,53 +540,6 @@ export function TryOn() {
                 {selectedJob ? `${selectedJob.ratio} 全身试穿` : "试穿预览"}
               </h2>
             </div>
-            <div>
-              {selectedJob?.file_path && (
-                <>
-                  <button
-                    className="button secondary"
-                    onClick={() => setResultOpen(true)}
-                  >
-                    <Eye size={16} />
-                    原图
-                  </button>
-                  <a
-                    className="button secondary"
-                    href={fileUrl(selectedJob.file_path)}
-                    download
-                  >
-                    <Download size={16} />
-                    下载
-                  </a>
-                </>
-              )}
-              <button
-                className="button secondary"
-                disabled={!hasOriginals}
-                onClick={() => setOriginalsOpen(true)}
-              >
-                <Eye size={16} />
-                参考图
-              </button>
-              {selectedJob && (
-                <button
-                  className="button secondary"
-                  disabled={isPending(selectedJob.status)}
-                  onClick={() => void regenerate(selectedJob.id)}
-                >
-                  <RefreshCw size={16} />
-                  重新生成
-                </button>
-              )}
-              <button
-                className="button primary"
-                disabled={!canCreate}
-                onClick={() => void create()}
-              >
-                <Sparkles size={16} />
-                生成画面
-              </button>
-            </div>
           </header>
           <div className={`artboard ${displayedPath ? "with-image" : ""}`}>
             {displayedPath && (
@@ -679,6 +641,47 @@ export function TryOn() {
           </div>
         </section>
         <aside className="controls try-on-controls">
+          <div className="workspace-actions" aria-label="换装操作">
+            {displayedPath && (
+              <button
+                className="button secondary"
+                type="button"
+                onClick={() => void exportImage()}
+              >
+                <Download size={16} />
+                导出
+              </button>
+            )}
+            <button
+              className="button secondary"
+              type="button"
+              disabled={!hasOriginals}
+              onClick={() => setOriginalsOpen(true)}
+            >
+              <Eye size={16} />
+              参考图
+            </button>
+            {selectedJob && (
+              <button
+                className="button secondary"
+                type="button"
+                disabled={isPending(selectedJob.status)}
+                onClick={() => void regenerate(selectedJob.id)}
+              >
+                <RefreshCw size={16} />
+                重新生成
+              </button>
+            )}
+            <button
+              className="button primary workspace-generate-button"
+              type="button"
+              disabled={!canCreate}
+              onClick={() => void create()}
+            >
+              <Sparkles size={16} />
+              生成画面
+            </button>
+          </div>
           <div className="controls-head">
             <b>换装控制</b>
             <span>自动保存</span>
@@ -867,14 +870,14 @@ export function TryOn() {
           >
             <img src={fileUrl(displayedPath)} alt="换装生成大图" />
             <div className="try-on-result-actions">
-              <a
+              <button
                 className="button secondary"
-                href={fileUrl(displayedPath)}
-                download
+                type="button"
+                onClick={() => void exportImage()}
               >
                 <Download size={16} />
-                下载图片
-              </a>
+                导出图片
+              </button>
               <button
                 className="icon-button"
                 type="button"
