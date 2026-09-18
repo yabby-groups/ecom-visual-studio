@@ -72,6 +72,41 @@
   background: rgba(5, 8, 24, 0.28);
   color: #fff;
 }
+.template-ratio-select {
+  position: relative;
+  min-width: 0;
+}
+.custom-template-form .template-ratio-select select {
+  appearance: none;
+  cursor: pointer;
+  padding-right: 42px;
+  font-weight: 750;
+  letter-spacing: 0.01em;
+  transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+}
+.template-ratio-select svg {
+  position: absolute;
+  top: 50%;
+  right: 13px;
+  pointer-events: none;
+  color: #9ff1dd;
+  transform: translateY(-50%);
+  transition: transform 160ms ease, color 160ms ease;
+}
+.template-ratio-select:focus-within select {
+  border-color: #9ff1dd;
+  background: rgba(5, 8, 24, 0.5);
+  box-shadow: 0 0 0 3px rgba(159, 241, 221, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.13);
+  outline: none;
+}
+.template-ratio-select:focus-within svg {
+  color: #fff;
+  transform: translateY(-42%) rotate(180deg);
+}
+.custom-template-form select option {
+  background: #171a2b;
+  color: #fff;
+}
 .custom-template-form textarea {
   height: 42px;
   resize: vertical;

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   Copy,
+  ChevronDown,
   Download,
   Eye,
   ImagePlus,
@@ -467,18 +468,21 @@ export function Workspace() {
               </div>
               <label>
                 场景模板
-                <select
-                  value={asset.template}
-                  onChange={(event) =>
-                    void updateAsset({ template: event.target.value })
-                  }
-                >
-                  {templates.map((item) => (
-                    <option value={item.id} key={item.id}>
-                      {item.name}
-                    </option>
-                  ))}
-                </select>
+                <span className="workspace-template-select">
+                  <select
+                    value={asset.template}
+                    onChange={(event) =>
+                      void updateAsset({ template: event.target.value })
+                    }
+                  >
+                    {templates.map((item) => (
+                      <option value={item.id} key={item.id}>
+                        {item.name}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown size={16} aria-hidden="true" />
+                </span>
               </label>
               <fieldset>
                 <legend>画面比例</legend>
@@ -561,16 +565,19 @@ export function Workspace() {
             </div>
             <label>
               选择场景模板
-              <select
-                value={templateId}
-                onChange={(event) => setTemplateId(event.target.value)}
-              >
-                {templates.map((item) => (
-                  <option value={item.id} key={item.id}>
-                    {item.name} · {item.ratio}
-                  </option>
-                ))}
-              </select>
+              <span className="add-asset-select">
+                <select
+                  value={templateId}
+                  onChange={(event) => setTemplateId(event.target.value)}
+                >
+                  {templates.map((item) => (
+                    <option value={item.id} key={item.id}>
+                      {item.name} · {item.ratio}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown size={18} aria-hidden="true" />
+              </span>
             </label>
             <p>画面将追加到序列末尾，随后可编辑提示词并单独生成。</p>
             <div className="add-asset-actions">

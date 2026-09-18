@@ -1,4 +1,5 @@
 import { type FormEvent, useLayoutEffect, useRef, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { client } from "../api";
 import { nativeImageRatios } from "../constants/imageSizes";
@@ -175,13 +176,16 @@ export function Templates() {
             placeholder="模板名称，例如：户外跑步场景"
             required
           />
-          <select name="ratio" defaultValue="1:1">
-            {nativeImageRatios.map(({ ratio, label, size }) => (
-              <option value={ratio} key={ratio}>
-                {ratio} {label} · {size}
-              </option>
-            ))}
-          </select>
+          <div className="template-ratio-select">
+            <select name="ratio" defaultValue="1:1" aria-label="画面比例">
+              {nativeImageRatios.map(({ ratio, label, size }) => (
+                <option value={ratio} key={ratio}>
+                  {ratio} {label} · {size}
+                </option>
+              ))}
+            </select>
+            <ChevronDown aria-hidden="true" size={18} strokeWidth={2.5} />
+          </div>
           <textarea
             name="direction"
             maxLength={1800}

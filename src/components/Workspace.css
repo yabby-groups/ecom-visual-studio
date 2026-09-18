@@ -161,14 +161,35 @@
   color: #dce3ec;
   font-size: 13px;
 }
+.add-asset-select {
+  position: relative;
+  display: block;
+}
 .add-asset-dialog select {
   width: 100%;
   min-height: 42px;
-  border: 1px solid #526176;
+  appearance: none;
+  border: 1px solid #3f4b5d;
   border-radius: 11px;
-  padding: 0 11px;
-  background: #293240;
+  padding: 0 42px 0 13px;
+  background: #252d39;
   color: #f3f5f7;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.add-asset-dialog select:hover,
+.add-asset-dialog select:focus-visible {
+  border-color: #72cdb8;
+  outline: none;
+}
+.add-asset-select svg {
+  position: absolute;
+  top: 50%;
+  right: 14px;
+  transform: translateY(-50%);
+  color: #8fe1cd;
+  pointer-events: none;
 }
 .add-asset-dialog p {
   margin: 13px 0 22px;
@@ -465,15 +486,45 @@
   font-size: 12px;
   font-weight: 700;
 }
-.controls select,
 .controls textarea {
   border-color: #555d72;
   background: #202433;
   color: #fff;
   font-size: 11px;
 }
-.workspace textarea:focus,
-.workspace select:focus {
+.workspace-template-select {
+  position: relative;
+  display: block;
+}
+.controls .workspace-template-select select {
+  width: 100%;
+  min-height: 42px;
+  appearance: none;
+  border: 1px solid #3f4b5d;
+  border-radius: 11px;
+  padding: 0 38px 0 13px;
+  background: #252d39;
+  color: #f3f5f7;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.controls .workspace-template-select select:hover,
+.controls .workspace-template-select select:focus-visible {
+  border-color: #72cdb8;
+  outline: none;
+  box-shadow: 0 0 0 3px #48d8ba22;
+}
+.workspace-template-select svg {
+  position: absolute;
+  top: 50%;
+  right: 13px;
+  transform: translateY(-50%);
+  color: #8fe1cd;
+  pointer-events: none;
+}
+.workspace textarea:focus {
   border-color: #48d8ba;
   box-shadow: 0 0 0 3px #48d8ba22;
 }
