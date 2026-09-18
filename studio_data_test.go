@@ -663,8 +663,20 @@ func TestImportURLRetriesTimeoutAndStoresImage(t *testing.T) {
 		user:    &User{ID: "alice"},
 		httpClient: &http.Client{Transport: roundTripperFunc(func(request *http.Request) (*http.Response, error) {
 			attempts++
-			if got := request.Header.Get("User-Agent"); got != "Ecom Visual Studio/1.0" {
+			if got := request.Header.Get("User-Agent"); got != browserUserAgent {
 				t.Fatalf("User-Agent = %q", got)
+			}
+			wantHeaders := map[string]string{
+				"Accept":          "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+				"Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+				"Sec-Fetch-Dest":  "image",
+				"Sec-Fetch-Mode":  "no-cors",
+				"Sec-Fetch-Site":  "cross-site",
+			}
+			for name, want := range wantHeaders {
+				if got := request.Header.Get(name); got != want {
+					t.Fatalf("%s = %q, want %q", name, got, want)
+				}
 			}
 			if attempts == 1 {
 				return nil, context.DeadlineExceeded

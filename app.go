@@ -25,6 +25,7 @@ const (
 	imageImportTimeout     = 300 * time.Second
 	imageImportMaxAttempts = 3
 	localWorkspaceID       = "desktop-workspace"
+	browserUserAgent       = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
 )
 
 type Studio struct {
@@ -352,8 +353,11 @@ func (s *Studio) downloadPublicImage(rawURL string) ([]byte, string, error) {
 	client := *baseClient
 	client.Timeout = imageImportTimeout
 	client.CheckRedirect = func(request *http.Request, _ []*http.Request) error {
-		_, err := publicImageURL(request.URL.String())
-		return err
+		if _, err := publicImageURL(request.URL.String()); err != nil {
+			return err
+		}
+		setBrowserImageHeaders(request)
+		return nil
 	}
 
 	var lastErr error
@@ -362,7 +366,7 @@ func (s *Studio) downloadPublicImage(rawURL string) ([]byte, string, error) {
 		if err != nil {
 			return nil, "", fmt.Errorf("下载图片失败: %w", err)
 		}
-		request.Header.Set("User-Agent", "Ecom Visual Studio/1.0")
+		setBrowserImageHeaders(request)
 		response, err := client.Do(request)
 		if err == nil && response.StatusCode >= http.StatusOK && response.StatusCode < http.StatusMultipleChoices {
 			data, readErr := io.ReadAll(io.LimitReader(response.Body, maxUploadBytes+1))
@@ -386,6 +390,15 @@ func (s *Studio) downloadPublicImage(rawURL string) ([]byte, string, error) {
 		return nil, "", errors.New("图片下载超时，请稍后重新导入")
 	}
 	return nil, "", lastErr
+}
+
+func setBrowserImageHeaders(request *http.Request) {
+	request.Header.Set("User-Agent", browserUserAgent)
+	request.Header.Set("Accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8")
+	request.Header.Set("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
+	request.Header.Set("Sec-Fetch-Dest", "image")
+	request.Header.Set("Sec-Fetch-Mode", "no-cors")
+	request.Header.Set("Sec-Fetch-Site", "cross-site")
 }
 
 func retryableImageImportError(err error) bool {
