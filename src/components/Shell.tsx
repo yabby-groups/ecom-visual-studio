@@ -1,14 +1,22 @@
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import {
   FolderOpen,
   LayoutGrid,
+  Moon,
   Shirt,
   Settings,
   Sparkles,
+  Sun,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAppStore } from "../store";
 import { useRequireAiAuth } from "../auth";
+import {
+  getThemePreference,
+  resolvedTheme,
+  setThemePreference,
+  subscribeTheme,
+} from "../theme";
 import { Chat } from "./Chat";
 import { LogoutButton } from "./LogoutButton";
 import { Nav } from "./Nav";
@@ -19,6 +27,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
   const requireAiAuth = useRequireAiAuth();
   const [chatOpen, setChatOpen] = useState(false);
+  const themePreference = useSyncExternalStore(
+    subscribeTheme,
+    getThemePreference,
+  );
+  const isDark = resolvedTheme(themePreference) === "dark";
   const displayName = user ? user.profile.nick_name || user.username : "";
   return (
     <div className="app-shell shell">
@@ -65,6 +78,15 @@ export function Shell({ children }: { children: React.ReactNode }) {
         <Nav to="/settings" icon={<Settings />} label="设置" />
       </nav>
       <div className="shell-actions">
+        <button
+          className="theme-toggle"
+          type="button"
+          onClick={() => setThemePreference(isDark ? "light" : "dark")}
+          aria-label={isDark ? "切换为浅色主题" : "切换为深色主题"}
+          title={isDark ? "切换为浅色主题" : "切换为深色主题"}
+        >
+          {isDark ? <Sun size={18} /> : <Moon size={18} />}
+        </button>
         {user ? (
           <LogoutButton className="text-button">
             {user.profile.avatar_url ? (

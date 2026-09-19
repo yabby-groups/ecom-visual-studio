@@ -161,6 +161,40 @@
   align-items: center;
   gap: 10px;
 }
+.theme-toggle {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(171, 212, 200, 0.42);
+  border-radius: 12px;
+  background: rgba(37, 143, 123, 0.16);
+  color: #d9f5ec;
+  cursor: pointer;
+  transition: background 160ms ease, transform 160ms ease;
+}
+.theme-toggle:hover {
+  background: rgba(37, 143, 123, 0.32);
+  transform: translateY(-1px);
+}
+.theme-toggle:focus-visible {
+  outline: 2px solid #81d5c2;
+  outline-offset: 2px;
+}
+:root[data-theme="light"] .theme-toggle {
+  border-color: #bfd4cd;
+  background: #fff;
+  color: #0c654f;
+  box-shadow: 0 3px 10px rgba(23, 34, 41, 0.08);
+}
+:root[data-theme="light"] .theme-toggle:hover {
+  border-color: #78a99b;
+  background: #e4f1ed;
+}
+:root[data-theme="light"] .theme-toggle:focus-visible {
+  outline-color: #137a65;
+}
 .shell-actions .text-button {
   display: inline-flex;
   align-items: center;
@@ -308,6 +342,11 @@
   .shell-actions .chat-toggle,
   .shell-actions .icon-button {
     display: none;
+  }
+  .theme-toggle {
+    width: 42px;
+    height: 42px;
+    margin-right: 8px;
   }
   .shell-actions .create-button {
     min-height: 42px;
