@@ -21,8 +21,8 @@ func main() {
 
 	err = wails.Run(&options.App{
 		Title:     "Ecom Visual Studio",
-		Width:     1440,
-		Height:    900,
+		Width:     1280,
+		Height:    800,
 		MinWidth:  1100,
 		MinHeight: 720,
 		AssetServer: &assetserver.Options{
