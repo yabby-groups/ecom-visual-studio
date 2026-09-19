@@ -42,6 +42,13 @@ var builtInTemplates = []map[string]any{
 	{"id": "detail-macro", "name": "核心细节", "group": "场景展示", "ratio": "2:3", "direction": "特写呈现材质、结构、纹理和标志性细节。", "custom": false},
 	{"id": "poster-banner", "name": "卖点海报", "group": "场景展示", "ratio": "2:3", "direction": "突出商品，留出信息排版空间，适用于促销和传播。", "custom": false},
 	{"id": "multi-angle-grid", "name": "多角度展示", "group": "商品展示", "ratio": "1:1", "direction": "An orderly product grid showing useful angles and silhouette.", "custom": false},
+	{"id": "social-media", "name": "社媒配图", "group": "营销展示", "ratio": "1:1", "direction": "构建适合社交平台停留与转发的画面，突出视觉中心，并预留简短文案空间。", "custom": false},
+	{"id": "ugc-style", "name": "UGC 风格", "group": "场景展示", "ratio": "2:3", "direction": "以自然光和真实日常视角呈现商品，保留轻微不完美感，营造用户分享感。", "custom": false},
+	{"id": "infographic", "name": "卖点信息图", "group": "商品展示", "ratio": "3:2", "direction": "以产品主体搭配图标、标签和短文案区域，清楚组织卖点、参数和购买理由。", "custom": false},
+	{"id": "size-spec", "name": "尺寸规格", "group": "商品展示", "ratio": "3:2", "direction": "清楚展示产品的正侧视角、尺寸线、结构和规格说明，适配用户的购买判断。", "custom": false},
+	{"id": "livestream", "name": "直播展示", "group": "营销展示", "ratio": "16:9", "direction": "搭建适合直播讲解与带货的产品陈列场景，呈现镜头景别、互动区域和直播氛围。", "custom": false},
+	{"id": "packaging", "name": "包装展示", "group": "商品展示", "ratio": "3:2", "direction": "组合呈现包装正面、内衬、配件和品牌细节，突出开箱与礼赠体验。", "custom": false},
+	{"id": "seasonal-campaign", "name": "季节营销", "group": "营销展示", "ratio": "2:3", "direction": "围绕节日、季节或主题活动搭建画面，将季节元素、品牌色与商品陈列统一为活动传播视觉。", "custom": false},
 }
 
 var idSequence atomic.Uint64

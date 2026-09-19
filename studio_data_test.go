@@ -118,6 +118,43 @@ func TestLocalWorkspaceMigrationKeepsDataAvailableWithoutLogin(t *testing.T) {
 	}
 }
 
+func TestBuiltInTemplatesCoverEveryBundledTemplatePreview(t *testing.T) {
+	want := map[string]struct {
+		name  string
+		group string
+		ratio string
+	}{
+		"hero-image":        {"商品主图", "商品展示", "1:1"},
+		"lifestyle-scene":   {"生活场景", "场景展示", "2:3"},
+		"detail-macro":      {"核心细节", "场景展示", "2:3"},
+		"poster-banner":     {"卖点海报", "场景展示", "2:3"},
+		"multi-angle-grid":  {"多角度展示", "商品展示", "1:1"},
+		"social-media":      {"社媒配图", "营销展示", "1:1"},
+		"ugc-style":         {"UGC 风格", "场景展示", "2:3"},
+		"infographic":       {"卖点信息图", "商品展示", "3:2"},
+		"size-spec":         {"尺寸规格", "商品展示", "3:2"},
+		"livestream":        {"直播展示", "营销展示", "16:9"},
+		"packaging":         {"包装展示", "商品展示", "3:2"},
+		"seasonal-campaign": {"季节营销", "营销展示", "2:3"},
+	}
+	if len(builtInTemplates) != len(want) {
+		t.Fatalf("built-in template count = %d, want %d", len(builtInTemplates), len(want))
+	}
+	for _, template := range builtInTemplates {
+		id := template["id"].(string)
+		expected, ok := want[id]
+		if !ok {
+			t.Fatalf("unexpected built-in template %q", id)
+		}
+		if template["name"] != expected.name || template["group"] != expected.group || template["ratio"] != expected.ratio || template["custom"] != false {
+			t.Fatalf("template %q = %#v", id, template)
+		}
+		if direction, ok := template["direction"].(string); !ok || strings.TrimSpace(direction) == "" {
+			t.Fatalf("template %q has no direction", id)
+		}
+	}
+}
+
 func TestGenerateAssetRequiresLoginBeforeQueueing(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")
 	if err != nil {
