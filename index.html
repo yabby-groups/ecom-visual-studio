@@ -8,6 +8,17 @@
     />
     <link rel="icon" type="image/svg+xml" href="/ecom-visual-studio.svg" />
     <title>Ecom Visual Studio</title>
+    <script>
+      (function () {
+        var preference = localStorage.getItem("ecom-theme") || "system";
+        var dark =
+          preference === "dark" ||
+          (preference === "system" &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches);
+        document.documentElement.dataset.theme = dark ? "dark" : "light";
+        document.documentElement.style.colorScheme = dark ? "dark" : "light";
+      })();
+    </script>
   </head>
   <body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body>
 </html>

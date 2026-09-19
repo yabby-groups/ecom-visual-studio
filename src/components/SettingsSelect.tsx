@@ -75,9 +75,20 @@ export function SettingsSelect({
               className={option.value === value ? "is-selected" : ""}
               disabled={option.disabled}
               key={option.value}
-              onClick={() => {
-                onChange(option.value);
+              onPointerDown={(event) => {
+                // Wails can repaint during a theme switch before a click event
+                // is delivered. Commit selection on pointerdown so the menu
+                // always closes as part of the same interaction.
+                event.preventDefault();
                 setOpen(false);
+                onChange(option.value);
+              }}
+              onClick={(event) => {
+                // Keyboard activation does not produce a pointer event. Pointer
+                // clicks have a positive detail and were already handled above.
+                if (event.detail !== 0) return;
+                setOpen(false);
+                onChange(option.value);
               }}
             >
               {option.label}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useSyncExternalStore, useState } from "react";
 import {
   LoaderCircle,
   LogOut,
@@ -11,6 +11,11 @@ import {
 import { client } from "../api";
 import { useRequireAiAuth } from "../auth";
 import { useAppStore } from "../store";
+import {
+  getThemePreference,
+  setThemePreference,
+  subscribeTheme,
+} from "../theme";
 import type { StorageLocation, TokenSettings } from "../types";
 import { LogoutButton } from "./LogoutButton";
 import { Notice } from "./Notice";
@@ -61,6 +66,10 @@ export function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [storage, setStorage] = useState<StorageLocation | null>(null);
   const [migratingStorage, setMigratingStorage] = useState(false);
+  const themePreference = useSyncExternalStore(
+    subscribeTheme,
+    getThemePreference,
+  );
   const imageModels = models.filter((model) =>
     model.id.startsWith("gpt-image-"),
   );
@@ -274,6 +283,37 @@ export function SettingsPage() {
             </button>
           </section>
         )}
+        <section className="settings-card settings-appearance">
+          <div className="settings-card-heading">
+            <span
+              className="settings-card-icon settings-card-icon-violet"
+              aria-hidden="true"
+            >
+              <Settings size={19} />
+            </span>
+            <div>
+              <h2>外观主题</h2>
+              <p>选择界面配色。跟随系统时，会随设备的浅色或深色模式自动切换。</p>
+            </div>
+          </div>
+          <label>
+            主题
+            <SettingsSelect
+              name="theme"
+              value={themePreference}
+              options={[
+                { value: "system", label: "跟随系统" },
+                { value: "light", label: "浅色" },
+                { value: "dark", label: "深色" },
+              ]}
+              onChange={(value) =>
+                setThemePreference(
+                  value as "system" | "light" | "dark",
+                )
+              }
+            />
+          </label>
+        </section>
         <section className="settings-storage settings-card">
           <div className="settings-card-heading">
             <span

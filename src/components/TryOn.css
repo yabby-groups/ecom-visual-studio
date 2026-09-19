@@ -1,6 +1,17 @@
 .try-on-header .eyebrow {
   color: #9ff0d9;
 }
+.workspace-header.try-on-header {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.workspace-header.try-on-header > div {
+  grid-column: 1;
+}
+.workspace-header.try-on-header > .button {
+  grid-column: 2;
+  width: auto;
+  min-width: 0;
+}
 .try-on-workspace {
   grid-template-columns: 230px minmax(400px, 1fr) 310px;
 }

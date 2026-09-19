@@ -1,5 +1,4 @@
 import {
-  ArrowLeft,
   Download,
   Eye,
   ImagePlus,
@@ -437,10 +436,6 @@ export function TryOn() {
   return (
     <Shell>
       <header className="workspace-header try-on-header">
-        <button className="back-link" onClick={() => navigate("/")}>
-          <ArrowLeft size={17} />
-          创作台
-        </button>
         <div>
           <span className="eyebrow">AI TRY-ON</span>
           <h1>换装工作台</h1>

@@ -442,6 +442,88 @@ select:focus {
     bottom: 15px;
   }
 }
+
+/* Light theme is deliberately kept at the end: the Prism Studio skin above
+   contains page-local dark surfaces that need an explicit counterpart. */
+:root[data-theme="light"] {
+  --ink: #172229;
+  --muted: #667477;
+  --line: #d9e0de;
+  --paper: #f4f6f4;
+  --white: #fff;
+  --canvas: #e9edeb;
+  --accent: #137a65;
+  --accent-dark: #0c654f;
+  --soft: #e4f1ed;
+  color: var(--ink);
+  background: var(--paper);
+}
+
+:root[data-theme="light"] body {
+  background: var(--paper);
+  color: var(--ink);
+}
+:root[data-theme="light"] body::before { display: none; }
+:root[data-theme="light"] .rail.sidebar,
+:root[data-theme="light"] .mobile-bar,
+:root[data-theme="light"] .mobile-nav { background: #172229; }
+:root[data-theme="light"] .rail.sidebar { border-color: #d2dcda; box-shadow: 0 12px 32px rgba(23, 34, 41, .14); }
+:root[data-theme="light"] .topbar,
+:root[data-theme="light"] .shortcut-card,
+:root[data-theme="light"] .template-card,
+:root[data-theme="light"] .project-preview,
+:root[data-theme="light"] .library-art-grid .project-preview { background: #fff; }
+:root[data-theme="light"] .library-heading h1,
+:root[data-theme="light"] .library-empty b,
+:root[data-theme="light"] .settings-intro h1,
+:root[data-theme="light"] .settings-card h2,
+:root[data-theme="light"] .settings-form label,
+:root[data-theme="light"] .custom-template-form span,
+:root[data-theme="light"] .creation-form .pack-composer-head h3,
+:root[data-theme="light"] .creation-form .pack-scene-option b { color: var(--ink); }
+:root[data-theme="light"] .library-heading p:last-child,
+:root[data-theme="light"] .library-empty,
+:root[data-theme="light"] .settings-intro p,
+:root[data-theme="light"] .settings-card p,
+:root[data-theme="light"] .custom-template-form small,
+:root[data-theme="light"] .creation-form .pack-composer-head small,
+:root[data-theme="light"] .creation-form .pack-scene-option small,
+:root[data-theme="light"] .creation-form .pack-composer-empty { color: var(--muted); }
+:root[data-theme="light"] .filter { background: #fff; color: var(--muted); }
+:root[data-theme="light"] .filter.active { background: var(--soft); color: var(--accent-dark); }
+:root[data-theme="light"] .library-empty,
+:root[data-theme="light"] .custom-template-form,
+:root[data-theme="light"] .settings-card { border-color: var(--line); background: #fff; box-shadow: 0 8px 24px rgba(23, 34, 41, .06); }
+:root[data-theme="light"] .custom-template-form input,
+:root[data-theme="light"] .custom-template-form select,
+:root[data-theme="light"] .custom-template-form textarea,
+:root[data-theme="light"] .settings-form select,
+:root[data-theme="light"] .settings-select-trigger,
+:root[data-theme="light"] .settings-select-menu { border-color: #cbd7d3; background: #fff; color: var(--ink); }
+:root[data-theme="light"] .settings-select-menu button { color: var(--ink); }
+:root[data-theme="light"] .settings-select-menu button:hover,
+:root[data-theme="light"] .settings-select-menu button:focus-visible,
+:root[data-theme="light"] .settings-select-menu button.is-selected { background: var(--soft); color: var(--accent-dark); }
+:root[data-theme="light"] .creation-form .pack-composer { border-color: #c7d9d3; background: #f7fbf9; box-shadow: none; }
+:root[data-theme="light"] .creation-form .pack-scene-option { border-color: #d3dfda; background: #fff; }
+:root[data-theme="light"] .creation-form .pack-scene-option:hover { border-color: #86afa3; background: #f4faf7; }
+:root[data-theme="light"] .creation-form .pack-scene-option.is-selected { border-color: var(--accent); background: var(--soft); }
+:root[data-theme="light"] .creation-form .pack-scene-check { border-color: #9aaca7; background: #fff; }
+:root[data-theme="light"] .creation-form .pack-scene-option.is-selected .pack-scene-check { box-shadow: inset 0 0 0 4px #fff; }
+:root[data-theme="light"] .workspace,
+:root[data-theme="light"] .workspace-main,
+:root[data-theme="light"] .try-on-page { color: var(--ink); background: var(--paper); }
+:root[data-theme="light"] .workspace-sidebar,
+:root[data-theme="light"] .workspace-inspector,
+:root[data-theme="light"] .try-on-panel,
+:root[data-theme="light"] .chat-panel,
+:root[data-theme="light"] .confirm-dialog { border-color: #d3dfda; background: #fff; color: var(--ink); box-shadow: 0 20px 60px rgba(23, 34, 41, .18); }
+:root[data-theme="light"] .login-page { background: #edf4f1; }
+:root[data-theme="light"] .login-card { border-color: #d3dfda; background: #fff; box-shadow: 0 20px 60px rgba(23, 34, 41, .14); }
+:root[data-theme="light"] .login-card h1,
+:root[data-theme="light"] .login-card label { color: var(--ink); }
+:root[data-theme="light"] .login-card p { color: var(--muted); }
+:root[data-theme="light"] .login-card input { border-color: #cbd7d3; background: #fff; color: var(--ink); }
 @media (max-width: 520px) {
   .topbar > .button {
     padding: 8px 10px;
@@ -498,7 +580,7 @@ select:focus {
 }
 
 /* Prism Studio skin from the running Frameboard reference. */
-:root {
+:root[data-theme="dark"] {
   --ink: #f7f8ff;
   --muted: #bac3d8;
   --line: rgba(255, 255, 255, 0.18);
@@ -511,11 +593,11 @@ select:focus {
   color: var(--ink);
   background: var(--paper);
 }
-body {
+:root[data-theme="dark"] body {
   background: #101325;
   color: var(--ink);
 }
-body::before {
+:root[data-theme="dark"] body::before {
   content: "";
   position: fixed;
   inset: 0;
@@ -898,4 +980,629 @@ button:active {
   .settings-form .form-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* Keep text contrast deterministic in the light skin.  The original Prism
+   rules intentionally use pale text, so shared text controls need explicit
+   light counterparts instead of inheriting those values. */
+:root[data-theme="light"] .shell-actions .text-button {
+  color: #176b5b;
+}
+:root[data-theme="light"] .shell-actions .text-button:hover {
+  color: #0c4d40;
+}
+:root[data-theme="light"] .shell-actions .icon-button {
+  border-color: #86afa3;
+  background: #e4f1ed;
+  color: #0c5648;
+}
+:root[data-theme="light"] .shell-actions .chat-toggle {
+  border-color: #74afa2;
+  background: #e4f1ed;
+  color: #0c5648;
+}
+:root[data-theme="light"] .shell-actions .chat-toggle:disabled {
+  border-color: #b7d2cb;
+  background: #edf5f2;
+  color: #52746c;
+  opacity: 1;
+}
+:root[data-theme="light"] .settings-intro .eyebrow,
+:root[data-theme="light"] .page .eyebrow { color: #0c7b67; }
+:root[data-theme="light"] main :is(h1, h2, h3, h4, p, label, small, .text-button) {
+  color: var(--ink);
+}
+:root[data-theme="light"] main :is(.muted, .page-lead, .settings-card p, .settings-intro p, .library-heading p:last-child, .custom-template-form small, .creation-form .pack-composer-head small, .creation-form .pack-scene-option small, .creation-form .pack-composer-empty) {
+  color: var(--muted);
+}
+:root[data-theme="light"] main .button.primary,
+:root[data-theme="light"] main .create-button {
+  color: #fff;
+}
+:root[data-theme="light"] main .settings-card-icon,
+:root[data-theme="light"] main .settings-card-icon svg,
+:root[data-theme="light"] main .eyebrow,
+:root[data-theme="light"] main .text-link { color: var(--accent); }
+:root[data-theme="light"] .settings-storage-path { color: #526a66; }
+:root[data-theme="light"] .settings-storage-button {
+  border-color: #d6a94d;
+  background: #fff8e8;
+  color: #8a5a09;
+}
+:root[data-theme="light"] .settings-storage-button:disabled {
+  border-color: #d9c18e;
+  background: #fffaf0;
+  color: #896d36;
+  opacity: 1;
+}
+:root[data-theme="light"] .rail.sidebar,
+:root[data-theme="light"] .mobile-bar,
+:root[data-theme="light"] .mobile-nav {
+  border-color: #d9e3e0;
+  background: rgba(255, 255, 255, .94);
+  box-shadow: 0 12px 32px rgba(23, 34, 41, .10);
+}
+:root[data-theme="light"] .rail .nav-link,
+:root[data-theme="light"] .mobile-nav .nav-link,
+:root[data-theme="light"] .rail-bottom .nav-link,
+:root[data-theme="light"] .app-version {
+  color: #5f706c;
+}
+:root[data-theme="light"] .rail .nav-link:hover,
+:root[data-theme="light"] .rail .nav-link.active,
+:root[data-theme="light"] .rail .nav-link[aria-current="page"],
+:root[data-theme="light"] .mobile-nav .nav-link.active,
+:root[data-theme="light"] .mobile-nav .nav-link[aria-current="page"] {
+  background: #e4f1ed;
+  color: #0c6a58;
+}
+:root[data-theme="light"] .topbar {
+  border-bottom: 1px solid #d9e3e0;
+  background: rgba(255, 255, 255, .94);
+  box-shadow: 0 8px 20px rgba(23, 34, 41, .08);
+}
+:root[data-theme="light"] .topbar > strong { color: #30423e; }
+:root[data-theme="light"] .project-card span,
+:root[data-theme="light"] .project-card p,
+:root[data-theme="light"] .project-card > svg,
+:root[data-theme="light"] .library-art-grid .project-card span,
+:root[data-theme="light"] .library-art-grid .project-card p {
+  color: #667a76;
+}
+
+/* Light mode uses semantic surfaces rather than compensating for the dark
+   Prism rules one selector at a time. Keep these tokens local to the resolved
+   theme so the dark skin remains independent. */
+:root[data-theme="light"] {
+  --ink: #29241f;
+  --muted: #6c6358;
+  --line: #ded5c9;
+  --paper: #f7f3eb;
+  --white: #fffdf9;
+  --canvas: #eee7dc;
+  --surface-raised: #fffdf9;
+  --surface-muted: #f5eee2;
+  --surface-inset: #ebe2d5;
+  --accent: #a46416;
+  --accent-dark: #75420a;
+  --soft: #f7e6c3;
+  --success: #176a55;
+  --success-soft: #e2f0e9;
+  --warning: #965e0c;
+  --warning-soft: #f9ebcc;
+  --danger: #ad3028;
+  --danger-soft: #f9e3df;
+  --shadow: rgba(55, 41, 25, 0.12);
+  --scrim: rgba(42, 32, 23, 0.48);
+}
+
+:root[data-theme="light"] :is(button, input, textarea, select):focus-visible {
+  outline: 3px solid rgba(164, 100, 22, 0.28);
+  outline-offset: 2px;
+}
+
+:root[data-theme="light"] :is(.button.primary, .create-button, .confirm-dialog-confirm) {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fffdf9;
+  box-shadow: 0 8px 20px rgba(164, 100, 22, 0.2);
+}
+
+:root[data-theme="light"] :is(.button.primary, .create-button, .confirm-dialog-confirm):hover:not(:disabled) {
+  border-color: var(--accent-dark);
+  background: var(--accent-dark);
+}
+
+:root[data-theme="light"] :is(.button.secondary, .icon-button) {
+  border-color: var(--line);
+  background: var(--surface-raised);
+  color: var(--ink);
+}
+
+:root[data-theme="light"] :is(.button.secondary, .icon-button):hover:not(:disabled) {
+  border-color: #c7a76d;
+  background: var(--soft);
+}
+
+:root[data-theme="light"] .form-error,
+:root[data-theme="light"] .confirm-dialog-error,
+:root[data-theme="light"] .try-on-url-error,
+:root[data-theme="light"] .reference-url-error {
+  color: var(--danger);
+}
+
+/* Navigation and ordinary page surfaces. */
+:root[data-theme="light"] :is(.rail.sidebar, .mobile-bar, .mobile-nav, .topbar) {
+  border-color: var(--line);
+  background: rgba(241, 235, 224, 0.96);
+  box-shadow: 0 6px 18px rgba(55, 41, 25, 0.08);
+}
+
+:root[data-theme="light"] .topbar.topbar {
+  background: var(--paper);
+  box-shadow: none;
+}
+
+
+:root[data-theme="light"] :is(.brand, .topbar > strong, .workspace-header, .workspace-header h1) {
+  color: var(--ink);
+}
+
+:root[data-theme="light"] :is(.nav-link, .app-version, .back-link) {
+  color: var(--muted);
+}
+
+:root[data-theme="light"] :is(.nav-link:hover, .nav-link.active, .nav-link[aria-current="page"]) {
+  background: var(--soft);
+  color: var(--accent-dark);
+}
+
+:root[data-theme="light"] :is(.rail .nav-link:hover, .rail .nav-link.active, .rail .nav-link[aria-current="page"], .mobile-nav .nav-link:hover, .mobile-nav .nav-link.active, .mobile-nav .nav-link[aria-current="page"]) {
+  background: var(--soft);
+  color: var(--accent-dark);
+}
+
+:root[data-theme="light"] :is(.studio-hero, .shortcut-section, .gallery-section, .content-section, .create-page, .library-page, .settings-page) {
+  color: var(--ink);
+}
+
+:root[data-theme="light"] :is(.shortcut-card, .template-card, .project-preview, .library-empty, .settings-card, .custom-template-form, .creation-form .step) {
+  border-color: var(--line);
+  background: var(--surface-raised);
+  box-shadow: 0 8px 24px rgba(55, 41, 25, 0.06);
+}
+
+:root[data-theme="light"] :is(.shortcut-card:hover, .template-card:hover, .project-card:hover) {
+  border-color: #c7a76d;
+  background: #fff8eb;
+}
+
+:root[data-theme="light"] :is(.hero-visual, .visual-empty, .first-empty) {
+  border-color: var(--line);
+  background: var(--surface-muted);
+  color: var(--ink);
+  box-shadow: none;
+}
+
+:root[data-theme="light"] .hero-visual::after {
+  background: linear-gradient(180deg, transparent 52%, rgba(42, 32, 23, 0.32));
+}
+
+:root[data-theme="light"] :is(.visual-empty span, .visual-empty b, .first-empty h3, .first-empty p) {
+  color: var(--ink);
+}
+
+:root[data-theme="light"] .studio-hero .hero-copy {
+  color: var(--muted) !important;
+}
+
+:root[data-theme="light"] :is(.shortcut-card strong, .shortcut-card small, .shortcut-card > span, .shortcut-card i) {
+  color: var(--ink);
+}
+
+:root[data-theme="light"] :is(.shortcut-number, .shortcut-card i) {
+  color: var(--accent) !important;
+}
+
+:root[data-theme="light"] :is(.template-tile, .template-tile > div) {
+  border-color: var(--line);
+  background: var(--surface-raised);
+  color: var(--ink);
+  box-shadow: 0 8px 20px rgba(55, 41, 25, 0.06);
+}
+
+:root[data-theme="light"] :is(.template-tile:hover, .template-tile:focus-visible) {
+  border-color: #c7a76d;
+  background: #fff8eb;
+}
+
+:root[data-theme="light"] :is(.template-tile b, .template-tile p, .template-tile small, .template-tile span) {
+  color: var(--ink);
+}
+
+:root[data-theme="light"] :is(.template-tile small, .template-tile p) {
+  color: var(--muted);
+}
+
+:root[data-theme="light"] :is(.filter, .goal, .creation-form .pack-scene-option, .creation-form .analysis-button, .creation-form .reference-source-tabs button) {
+  border-color: var(--line);
+  background: var(--surface-raised);
+  color: var(--ink);
+}
+
+:root[data-theme="light"] :is(.filter.active, .goal.active, .creation-form .pack-scene-option.is-selected, .creation-form .reference-source-tabs button.active) {
+  border-color: #c58a31;
+  background: var(--soft);
+  color: var(--accent-dark);
+  box-shadow: 0 0 0 3px rgba(164, 100, 22, 0.1);
+}
+
+/* Creation forms and reference tools. */
+:root[data-theme="light"] :is(.creation-form, .creation-form .step-body, .creation-form label, .creation-form .step-body h2, .creation-form .ai-analysis h3) {
+  color: var(--ink);
+}
+
+:root[data-theme="light"] :is(.creation-form input:not([type="file"]), .creation-form textarea, .creation-form .reference-input-panel, .creation-form .reference-url-form, .creation-form .analysis-button, .creation-form .pack-composer) {
+  border-color: var(--line);
+  background: var(--surface-raised);
+  color: var(--ink);
+}
+
+:root[data-theme="light"] .creation-form .reference-source-tabs {
+  border-color: var(--line);
+  background: var(--surface-inset);
+  box-shadow: none;
+}
+
+:root[data-theme="light"] .creation-form .reference-source-tabs button {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  box-shadow: none;
+}
+
+:root[data-theme="light"] .creation-form .reference-source-tabs button.active {
+  background: var(--soft);
+  color: var(--accent-dark);
+  box-shadow: none;
+}
+
+:root[data-theme="light"] :is(.creation-form .reference-empty, .creation-form .reference-upload-zone, .creation-form .reference-url-form) {
+  border-color: #c7a76d;
+  background: var(--surface-muted);
+  color: var(--accent-dark);
+}
+
+:root[data-theme="light"] :is(.creation-form .reference-empty b, .creation-form .reference-upload-zone b, .creation-form .analysis-button b) {
+  color: var(--ink);
+}
+
+:root[data-theme="light"] :is(.creation-form .reference-empty span, .creation-form .reference-upload-zone small, .creation-form .analysis-button small, .creation-form .step-body > p, .creation-footer span) {
+  color: var(--muted);
+}
+
+:root[data-theme="light"] :is(.creation-form .goal i, .creation-form .pack-composer-head strong) {
+  border-color: #d6bb86;
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+:root[data-theme="light"] .creation-form .goal b {
+  color: var(--ink);
+}
+
+:root[data-theme="light"] .creation-form .goal span {
+  color: var(--muted);
+}
+
+:root[data-theme="light"] .creation-form .goal i {
+  border-color: transparent;
+  background: transparent;
+  color: var(--accent-text) !important;
+}
+
+:root[data-theme="light"] :is(.creation-form .step-index, .creation-form .analysis-kicker) {
+  border-color: transparent;
+  background: transparent;
+  color: var(--accent-text);
+}
+
+:root[data-theme="light"] .creation-footer {
+  border-color: var(--line);
+  background: var(--surface-inset);
+  color: var(--muted);
+}
+
+:root[data-theme="light"] :is(.creation-form .ai-analysis, .creation-form .analysis-status) {
+  border-color: #d6bb86;
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+/* Settings uses color as a state cue, with the same warm scale as the rest of
+   the light interface instead of the dark skin's neon status blocks. */
+:root[data-theme="light"] :is(.settings-form select, .settings-select-trigger, .settings-select-menu) {
+  border-color: var(--line);
+  background: var(--surface-raised);
+  color: var(--ink);
+}
+
+:root[data-theme="light"] :is(.settings-select-menu button, .settings-form label, .settings-card h2) {
+  color: var(--ink);
+}
+
+:root[data-theme="light"] :is(.settings-select-menu button:hover, .settings-select-menu button:focus-visible, .settings-select-menu button.is-selected) {
+  background: var(--soft);
+  color: var(--accent-dark);
+}
+
+:root[data-theme="light"] .settings-card-icon {
+  background: var(--soft);
+  color: var(--accent-dark);
+}
+
+:root[data-theme="light"] .settings-card-icon-violet {
+  background: #eee8e0;
+  color: #66584b;
+}
+
+:root[data-theme="light"] .settings-card-icon-warm,
+:root[data-theme="light"] .settings-card-icon-storage {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+:root[data-theme="light"] :is(.settings-storage-button, .settings-storage-button:disabled) {
+  border-color: #d6bb86;
+  background: var(--warning-soft);
+  color: var(--warning);
+  opacity: 1;
+}
+
+:root[data-theme="light"] :is(.settings-logout-button, .settings-logout-button:hover:not(:disabled)) {
+  border-color: #d9a49e;
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+/* Workspace and try-on use dense tool surfaces, not dark glass. */
+:root[data-theme="light"] :is(.workspace, .try-on-workspace) {
+  border-color: var(--line);
+  background: var(--surface-raised);
+  box-shadow: 0 16px 40px var(--shadow);
+  backdrop-filter: none;
+}
+
+:root[data-theme="light"] :is(.sequence, .stage, .controls) {
+  border-color: var(--line);
+  background: var(--surface-raised);
+  color: var(--ink);
+}
+
+:root[data-theme="light"] :is(.sequence-head, .sequence-item, .sequence-item strong, .stage header h2, .controls label, .controls legend) {
+  color: var(--ink);
+}
+
+:root[data-theme="light"] :is(.sequence-head small, .sequence-item small, .controls-head span, .artboard-empty p, .try-on-reference-head small, .try-on-controls label, .try-on-mode-options small, .try-on-pagination) {
+  color: var(--muted);
+}
+
+:root[data-theme="light"] :is(.sequence-item.active, .sequence-item:hover, .variant.active, .variant:hover, .ratio-row button.active, .ratio-row button:hover) {
+  background: var(--soft);
+  color: var(--ink);
+}
+
+:root[data-theme="light"] :is(.sequence-add, .try-on-source-tabs button.active, .try-on-mode-options button.active) {
+  border-color: #c58a31;
+  background: var(--soft);
+  color: var(--accent-dark);
+}
+
+:root[data-theme="light"] :is(.artboard, .artboard.with-image, .workspace-template-select select, .controls textarea, .ratio-row button, .try-on-source-tabs button, .try-on-mode-options button, .try-on-reference-thumbnail, .try-on-controls textarea, .try-on-url-import input) {
+  border-color: var(--line);
+  background: var(--surface-inset);
+  color: var(--ink);
+}
+
+:root[data-theme="light"] :is(.artboard-empty, .try-on-controls .try-on-upload, .try-on-controls .try-on-url-import, .variant.empty) {
+  border-color: #cfb991;
+  background: var(--surface-muted);
+  color: var(--accent-dark);
+}
+
+:root[data-theme="light"] :is(.try-on-controls .try-on-upload b, .try-on-url-import b, .try-on-reference-head b, .try-on-mode-options b, .artboard-empty h3) {
+  color: var(--ink);
+}
+
+:root[data-theme="light"] :is(.workspace .button:disabled, .try-on-generate:disabled, .creation-form .analysis-button:disabled) {
+  border-color: var(--line);
+  background: var(--surface-inset);
+  color: var(--muted);
+  box-shadow: none;
+  opacity: 1;
+}
+
+/* Overlays, chat, notices, and authentication. */
+:root[data-theme="light"] :is(.add-asset-backdrop, .original-preview-backdrop, .try-on-originals-backdrop, .try-on-result-backdrop, .confirm-dialog-backdrop) {
+  background: var(--scrim);
+}
+
+:root[data-theme="light"] :is(.add-asset-dialog, .original-preview, .try-on-originals, .try-on-result-modal, .confirm-dialog, .chat-panel) {
+  border-color: var(--line);
+  background: var(--surface-raised);
+  color: var(--ink);
+  box-shadow: 0 24px 64px rgba(42, 32, 23, 0.22);
+}
+
+:root[data-theme="light"] :is(.add-asset-dialog h2, .add-asset-dialog label, .add-asset-dialog p, .original-preview, .try-on-originals h2, .chat-panel h3, .confirm-dialog h2, .confirm-dialog p) {
+  color: var(--ink);
+}
+
+:root[data-theme="light"] :is(.add-asset-dialog select, .add-asset-dialog .icon-button, .try-on-originals .icon-button, .chat-panel textarea) {
+  border-color: var(--line);
+  background: var(--surface-muted);
+  color: var(--ink);
+}
+
+:root[data-theme="light"] .chat-message.assistant {
+  background: var(--surface-inset);
+  color: var(--ink);
+}
+
+:root[data-theme="light"] .chat-message.user {
+  border: 1px solid #c58a31;
+  background: var(--soft);
+  color: var(--ink);
+}
+
+:root[data-theme="light"] .notice {
+  border-color: #b7d6c9;
+  background: var(--success);
+  color: #fffdf9;
+  box-shadow: 0 14px 32px rgba(29, 75, 59, 0.28);
+}
+
+:root[data-theme="light"] :is(.auth-page, .login-page) {
+  background: var(--paper);
+}
+
+:root[data-theme="light"] :is(.auth-panel, .login-card, .oauth-card) {
+  border-color: var(--line);
+  background: var(--surface-raised);
+  color: var(--ink);
+  box-shadow: 0 20px 60px var(--shadow);
+}
+
+:root[data-theme="light"] :is(.auth-panel h1, .auth-panel > p, .auth-panel .form-stack label, .oauth-card strong, .oauth-card span) {
+  color: var(--ink);
+}
+
+:root[data-theme="light"] .auth-panel .form-stack input {
+  border-color: var(--line);
+  background: var(--surface-raised);
+  color: var(--ink);
+}
+
+/* Final light-mode contrast pass for states that only render after an upload,
+   modal action, or authenticated workflow. */
+:root[data-theme="light"] {
+  --accent-text: #80500f;
+}
+
+:root[data-theme="light"] :is(.text-link, .eyebrow, .settings-intro .eyebrow, .page .eyebrow) {
+  color: var(--accent-text);
+}
+
+:root[data-theme="light"] :is(.creation-form .reference-preview, .creation-form .reference-input-panel) {
+  border-color: var(--line);
+  background: var(--surface-muted);
+}
+
+:root[data-theme="light"] :is(.creation-form .reference-panel-heading > span, .creation-form .reference-empty b, .creation-form .reference-upload-zone b, .creation-form .reference-url-form > label, .creation-form .ai-analysis h3, .creation-form .ai-analysis p) {
+  color: var(--ink);
+}
+
+:root[data-theme="light"] :is(.creation-form .reference-panel-heading small, .creation-form .reference-url-form > small, .creation-form .reference-empty span, .creation-form .reference-upload-zone small, .creation-form .analysis-button small) {
+  color: var(--muted);
+}
+
+:root[data-theme="light"] :is(.creation-form .reference-empty-icon, .creation-form .reference-ready) {
+  border-color: #c7a76d;
+  background: var(--soft);
+  color: var(--accent-text);
+}
+
+:root[data-theme="light"] .creation-form .analysis-button > span {
+  background: var(--surface-inset);
+  color: var(--accent-text);
+}
+
+:root[data-theme="light"] .creation-form .analysis-status {
+  color: var(--success);
+}
+
+:root[data-theme="light"] :is(.try-on-header .eyebrow, .try-on-controls .try-on-upload, .try-on-controls .try-on-url-import, .try-on-reference-thumbnail span, .try-on-pagination button) {
+  color: var(--accent-text);
+}
+
+:root[data-theme="light"] :is(.try-on-sequence-row .sequence-item i, .try-on-workspace .sequence-item i, .try-on-reference-thumbnail, .try-on-controls .try-on-upload, .try-on-controls .try-on-url-import) {
+  border-color: #cfb991;
+  background: var(--surface-muted);
+}
+
+:root[data-theme="light"] :is(.try-on-reference-head b, .try-on-controls .try-on-upload b, .try-on-url-import b, .try-on-mode-options b, .try-on-originals h2, .try-on-original-grid figcaption) {
+  color: var(--ink);
+}
+
+:root[data-theme="light"] :is(.try-on-reference-head small, .try-on-controls .try-on-upload span, .try-on-url-import > span, .try-on-mode-options small, .try-on-pagination, .variant-strip > span:first-child, .try-on-original-grid figcaption) {
+  color: var(--muted);
+}
+
+:root[data-theme="light"] :is(.try-on-delete, .try-on-pagination button, .try-on-reference-thumbnail span) {
+  color: var(--accent-text);
+}
+
+:root[data-theme="light"] .sequence-item > b {
+  color: var(--accent-text);
+}
+
+:root[data-theme="light"] :is(.try-on-originals, .try-on-result-modal, .original-preview) :is(header, figcaption, p, small, span, b) {
+  color: var(--ink);
+}
+
+:root[data-theme="light"] :is(.workspace .sequence-add, .workspace .add-variant, .workspace .artboard-empty, .workspace .variant.empty) {
+  color: var(--accent-text);
+}
+
+:root[data-theme="light"] :is(.workspace .sequence-head small, .workspace .sequence-item small, .workspace .artboard-empty p, .workspace .variant-strip > span:first-child, .workspace .controls-head span, .workspace .style-lock span) {
+  color: var(--muted);
+}
+
+:root[data-theme="light"] :is(.workspace .artboard-empty h3, .workspace .style-lock b, .workspace .controls legend, .workspace .controls label) {
+  color: var(--ink);
+}
+
+:root[data-theme="light"] :is(.template-tile i, .template-card > span) {
+  color: var(--accent-text);
+}
+
+:root[data-theme="light"] :is(.template-tile small, .template-tile span, .template-card p, .custom-template-form small) {
+  color: var(--muted);
+}
+
+:root[data-theme="light"] :is(.template-tile b, .template-tile p, .custom-template-form span) {
+  color: var(--ink);
+}
+
+:root[data-theme="light"] :is(.custom-template-form input, .custom-template-form select, .custom-template-form textarea) {
+  border-color: var(--line);
+  background: var(--surface-raised);
+  color: var(--ink);
+}
+
+:root[data-theme="light"] .custom-template-form select option {
+  background: var(--surface-raised);
+  color: var(--ink);
+}
+
+:root[data-theme="light"] :is(.chat-panel header, .chat-panel form) {
+  border-color: var(--line);
+}
+
+:root[data-theme="light"] :is(.chat-panel h3, .chat-log > p, .chat-panel textarea) {
+  color: var(--ink);
+}
+
+:root[data-theme="light"] .chat-log > p {
+  color: var(--muted);
+}
+
+:root[data-theme="light"] :is(.confirm-dialog-actions .text-button, .confirm-dialog-actions .text-button:hover:not(:disabled)) {
+  border-color: var(--line);
+  background: var(--surface-muted);
+  color: var(--ink);
+}
+
+:root[data-theme="light"] :is(.password-toggle, .auth-panel .text-button) {
+  color: var(--accent-text);
 }
