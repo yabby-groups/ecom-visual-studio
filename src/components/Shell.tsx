@@ -53,7 +53,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         </nav>
         <div className="rail-bottom sidebar-bottom">
           <Nav to="/settings" icon={<Settings />} label="设置" />
-          <span className="app-version">v1.0.0</span>
+          <span className="app-version">v1.0.1</span>
         </div>
       </aside>
       <main className="app-main">

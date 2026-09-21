@@ -641,6 +641,7 @@ func TestLogoutDeletesProviderCredentialsButKeepsLocalProjects(t *testing.T) {
 
 func TestHuabotLoginUsesWebBaseAndEncryptsToken(t *testing.T) {
 	listRequests := 0
+	signoutRequests := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/signin/":
@@ -663,6 +664,12 @@ func TestHuabotLoginUsesWebBaseAndEncryptsToken(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(map[string]any{"tokens": []map[string]any{{"id": "token-1", "token_name": "Primary", "token_key": "sk-secret", "token_key_masked": "sk-...", "status": 1, "today_used_cost": todayCost, "total_used_cost": totalCost}}})
 		case "/api/token_base/model/list/":
 			_ = json.NewEncoder(w).Encode(map[string]any{"models": []map[string]any{{"id": "image", "alias": "gpt-image-2", "title": "Image"}, {"id": "chat", "alias": "gpt-5.6-luna", "title": "Chat"}}})
+		case "/api/signout/":
+			signoutRequests++
+			if r.Method != http.MethodPost || r.Header.Get("Authorization") != "Bearer session" {
+				t.Fatalf("signout request = %s %q", r.Method, r.Header.Get("Authorization"))
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"result": "OK"})
 		default:
 			t.Fatalf("unexpected URL %s", r.URL.String())
 		}
@@ -700,6 +707,12 @@ func TestHuabotLoginUsesWebBaseAndEncryptsToken(t *testing.T) {
 	if refreshed["today_cost"] != "12" || refreshed["total_cost"] != "34" {
 		t.Fatalf("refreshed usage = %#v", refreshed)
 	}
+	if _, err := studio.Logout(); err != nil {
+		t.Fatal(err)
+	}
+	if signoutRequests != 1 {
+		t.Fatalf("signout requests = %d, want 1", signoutRequests)
+	}
 }
 
 func TestHuabotDeviceAuthorizationPollsAndSyncsAccount(t *testing.T) {
@@ -710,7 +723,7 @@ func TestHuabotDeviceAuthorizationPollsAndSyncsAccount(t *testing.T) {
 			if err := r.ParseForm(); err != nil {
 				t.Fatal(err)
 			}
-			if r.Form.Get("client_id") != "desktop-client" || r.Form.Get("scope") != "profile:read token_base:read token_base:write" {
+			if r.Form.Get("client_id") != "desktop-client" || r.Form.Get("scope") != "profile:read token_base:read token_base:write offline_access" {
 				t.Fatalf("device form = %#v", r.Form)
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"device_code": "device-secret", "user_code": "ABCD-EFGH", "verification_uri": serverURL(r) + "/oauth/device", "verification_uri_complete": serverURL(r) + "/oauth/device?user_code=ABCD-EFGH", "expires_in": 600, "interval": 3})
@@ -721,7 +734,7 @@ func TestHuabotDeviceAuthorizationPollsAndSyncsAccount(t *testing.T) {
 				_ = json.NewEncoder(w).Encode(map[string]any{"error": "authorization_pending"})
 				return
 			}
-			_ = json.NewEncoder(w).Encode(map[string]any{"access_token": "myna_oauth_access", "token_type": "Bearer", "expires_in": 3600, "scope": "profile:read token_base:read token_base:write"})
+			_ = json.NewEncoder(w).Encode(map[string]any{"access_token": "myna_oauth_access", "refresh_token": "myna_refresh_secret", "token_type": "Bearer", "expires_in": 3600, "scope": "profile:read token_base:read token_base:write offline_access"})
 		case "/api/user/me/":
 			if r.Header.Get("Authorization") != "Bearer myna_oauth_access" {
 				t.Fatalf("authorization = %q", r.Header.Get("Authorization"))
@@ -731,6 +744,14 @@ func TestHuabotDeviceAuthorizationPollsAndSyncsAccount(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(map[string]any{"tokens": []map[string]any{{"id": "token-1", "token_name": "Primary", "token_key": "sk-secret", "status": 1}}})
 		case "/api/token_base/model/list/":
 			_ = json.NewEncoder(w).Encode(map[string]any{"models": []map[string]any{{"id": "image", "alias": "gpt-image-2", "title": "Image"}, {"id": "chat", "alias": "gpt-5.6-luna", "title": "Chat"}}})
+		case "/oauth/revoke":
+			if err := r.ParseForm(); err != nil {
+				t.Fatal(err)
+			}
+			if r.Method != http.MethodPost || r.Form.Get("client_id") != "desktop-client" || r.Form.Get("token") != "myna_refresh_secret" {
+				t.Fatalf("revoke form = %#v", r.Form)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{})
 		default:
 			t.Fatalf("unexpected URL %s", r.URL.String())
 		}
@@ -765,6 +786,64 @@ func TestHuabotDeviceAuthorizationPollsAndSyncsAccount(t *testing.T) {
 	}
 	if strings.Contains(stored, "sk-secret") {
 		t.Fatal("raw provider token was stored in SQLite")
+	}
+	if err := db.QueryRow("select secret from auth_credentials where user_id=?", stableID("alice")).Scan(&stored); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(stored, "myna_refresh_secret") {
+		t.Fatal("raw OAuth refresh token was stored in SQLite")
+	}
+	if _, err := studio.Logout(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestLogoutKeepsLocalCredentialsWhenRemoteSignoutFails(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/signout/" {
+			t.Fatalf("unexpected URL %s", r.URL.String())
+		}
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(w).Encode(map[string]any{"err": "temporarily unavailable"})
+	}))
+	defer server.Close()
+	t.Setenv("HUABOT_WEB_BASE_URL", server.URL)
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	masterKey := make([]byte, 32)
+	credential, err := seal(masterKey, "session")
+	if err != nil {
+		t.Fatal(err)
+	}
+	studio := &Studio{db: db, dataDir: t.TempDir(), httpClient: server.Client(), masterKey: masterKey, user: &User{ID: "user-1", Username: "alice"}}
+	if err := studio.migrate(); err != nil {
+		t.Fatal(err)
+	}
+	for _, statement := range []string{
+		"insert into users values('user-1','alice',1,'Alice','')",
+		"insert into desktop_session values(1,'user-1')",
+	} {
+		if _, err := db.Exec(statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := db.Exec("insert into auth_credentials(user_id,kind,secret) values(?,?,?)", "user-1", passwordCredentialKind, credential); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := studio.Logout(); err == nil || !strings.Contains(err.Error(), "temporarily unavailable") {
+		t.Fatalf("Logout() error = %v, want remote signout failure", err)
+	}
+	for _, table := range []string{"desktop_session", "auth_credentials"} {
+		var count int
+		if err := db.QueryRow("select count(*) from " + table).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		if count != 1 {
+			t.Fatalf("%s count after failed logout = %d, want 1", table, count)
+		}
 	}
 }
 

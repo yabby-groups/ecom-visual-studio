@@ -24,7 +24,15 @@ type providerToken struct {
 }
 type providerModel struct{ ID, Name, Alias string }
 
-const oauthDeviceGrantType = "urn:ietf:params:oauth:grant-type:device_code"
+const (
+	oauthDeviceGrantType       = "urn:ietf:params:oauth:grant-type:device_code"
+	oauthRefreshCredentialKind = "oauth_refresh"
+	passwordCredentialKind     = "password_session"
+)
+
+type authCredential struct {
+	Kind, Secret string
+}
 
 type deviceAuthorization struct {
 	DeviceCode              string `json:"device_code"`
@@ -193,10 +201,10 @@ func (s *Studio) loginHuabot(name, password, totp string) (map[string]any, error
 	if account, ok := login["user"].(map[string]any); ok && stringValue(account["name"]) == "" {
 		account["name"] = name
 	}
-	return s.completeHuabotLogin(bearer, login)
+	return s.completeHuabotLogin(bearer, login, authCredential{Kind: passwordCredentialKind, Secret: bearer})
 }
 
-func (s *Studio) completeHuabotLogin(bearer string, login map[string]any) (map[string]any, error) {
+func (s *Studio) completeHuabotLogin(bearer string, login map[string]any, credential authCredential) (map[string]any, error) {
 	config := s.huabotConfig()
 	var listed map[string]any
 	if err := s.webRequest(http.MethodGet, config.WebBase+"/api/token_base/token/my/list/", bearer, nil, &listed); err != nil {
@@ -254,7 +262,7 @@ func (s *Studio) completeHuabotLogin(bearer string, login map[string]any) (map[s
 	if user.Profile.NickName == "" {
 		user.Profile.NickName = name
 	}
-	if err := s.syncAccount(user, tokens, models); err != nil {
+	if err := s.syncAccount(user, tokens, models, credential); err != nil {
 		return nil, err
 	}
 	if err := s.persistLogin(user.ID); err != nil {
@@ -271,7 +279,7 @@ func (s *Studio) startHuabotAuthorization() (deviceAuthorization, error) {
 	config := s.huabotConfig()
 	form := url.Values{
 		"client_id": {s.oauthClientID()},
-		"scope":     {"profile:read token_base:read token_base:write"},
+		"scope":     {"profile:read token_base:read token_base:write offline_access"},
 	}
 	var authorization deviceAuthorization
 	if err := s.webRequest(http.MethodPost, config.WebBase+"/oauth/device/code", "", form, &authorization); err != nil {
@@ -311,11 +319,15 @@ func (s *Studio) pollHuabotAuthorization(deviceCode string) (map[string]any, err
 	if bearer == "" {
 		return nil, errors.New("huabot 未返回访问令牌")
 	}
+	refreshToken := stringValue(exchanged["refresh_token"])
+	if refreshToken == "" {
+		return nil, errors.New("huabot 未返回刷新令牌")
+	}
 	var login map[string]any
 	if err := s.webRequest(http.MethodGet, config.WebBase+"/api/user/me/", bearer, nil, &login); err != nil {
 		return nil, err
 	}
-	result, err := s.completeHuabotLogin(bearer, login)
+	result, err := s.completeHuabotLogin(bearer, login, authCredential{Kind: oauthRefreshCredentialKind, Secret: refreshToken})
 	if err != nil {
 		return nil, err
 	}
@@ -323,7 +335,7 @@ func (s *Studio) pollHuabotAuthorization(deviceCode string) (map[string]any, err
 	return result, nil
 }
 
-func (s *Studio) syncAccount(user User, tokens []providerToken, models []providerModel) error {
+func (s *Studio) syncAccount(user User, tokens []providerToken, models []providerModel, credential authCredential) error {
 	done, err := s.beginDataWrite()
 	if err != nil {
 		return err
@@ -374,7 +386,42 @@ func (s *Studio) syncAccount(user User, tokens []providerToken, models []provide
 	if _, err = tx.Exec("insert into settings(user_id,token_id,image_model,text_model,chat_model) values(?,?,?,?,?) on conflict(user_id) do update set token_id=excluded.token_id,image_model=excluded.image_model,text_model=excluded.text_model,chat_model=excluded.chat_model", user.ID, oldToken, image, text, chat); err != nil {
 		return err
 	}
+	credentialSecret, err := seal(s.masterKey, credential.Secret)
+	if err != nil {
+		return err
+	}
+	if _, err = tx.Exec("insert into auth_credentials(user_id,kind,secret) values(?,?,?) on conflict(user_id) do update set kind=excluded.kind,secret=excluded.secret", user.ID, credential.Kind, credentialSecret); err != nil {
+		return err
+	}
 	return tx.Commit()
+}
+
+func (s *Studio) logoutHuabot(userID string) error {
+	var credential authCredential
+	err := s.db.QueryRow("select kind,secret from auth_credentials where user_id=?", userID).Scan(&credential.Kind, &credential.Secret)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	secret, err := unseal(s.masterKey, credential.Secret)
+	if err != nil {
+		return err
+	}
+	config := s.huabotConfig()
+	var response map[string]any
+	switch credential.Kind {
+	case oauthRefreshCredentialKind:
+		return s.webRequest(http.MethodPost, config.WebBase+"/oauth/revoke", "", url.Values{
+			"client_id": {s.oauthClientID()},
+			"token":     {secret},
+		}, &response)
+	case passwordCredentialKind:
+		return s.webRequest(http.MethodPost, config.WebBase+"/api/signout/", secret, nil, &response)
+	default:
+		return fmt.Errorf("未知的登录凭据类型 %q", credential.Kind)
+	}
 }
 
 func (s *Studio) tokenSettings() (map[string]any, error) {

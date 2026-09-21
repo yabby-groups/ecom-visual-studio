@@ -174,6 +174,7 @@ func (s *Studio) migrate() error {
 		"create table if not exists settings (user_id text primary key, token_id text not null default '', image_model text not null default '', text_model text not null default '', chat_model text not null default '')",
 		"create table if not exists tokens (id text primary key, user_id text not null, name text not null, secret text not null, masked text not null default '', status integer not null default 1, today_cost text not null default '0', total_cost text not null default '0')",
 		"create table if not exists models (id text primary key, user_id text not null, name text not null, alias text not null)",
+		"create table if not exists auth_credentials (user_id text primary key references users(id) on delete cascade, kind text not null, secret text not null)",
 		"create table if not exists try_on_jobs (id text primary key, user_id text not null, person_paths text not null, garment_paths text not null, generation_mode text not null, instructions text not null default '', ratio text not null, status text not null, file_path text, generation_started_at integer, created_at integer not null)",
 		"create table if not exists try_on_versions (id text primary key, job_id text not null, file_path text not null, created_at integer not null)",
 		"create index if not exists projects_user_created_idx on projects(user_id, created_at desc)",
@@ -274,6 +275,9 @@ func (s *Studio) Logout() (map[string]bool, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := s.logoutHuabot(user.ID); err != nil {
+		return nil, err
+	}
 	if err := s.writeTransaction(func(tx *sql.Tx) error {
 		if _, err := tx.Exec("delete from desktop_session where singleton=1"); err != nil {
 			return err
@@ -282,6 +286,9 @@ func (s *Studio) Logout() (map[string]bool, error) {
 			return err
 		}
 		if _, err := tx.Exec("delete from tokens where user_id=?", user.ID); err != nil {
+			return err
+		}
+		if _, err := tx.Exec("delete from auth_credentials where user_id=?", user.ID); err != nil {
 			return err
 		}
 		_, err := tx.Exec("delete from models where user_id=?", user.ID)
