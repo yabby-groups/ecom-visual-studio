@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { client } from "../api";
 import { useAppStore } from "../store";
+import { useAiInteraction } from "../aiInteraction";
 import type { LatestCreation } from "../types";
 import { fileUrl } from "../utils/assets";
 import { ProjectCard } from "./ProjectCard";
@@ -11,8 +12,26 @@ import "./Home.css";
 export function Home() {
   const projects = useAppStore((state) => state.projects);
   const navigate = useNavigate();
+  const { registerPage } = useAiInteraction();
   const [latestCreation, setLatestCreation] = useState<LatestCreation | null>(
     null,
+  );
+  useEffect(
+    () =>
+      registerPage({
+        screen: "创作台",
+        data: () => ({
+          projects: projects.map((project) => ({
+            id: project.id,
+            name: project.name,
+            product: project.product,
+          })),
+          latest_creation: latestCreation
+            ? { project_id: latestCreation.project_id, title: latestCreation.title }
+            : null,
+        }),
+      }),
+    [latestCreation, projects, registerPage],
   );
   useEffect(() => {
     let active = true;

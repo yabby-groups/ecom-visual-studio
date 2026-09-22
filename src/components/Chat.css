@@ -67,6 +67,30 @@
   background: var(--ink);
   color: #fff;
 }
+.chat-entry {
+  display: grid;
+  gap: 6px;
+}
+.chat-action {
+  width: min(100%, 320px);
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(68, 221, 183, 0.35);
+  background: rgba(68, 221, 183, 0.08);
+  font-size: 12px;
+}
+.chat-action small {
+  color: var(--muted);
+}
+.chat-action > div {
+  display: flex;
+  gap: 6px;
+}
+.chat-action .button {
+  padding: 7px 9px;
+  font-size: 11px;
+}
 .chat-message.assistant {
   background: var(--canvas);
 }

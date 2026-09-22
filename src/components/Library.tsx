@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { client } from "../api";
@@ -6,14 +6,32 @@ import { Notice } from "./Notice";
 import { ProjectCard } from "./ProjectCard";
 import { Shell } from "./Shell";
 import { useAppStore } from "../store";
+import { useAiInteraction } from "../aiInteraction";
 import "./Library.css";
 
 export function Library() {
   const projects = useAppStore((state) => state.projects);
   const refresh = useAppStore((state) => state.refreshProjects);
   const navigate = useNavigate();
+  const { registerPage } = useAiInteraction();
   const [filter, setFilter] = useState("全部作品");
   const [notice, setNotice] = useState("");
+  useEffect(
+    () =>
+      registerPage({
+        screen: "作品库",
+        data: () => ({
+          filter,
+          projects: projects.map((project) => ({
+            id: project.id,
+            name: project.name,
+            product: project.product,
+            asset_count: project.asset_count,
+          })),
+        }),
+      }),
+    [filter, projects, registerPage],
+  );
   async function remove(id: string) {
     if (!window.confirm("确定删除这个项目及其生成图片吗？")) return;
     await client.deleteProject(id);

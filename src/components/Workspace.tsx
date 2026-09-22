@@ -15,6 +15,7 @@ import {
 import { useNavigate, useParams } from "react-router-dom";
 import { client } from "../api";
 import { useRequireAiAuth } from "../auth";
+import { useAiInteraction } from "../aiInteraction";
 import { nativeImageRatios } from "../constants/imageSizes";
 import { Notice } from "./Notice";
 import { Shell } from "./Shell";
@@ -45,6 +46,7 @@ export function Workspace() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
   const requireAiAuth = useRequireAiAuth();
+  const { registerPage } = useAiInteraction();
   const templates = useAppStore((state) => state.templates);
   const [project, setProject] = useState<Project | null>(null);
   const [assetId, setAssetId] = useState("");
@@ -89,6 +91,34 @@ export function Workspace() {
       setLoading(false);
     }
   }
+  useEffect(
+    () =>
+      registerPage({
+        screen: "项目工作区",
+        data: () => ({
+          project: project
+            ? {
+                id: project.id,
+                name: project.name,
+                product: project.product,
+                description: project.description,
+                benefits: project.benefits,
+                assets: project.assets?.map((item) => ({
+                  id: item.id,
+                  title: item.title,
+                  template: item.template,
+                  ratio: item.ratio,
+                  prompt: item.prompt,
+                  status: item.status,
+                })),
+              }
+            : null,
+          selected_asset_id: assetId,
+        }),
+        refresh: () => load(),
+      }),
+    [assetId, project, registerPage],
+  );
   useEffect(() => {
     void load();
   }, [id]);

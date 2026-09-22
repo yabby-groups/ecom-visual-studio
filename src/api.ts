@@ -1,5 +1,7 @@
 import type {
   Asset,
+  AiChatContext,
+  AiChatResult,
   DeviceAuthorization,
   DeviceAuthorizationPoll,
   LatestCreation,
@@ -96,8 +98,9 @@ export const client = {
     call<{ description: string; benefits: string[] }>("Analyze", body),
   chat: async (
     messages: { role: string; content: string }[],
+    context: AiChatContext,
     onDelta: (delta: string) => void,
-  ) => {
+  ): Promise<AiChatResult> => {
     const requestID = nextChatRequestID();
     const eventName = `chat:delta:${requestID}`;
     let receivedDelta = false;
@@ -108,8 +111,9 @@ export const client = {
       }
     });
     try {
-      const result = await call<{ text: string }>("Chat", requestID, messages);
+      const result = await call<AiChatResult>("Chat", requestID, messages, context);
       if (!receivedDelta && result.text) onDelta(result.text);
+      return result;
     } finally {
       EventsOff(eventName);
     }

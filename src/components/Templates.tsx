@@ -1,16 +1,18 @@
-import { type FormEvent, useLayoutEffect, useRef, useState } from "react";
+import { type FormEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { client } from "../api";
 import { nativeImageRatios } from "../constants/imageSizes";
 import { Shell } from "./Shell";
 import { useAppStore } from "../store";
+import { useAiInteraction } from "../aiInteraction";
 import "./Templates.css";
 
 export function Templates() {
   const templates = useAppStore((state) => state.templates);
   const refresh = useAppStore((state) => state.refreshTemplates);
   const navigate = useNavigate();
+  const { registerPage } = useAiInteraction();
   const [error, setError] = useState("");
   const wallRef = useRef<HTMLDivElement>(null);
   const tileRefs = useRef(new Map<string, HTMLButtonElement>());
@@ -18,6 +20,22 @@ export function Templates() {
     height: 0,
     positions: {} as Record<string, { left: number; top: number }>,
   });
+  useEffect(
+    () =>
+      registerPage({
+        screen: "灵感模板",
+        data: () => ({
+          templates: templates.map((template) => ({
+            id: template.id,
+            name: template.name,
+            ratio: template.ratio,
+            direction: template.direction,
+            custom: template.custom,
+          })),
+        }),
+      }),
+    [registerPage, templates],
+  );
   const guide: Record<string, [string, string, string]> = {
     "hero-image": [
       "/template-previews/hero-image.jpg",

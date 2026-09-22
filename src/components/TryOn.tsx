@@ -15,6 +15,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { client } from "../api";
 import { useRequireAiAuth } from "../auth";
+import { useAiInteraction } from "../aiInteraction";
 import type { TryOnJob } from "../types";
 import { fileUrl, isPending, statusText } from "../utils/assets";
 import { Shell } from "./Shell";
@@ -181,6 +182,7 @@ export function TryOn() {
   const [draft] = useState(loadDraft);
   const navigate = useNavigate();
   const requireAiAuth = useRequireAiAuth();
+  const { registerPage } = useAiInteraction();
   const { id: selectedJobId } = useParams<{ id: string }>();
   const [personPaths, setPersonPaths] = useState<string[]>(
     draft?.personPaths ?? [],
@@ -208,6 +210,43 @@ export function TryOn() {
     null,
   );
   const [now, setNow] = useState(() => Date.now());
+
+  useEffect(
+    () =>
+      registerPage({
+        screen: "AI 换装",
+        data: () => ({
+          selected_job_id: selectedJobId || undefined,
+          draft: {
+            person_paths: personPaths,
+            garment_paths: garmentPaths,
+            generation_mode: generationMode,
+            instructions,
+            ratio,
+            consented,
+          },
+          recent_jobs: jobs.map((job) => ({ id: job.id, status: job.status, ratio: job.ratio })),
+        }),
+        refresh: () => load(),
+        execute: (action) => {
+          if (action.type !== "fill_draft") return false;
+          const payload = action.payload;
+          if (Array.isArray(payload.person_paths)) {
+            setPersonPaths(payload.person_paths.filter((path): path is string => typeof path === "string"));
+          }
+          if (Array.isArray(payload.garment_paths)) {
+            setGarmentPaths(payload.garment_paths.filter((path): path is string => typeof path === "string"));
+          }
+          if (payload.generation_mode === "combined" || payload.generation_mode === "combinations") {
+            setGenerationMode(payload.generation_mode);
+          }
+          if (typeof payload.instructions === "string") setInstructions(payload.instructions);
+          if (typeof payload.ratio === "string") setRatio(payload.ratio);
+          return true;
+        },
+      }),
+    [consented, garmentPaths, generationMode, instructions, jobs, personPaths, ratio, registerPage, selectedJobId],
+  );
 
   async function load(page = historyPage) {
     try {

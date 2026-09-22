@@ -3,6 +3,7 @@ import { ArrowLeft, LoaderCircle } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { client } from "../api";
 import { useRequireAiAuth } from "../auth";
+import { useAiInteraction } from "../aiInteraction";
 import {
   AiProductAnalysis,
   type ProductAnalysisMode,
@@ -38,6 +39,7 @@ export function NewProject() {
   const refreshProjects = useAppStore((state) => state.refreshProjects);
   const navigate = useNavigate();
   const requireAiAuth = useRequireAiAuth();
+  const { registerPage } = useAiInteraction();
   const [searchParams] = useSearchParams();
   const selectedTemplate = templates.find(
     (template) => template.id === searchParams.get("template"),
@@ -64,6 +66,46 @@ export function NewProject() {
     draft?.brandColor ?? "#137a65",
   );
   const formRef = useRef<HTMLFormElement>(null);
+
+  useEffect(
+    () =>
+      registerPage({
+        screen: "新建创作",
+        data: () => {
+          const fields = formRef.current
+            ? Object.fromEntries(
+                [...new FormData(formRef.current).entries()].map(([key, value]) => [key, String(value)]),
+              )
+            : {};
+          return {
+            draft: fields,
+            kind,
+            reference: reference || undefined,
+            selected_template_ids: selectedTemplates,
+            available_templates: templates.map((template) => ({ id: template.id, name: template.name, ratio: template.ratio })),
+          };
+        },
+        execute: (action) => {
+          if (action.type !== "fill_draft") return false;
+          const fields = action.payload.fields;
+          if (fields && typeof fields === "object" && !Array.isArray(fields)) {
+            for (const [name, value] of Object.entries(fields)) {
+              const field = formRef.current?.elements.namedItem(name);
+              if (
+                (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) &&
+                typeof value === "string"
+              ) {
+                field.value = value;
+              }
+            }
+          }
+          if (typeof action.payload.kind === "string") setKind(action.payload.kind);
+          if (typeof action.payload.color === "string") setBrandColor(action.payload.color);
+          return true;
+        },
+      }),
+    [kind, reference, registerPage, selectedTemplates, templates],
+  );
 
   useEffect(() => {
     if (!draft || !formRef.current) return;

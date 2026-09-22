@@ -9,6 +9,7 @@ import { Templates } from "./components/Templates";
 import { TryOn } from "./components/TryOn";
 import { Workspace } from "./components/Workspace";
 import { useAppStore } from "./store";
+import { AiInteractionProvider } from "./aiInteraction";
 
 export function App() {
   const initializing = useAppStore((state) => state.initializing);
@@ -19,6 +20,7 @@ export function App() {
       </div>
     );
   return (
+    <AiInteractionProvider>
     <Routes>
       <Route path="/" element={<Home />} />
       <Route path="/new" element={<NewProject />} />
@@ -31,5 +33,6 @@ export function App() {
       <Route path="/login" element={<Login />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </AiInteractionProvider>
   );
 }

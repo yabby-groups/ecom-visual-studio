@@ -1,14 +1,23 @@
 import { type FormEvent, useState } from "react";
 import { LoaderCircle, X } from "lucide-react";
 import { client } from "../api";
+import { useAiInteraction } from "../aiInteraction";
+import type { AiAction } from "../types";
 import "./Chat.css";
 
+type Message = {
+  role: string;
+  content: string;
+  actions?: AiAction[];
+};
+
 export function Chat({ onClose }: { onClose: () => void }) {
-  const [messages, setMessages] = useState<{ role: string; content: string }[]>(
-    [],
-  );
+  const { context, execute } = useAiInteraction();
+  const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
+  const [running, setRunning] = useState("");
+  const [actionStatus, setActionStatus] = useState<Record<string, string>>({});
   async function send(event: FormEvent) {
     event.preventDefault();
     if (!text.trim() || busy) return;
@@ -19,10 +28,14 @@ export function Chat({ onClose }: { onClose: () => void }) {
     let reply = "";
     setMessages([...next, { role: "assistant", content: reply }]);
     try {
-      await client.chat(next, (delta) => {
+      const result = await client.chat(next, context, (delta) => {
         reply += delta;
         setMessages([...next, { role: "assistant", content: reply }]);
       });
+      setMessages([
+        ...next,
+        { role: "assistant", content: result.text || reply, actions: result.actions },
+      ]);
     } catch (error) {
       setMessages([
         ...next,
@@ -33,6 +46,20 @@ export function Chat({ onClose }: { onClose: () => void }) {
       ]);
     } finally {
       setBusy(false);
+    }
+  }
+  async function confirm(action: AiAction, key: string) {
+    setRunning(key);
+    try {
+      const result = await execute(action);
+      setActionStatus((current) => ({ ...current, [key]: result }));
+    } catch (error) {
+      setActionStatus((current) => ({
+        ...current,
+        [key]: error instanceof Error ? error.message : "操作失败",
+      }));
+    } finally {
+      setRunning("");
     }
   }
   return (
@@ -49,12 +76,44 @@ export function Chat({ onClose }: { onClose: () => void }) {
       <div className="chat-log">
         {messages.length ? (
           messages.map((message, index) => (
-            <article
-              className={`chat-message ${message.role}`}
-              key={`${message.role}-${index}`}
-            >
-              {message.content}
-            </article>
+            <div className="chat-entry" key={`${message.role}-${index}`}>
+              <article className={`chat-message ${message.role}`}>
+                {message.content}
+              </article>
+              {message.actions?.map((action, actionIndex) => {
+                const key = `${index}-${actionIndex}`;
+                const status = actionStatus[key];
+                return (
+                  <section className="chat-action" key={key}>
+                    <strong>{action.summary}</strong>
+                    {status ? (
+                      <small>{status}</small>
+                    ) : (
+                      <div>
+                        <button
+                          className="button primary"
+                          type="button"
+                          disabled={Boolean(running)}
+                          onClick={() => void confirm(action, key)}
+                        >
+                          {running === key ? "执行中..." : "确认执行"}
+                        </button>
+                        <button
+                          className="button secondary"
+                          type="button"
+                          disabled={Boolean(running)}
+                          onClick={() =>
+                            setActionStatus((current) => ({ ...current, [key]: "已取消" }))
+                          }
+                        >
+                          取消
+                        </button>
+                      </div>
+                    )}
+                  </section>
+                );
+              })}
+            </div>
           ))
         ) : (
           <p>

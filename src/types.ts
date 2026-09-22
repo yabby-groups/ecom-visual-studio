@@ -114,3 +114,30 @@ export type TryOnPage = {
   total: number;
   has_more: boolean;
 };
+
+export type AiAction = {
+  type:
+    | "navigate"
+    | "fill_draft"
+    | "update_asset"
+    | "add_asset"
+    | "generate_asset"
+    | "generate_pack"
+    | "create_project"
+    | "create_template"
+    | "create_try_on"
+    | "regenerate_try_on";
+  summary: string;
+  payload: Record<string, unknown>;
+};
+
+export type AiChatContext = {
+  route: string;
+  screen: string;
+  data: Record<string, unknown>;
+};
+
+export type AiChatResult = {
+  text: string;
+  actions: AiAction[];
+};

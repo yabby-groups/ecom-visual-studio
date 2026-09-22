@@ -33,10 +33,19 @@ describe("client.chat", () => {
     });
 
     const received: string[] = [];
-    await client.chat([{ role: "user", content: "hello" }], (delta) => received.push(delta));
+    await client.chat(
+      [{ role: "user", content: "hello" }],
+      { route: "/", screen: "工作台", data: {} },
+      (delta) => received.push(delta),
+    );
 
     expect(received).toEqual(["first", " second"]);
     expect(chat).toHaveBeenCalledOnce();
+    expect(chat).toHaveBeenCalledWith(
+      expect.any(String),
+      [{ role: "user", content: "hello" }],
+      { route: "/", screen: "工作台", data: {} },
+    );
     expect(listeners).toEqual(new Map());
   });
 
@@ -48,7 +57,11 @@ describe("client.chat", () => {
     });
 
     const received: string[] = [];
-    await client.chat([{ role: "user", content: "hello" }], (delta) => received.push(delta));
+    await client.chat(
+      [{ role: "user", content: "hello" }],
+      { route: "/", screen: "工作台", data: {} },
+      (delta) => received.push(delta),
+    );
 
     expect(received).toEqual(["complete response"]);
     expect(listeners).toEqual(new Map());

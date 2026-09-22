@@ -980,12 +980,30 @@ func TestAnalyzeAndChatReadResponsesOutputTextViaOfficialSDK(t *testing.T) {
 	if analysis["description"] == "" || len(analysis["benefits"].([]any)) != 4 {
 		t.Fatalf("analysis = %#v", analysis)
 	}
-	chat, err := studio.Chat("chat-test", []map[string]string{{"role": "user", "content": "给我一个标题"}})
+	chat, err := studio.Chat("chat-test", []map[string]string{{"role": "user", "content": "给我一个标题"}}, map[string]any{"route": "/"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if chat["text"] != "商品分析" {
+	if chat.Text != "商品分析" {
 		t.Fatalf("chat = %#v", chat)
+	}
+}
+
+func TestParseChatResultSeparatesValidatedActions(t *testing.T) {
+	result := parseChatResult("建议先优化主图提示词。<ecom-actions>[{\"type\":\"update_asset\",\"summary\":\"更新主图提示词\",\"payload\":{\"id\":\"asset-1\",\"prompt\":\"明亮的棚拍主图\"}}]</ecom-actions>")
+	if result.Text != "建议先优化主图提示词。" || len(result.Actions) != 1 {
+		t.Fatalf("result = %#v", result)
+	}
+	if result.Actions[0].Type != "update_asset" || result.Actions[0].Payload["id"] != "asset-1" {
+		t.Fatalf("action = %#v", result.Actions[0])
+	}
+}
+
+func TestParseChatResultKeepsInvalidActionMarkupAsText(t *testing.T) {
+	raw := "<ecom-actions>[{\"type\":\"delete_project\",\"summary\":\"删除\",\"payload\":{}}]</ecom-actions>"
+	result := parseChatResult(raw)
+	if result.Text != raw || len(result.Actions) != 0 {
+		t.Fatalf("result = %#v", result)
 	}
 }
 

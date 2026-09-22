@@ -1,15 +1,15 @@
 export namespace main {
-	
+
 	export class AssetPatch {
 	    title: string;
 	    template: string;
 	    ratio: string;
 	    prompt: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new AssetPatch(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.title = source["title"];
@@ -22,11 +22,11 @@ export namespace main {
 	    kind: string;
 	    scene_template_ids: string[];
 	    template_id: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new PackInput(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.kind = source["kind"];
@@ -41,11 +41,11 @@ export namespace main {
 	    benefits: string;
 	    color: string;
 	    reference: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ProjectInput(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
@@ -61,11 +61,11 @@ export namespace main {
 	    image_model: string;
 	    text_model: string;
 	    chat_model: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new SettingsInput(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.token_id = source["token_id"];
@@ -78,11 +78,11 @@ export namespace main {
 	    name: string;
 	    ratio: string;
 	    direction: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new TemplateInput(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
@@ -96,11 +96,11 @@ export namespace main {
 	    generation_mode: string;
 	    instructions: string;
 	    ratio: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new TryOnInput(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.person_paths = source["person_paths"];
@@ -109,6 +109,54 @@ export namespace main {
 	        this.instructions = source["instructions"];
 	        this.ratio = source["ratio"];
 	    }
+	}
+	export class chatAction {
+	    type: string;
+	    summary: string;
+	    payload: Record<string, any>;
+
+	    static createFrom(source: any = {}) {
+	        return new chatAction(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.type = source["type"];
+	        this.summary = source["summary"];
+	        this.payload = source["payload"];
+	    }
+	}
+	export class chatResult {
+	    text: string;
+	    actions: chatAction[];
+
+	    static createFrom(source: any = {}) {
+	        return new chatResult(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.text = source["text"];
+	        this.actions = this.convertValues(source["actions"], chatAction);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class deviceAuthorization {
 	    device_code: string;
