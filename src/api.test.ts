@@ -67,3 +67,41 @@ describe("client.chat", () => {
     expect(listeners).toEqual(new Map());
   });
 });
+
+describe("client settings refresh", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("uses separate cached and refresh Wails bindings", async () => {
+    const tokenSettings = vi.fn(async () => ({ tokens: [] }));
+    const models = vi.fn(async () => ({ models: [] }));
+    const refreshTokenSettings = vi.fn(async () => ({ tokens: [] }));
+    const refreshModels = vi.fn(async () => ({ models: [] }));
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: {
+        go: {
+          main: {
+            Studio: {
+              TokenSettings: tokenSettings,
+              Models: models,
+              RefreshTokenSettings: refreshTokenSettings,
+              RefreshModels: refreshModels,
+            },
+          },
+        },
+      },
+    });
+
+    await expect(client.tokenSettings()).resolves.toEqual({ tokens: [] });
+    await expect(client.models()).resolves.toEqual({ models: [] });
+    await expect(client.refreshTokenSettings()).resolves.toEqual({ tokens: [] });
+    await expect(client.refreshModels()).resolves.toEqual({ models: [] });
+
+    expect(tokenSettings).toHaveBeenCalledOnce();
+    expect(models).toHaveBeenCalledOnce();
+    expect(refreshTokenSettings).toHaveBeenCalledOnce();
+    expect(refreshModels).toHaveBeenCalledOnce();
+  });
+});

@@ -102,6 +102,14 @@ export function Projects() {
   return window['go']['main']['Studio']['Projects']();
 }
 
+export function RefreshModels() {
+  return window['go']['main']['Studio']['RefreshModels']();
+}
+
+export function RefreshTokenSettings() {
+  return window['go']['main']['Studio']['RefreshTokenSettings']();
+}
+
 export function RegenerateTryOn(arg1) {
   return window['go']['main']['Studio']['RegenerateTryOn'](arg1);
 }

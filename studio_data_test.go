@@ -671,6 +671,7 @@ func TestLogoutDeletesProviderCredentialsButKeepsLocalProjects(t *testing.T) {
 
 func TestHuabotLoginUsesWebBaseAndEncryptsToken(t *testing.T) {
 	listRequests := 0
+	modelRequests := 0
 	signoutRequests := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -693,6 +694,7 @@ func TestHuabotLoginUsesWebBaseAndEncryptsToken(t *testing.T) {
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"tokens": []map[string]any{{"id": "token-1", "token_name": "Primary", "token_key": "sk-secret", "token_key_masked": "sk-...", "status": 1, "today_used_cost": todayCost, "total_used_cost": totalCost}}})
 		case "/api/token_base/model/list/":
+			modelRequests++
 			_ = json.NewEncoder(w).Encode(map[string]any{"models": []map[string]any{{"id": "image", "alias": "gpt-image-2", "title": "Image"}, {"id": "chat", "alias": "gpt-5.6-luna", "title": "Chat"}}})
 		case "/api/signout/":
 			signoutRequests++
@@ -733,9 +735,38 @@ func TestHuabotLoginUsesWebBaseAndEncryptsToken(t *testing.T) {
 	if len(settings["tokens"].([]map[string]any)) != 1 {
 		t.Fatalf("tokens = %#v", settings)
 	}
+	cached := settings["tokens"].([]map[string]any)[0]
+	if cached["today_cost"] != "0" || cached["total_cost"] != "0" {
+		t.Fatalf("cached usage = %#v", cached)
+	}
+	if listRequests != 1 {
+		t.Fatalf("token requests after cached read = %d, want 1", listRequests)
+	}
+	if _, err := studio.Models(); err != nil {
+		t.Fatal(err)
+	}
+	if modelRequests != 1 {
+		t.Fatalf("model requests after cached read = %d, want 1", modelRequests)
+	}
+	studio.mu.Lock()
+	studio.huabotBearer = ""
+	studio.mu.Unlock()
+	settings, err = studio.RefreshTokenSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
 	refreshed := settings["tokens"].([]map[string]any)[0]
 	if refreshed["today_cost"] != "12" || refreshed["total_cost"] != "34" {
 		t.Fatalf("refreshed usage = %#v", refreshed)
+	}
+	if listRequests != 2 {
+		t.Fatalf("token requests after refresh = %d, want 2", listRequests)
+	}
+	if _, err := studio.RefreshModels(); err != nil {
+		t.Fatal(err)
+	}
+	if modelRequests != 2 {
+		t.Fatalf("model requests after refresh = %d, want 2", modelRequests)
 	}
 	if _, err := studio.Logout(); err != nil {
 		t.Fatal(err)

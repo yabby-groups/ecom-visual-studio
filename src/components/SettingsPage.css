@@ -28,6 +28,32 @@
   font-size: 14px;
   line-height: 1.7;
 }
+
+.settings-sync-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -16px 0 20px;
+  color: #c5cde0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.settings-sync-retry {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  padding: 2px 0;
+  background: transparent;
+  color: #aaf7df;
+  font: inherit;
+  font-weight: 700;
+}
+
+.settings-sync-retry:hover {
+  color: #fff;
+}
 .settings-form {
   max-width: none;
   display: grid;

@@ -429,14 +429,6 @@ func (s *Studio) tokenSettings() (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	s.mu.RLock()
-	bearer := s.huabotBearer
-	s.mu.RUnlock()
-	if bearer != "" {
-		// Usage refresh is best-effort: opening settings must still work with the
-		// last locally cached values when Huabot is temporarily unavailable.
-		_ = s.refreshTokenUsage(user.ID, bearer)
-	}
 	result := map[string]any{"tokens": []map[string]any{}, "active_token_id": "", "image_model": "", "text_model": "", "chat_model": ""}
 	rows, err := s.db.Query("select id,name,masked,status,today_cost,total_cost from tokens where user_id=? order by name", user.ID)
 	if err != nil {
@@ -460,6 +452,76 @@ func (s *Studio) tokenSettings() (map[string]any, error) {
 		return nil, err
 	}
 	return result, nil
+}
+
+func (s *Studio) refreshTokenSettings() (map[string]any, error) {
+	user, err := s.currentUser()
+	if err != nil {
+		return nil, err
+	}
+	bearer, err := s.currentHuabotBearer(user.ID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.refreshTokenUsage(user.ID, bearer); err != nil {
+		return nil, err
+	}
+	return s.tokenSettings()
+}
+
+func (s *Studio) currentHuabotBearer(userID string) (string, error) {
+	s.mu.RLock()
+	if s.user != nil && s.user.ID == userID && s.huabotBearer != "" {
+		bearer := s.huabotBearer
+		s.mu.RUnlock()
+		return bearer, nil
+	}
+	s.mu.RUnlock()
+
+	var credential authCredential
+	if err := s.db.QueryRow("select kind,secret from auth_credentials where user_id=?", userID).Scan(&credential.Kind, &credential.Secret); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", errors.New("登录凭据已失效")
+		}
+		return "", err
+	}
+	secret, err := unseal(s.masterKey, credential.Secret)
+	if err != nil {
+		return "", err
+	}
+	bearer := secret
+	if credential.Kind == oauthRefreshCredentialKind {
+		config := s.huabotConfig()
+		var exchanged map[string]any
+		if err := s.webRequest(http.MethodPost, config.WebBase+"/oauth/token", "", url.Values{
+			"grant_type":    {"refresh_token"},
+			"client_id":     {s.oauthClientID()},
+			"refresh_token": {secret},
+		}, &exchanged); err != nil {
+			return "", err
+		}
+		bearer = stringValue(exchanged["access_token"])
+		if bearer == "" {
+			return "", errors.New("huabot 未返回访问令牌")
+		}
+		if nextRefresh := stringValue(exchanged["refresh_token"]); nextRefresh != "" && nextRefresh != secret {
+			encrypted, err := seal(s.masterKey, nextRefresh)
+			if err != nil {
+				return "", err
+			}
+			if _, err := s.execDataWrite("update auth_credentials set secret=? where user_id=?", encrypted, userID); err != nil {
+				return "", err
+			}
+		}
+	} else if credential.Kind != passwordCredentialKind {
+		return "", fmt.Errorf("未知的登录凭据类型 %q", credential.Kind)
+	}
+	s.mu.Lock()
+	if s.user != nil && s.user.ID == userID {
+		s.huabotBearer = bearer
+	}
+	s.mu.Unlock()
+	return bearer, nil
 }
 
 func (s *Studio) refreshTokenUsage(userID, bearer string) error {
@@ -503,13 +565,6 @@ func (s *Studio) models() (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	refreshed, err := s.fetchModels()
-	if err != nil {
-		return nil, err
-	}
-	if err := s.refreshModels(user.ID, refreshed); err != nil {
-		return nil, err
-	}
 	rows, err := s.db.Query("select alias,name from models where user_id=? order by name", user.ID)
 	if err != nil {
 		return nil, err
@@ -527,7 +582,22 @@ func (s *Studio) models() (map[string]any, error) {
 	return map[string]any{"models": result}, rows.Err()
 }
 
-func (s *Studio) refreshModels(userID string, models []providerModel) error {
+func (s *Studio) refreshModels() (map[string]any, error) {
+	user, err := s.currentUser()
+	if err != nil {
+		return nil, err
+	}
+	refreshed, err := s.fetchModels()
+	if err != nil {
+		return nil, err
+	}
+	if err := s.replaceModels(user.ID, refreshed); err != nil {
+		return nil, err
+	}
+	return s.models()
+}
+
+func (s *Studio) replaceModels(userID string, models []providerModel) error {
 	done, err := s.beginDataWrite()
 	if err != nil {
 		return err

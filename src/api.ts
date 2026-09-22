@@ -120,6 +120,8 @@ export const client = {
   },
   tokenSettings: () => call<TokenSettings>("TokenSettings"),
   models: () => call<{ models: Model[] }>("Models"),
+  refreshTokenSettings: () => call<TokenSettings>("RefreshTokenSettings"),
+  refreshModels: () => call<{ models: Model[] }>("RefreshModels"),
   saveSettings: (body: {
     token_id: string;
     image_model: string;

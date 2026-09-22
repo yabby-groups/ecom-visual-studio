@@ -52,6 +52,10 @@ export function Project(arg1:string):Promise<Record<string, any>>;
 
 export function Projects():Promise<Array<Record<string, any>>>;
 
+export function RefreshModels():Promise<Record<string, any>>;
+
+export function RefreshTokenSettings():Promise<Record<string, any>>;
+
 export function RegenerateTryOn(arg1:string):Promise<Record<string, boolean>>;
 
 export function ResetPrompt(arg1:string):Promise<Record<string, string>>;

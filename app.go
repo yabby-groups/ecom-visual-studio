@@ -314,6 +314,14 @@ func (s *Studio) Models() (map[string]any, error) {
 	return s.models()
 }
 
+func (s *Studio) RefreshTokenSettings() (map[string]any, error) {
+	return s.refreshTokenSettings()
+}
+
+func (s *Studio) RefreshModels() (map[string]any, error) {
+	return s.refreshModels()
+}
+
 func (s *Studio) SaveSettings(input SettingsInput) (map[string]bool, error) {
 	if err := s.dataWriteAllowed(); err != nil {
 		return nil, err
