@@ -47,6 +47,17 @@ function formatDuration(seconds: number) {
   return `${String(minutes).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
+function formatGeneratedAt(timestamp: number) {
+  const date = new Date(timestamp * 1000);
+  const datePart = [date.getFullYear(), date.getMonth() + 1, date.getDate()]
+    .map((part) => String(part).padStart(2, "0"))
+    .join("-");
+  const timePart = [date.getHours(), date.getMinutes()]
+    .map((part) => String(part).padStart(2, "0"))
+    .join(":");
+  return `${datePart} ${timePart}`;
+}
+
 type ReferenceSlotProps = {
   title: string;
   hint: string;
@@ -412,6 +423,15 @@ export function TryOn() {
     return () => window.clearInterval(timer);
   }, [pendingJob?.generation_started_at]);
   const displayedPath = selectedVersionPath ?? selectedJob?.file_path ?? null;
+  const currentVersion = selectedJob?.versions.find(
+    (version) => version.file_path === selectedJob.file_path,
+  );
+  const generationDuration =
+    selectedJob?.status === "ready" &&
+    currentVersion &&
+    selectedJob.generation_started_at !== null
+      ? Math.max(0, currentVersion.created_at - selectedJob.generation_started_at)
+      : null;
   const referencePersonPaths = selectedJob?.person_paths ?? personPaths;
   const referenceGarmentPaths = selectedJob?.garment_paths ?? garmentPaths;
   const hasOriginals =
@@ -601,6 +621,12 @@ export function TryOn() {
               </div>
             ) : null}
           </div>
+          {currentVersion && generationDuration !== null && (
+            <p className="generation-completed-at">
+              生成于 {formatGeneratedAt(currentVersion.created_at)} · 耗时{" "}
+              {formatDuration(generationDuration)}
+            </p>
+          )}
           <div className="variant-strip" aria-label="试穿版本">
             <span>版本</span>
             {selectedJob?.versions.length ? (
