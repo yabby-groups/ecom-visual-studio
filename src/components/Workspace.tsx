@@ -30,6 +30,17 @@ function formatDuration(seconds: number) {
   return `${String(minutes).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
+function formatGeneratedAt(timestamp: number) {
+  const date = new Date(timestamp * 1000);
+  const datePart = [date.getFullYear(), date.getMonth() + 1, date.getDate()]
+    .map((part) => String(part).padStart(2, "0"))
+    .join("-");
+  const timePart = [date.getHours(), date.getMinutes()]
+    .map((part) => String(part).padStart(2, "0"))
+    .join(":");
+  return `${datePart} ${timePart}`;
+}
+
 export function Workspace() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
@@ -165,6 +176,16 @@ export function Workspace() {
   const asset = currentProject.assets?.find((item) => item.id === assetId);
   const versions = asset?.versions ?? [];
   const displayedPath = selectedVersionPath ?? asset?.file_path ?? null;
+  const displayedVersion = versions.find(
+    (version) => version.file_path === displayedPath,
+  );
+  const displayedGenerationDuration =
+    displayedVersion?.generation_started_at === null || !displayedVersion
+      ? null
+      : Math.max(
+          0,
+          displayedVersion.created_at - displayedVersion.generation_started_at,
+        );
   const elapsedSeconds =
     asset && isPending(asset.status) && asset.generation_started_at
       ? Math.max(0, Math.floor(now / 1000 - asset.generation_started_at))
@@ -368,6 +389,13 @@ export function Workspace() {
                   </div>
                 ) : null}
               </div>
+              {displayedVersion && (
+                <p className="generation-completed-at">
+                  生成于 {formatGeneratedAt(displayedVersion.created_at)}
+                  {displayedGenerationDuration !== null &&
+                    ` · 耗时 ${formatDuration(displayedGenerationDuration)}`}
+                </p>
+              )}
               <div className="variant-strip" aria-label="画面版本">
                 <span>版本</span>
                 {versions.length ? (
@@ -384,11 +412,21 @@ export function Workspace() {
                           }
                           key={version.id}
                           aria-label={`查看${current ? "当前" : `历史 ${versions.length - index}`}版本`}
+                          title={`生成于 ${formatGeneratedAt(version.created_at)}`}
                         >
                           <img src={fileUrl(version.file_path)} alt="" />
-                          <b>
-                            {current ? "当前" : `v${versions.length - index}`}
-                          </b>
+                          <span className="variant-meta">
+                            <b>
+                              {current
+                                ? "当前"
+                                : `v${versions.length - index}`}
+                            </b>
+                            <small>
+                              {formatGeneratedAt(version.created_at)}
+                              {version.generation_started_at !== null &&
+                                ` · 耗时 ${formatDuration(Math.max(0, version.created_at - version.generation_started_at))}`}
+                            </small>
+                          </span>
                         </button>
                       );
                     })}

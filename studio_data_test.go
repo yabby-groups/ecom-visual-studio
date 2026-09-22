@@ -183,6 +183,36 @@ func TestGenerateAssetRequiresLoginBeforeQueueing(t *testing.T) {
 	}
 }
 
+func TestProjectIncludesAssetVersionGenerationStart(t *testing.T) {
+	db, err := sql.Open("sqlite", sqliteDSN(filepath.Join(t.TempDir(), "studio.db")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	studio := &Studio{db: db}
+	if err := studio.migrate(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("insert into projects(id,user_id,name,product,created_at) values('project-1',?,'Local','Desk',1)", localWorkspaceID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("insert into assets(id,project_id,title,template,ratio,status,created_at) values('asset-1','project-1','Hero','hero-image','1:1','ready',1)"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("insert into asset_versions(id,asset_id,file_path,generation_started_at,created_at) values('version-1','asset-1','generated/hero.png',10,25)"); err != nil {
+		t.Fatal(err)
+	}
+	project, err := studio.Project("project-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assets := project["assets"].([]map[string]any)
+	versions := assets[0]["versions"].([]map[string]any)
+	if versions[0]["generation_started_at"] != int64(10) {
+		t.Fatalf("generation_started_at = %#v, want 10", versions[0]["generation_started_at"])
+	}
+}
+
 func TestCreatePackMatchesPythonPackageConstruction(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")
 	if err != nil {
@@ -1038,6 +1068,18 @@ func TestImageFormat(t *testing.T) {
 	}
 	if got := imageFormat([]byte("RIFFxxxxWEBP")); got != "WebP" {
 		t.Fatalf("imageFormat(WebP) = %q", got)
+	}
+}
+
+func TestValidPNGDoesNotRejectProviderAspectRatio(t *testing.T) {
+	image := make([]byte, 24)
+	copy(image[:8], []byte{137, 80, 78, 71, 13, 10, 26, 10})
+	copy(image[12:16], []byte("IHDR"))
+	image[17], image[18] = 6, 136
+	image[21], image[22] = 3, 173
+
+	if err := validPNG(image); err != nil {
+		t.Fatalf("validPNG() rejected a valid provider image: %v", err)
 	}
 }
 

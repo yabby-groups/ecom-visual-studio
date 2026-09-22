@@ -169,7 +169,7 @@ func (s *Studio) migrate() error {
 		"create table if not exists desktop_session (singleton integer primary key check(singleton=1), user_id text not null references users(id) on delete cascade)",
 		"create table if not exists projects (id text primary key, user_id text not null, name text not null, product text not null, description text not null default '', benefits text not null default '', color text not null default '', reference text not null default '', created_at integer not null)",
 		"create table if not exists assets (id text primary key, project_id text not null, title text not null, template text not null, ratio text not null, prompt text not null default '', status text not null, file_path text, generation_started_at integer, created_at integer not null)",
-		"create table if not exists asset_versions (id text primary key, asset_id text not null, file_path text not null, created_at integer not null)",
+		"create table if not exists asset_versions (id text primary key, asset_id text not null, file_path text not null, generation_started_at integer, created_at integer not null)",
 		"create table if not exists custom_templates (id text primary key, user_id text not null, name text not null, ratio text not null, direction text not null, created_at integer not null)",
 		"create table if not exists settings (user_id text primary key, token_id text not null default '', image_model text not null default '', text_model text not null default '', chat_model text not null default '')",
 		"create table if not exists tokens (id text primary key, user_id text not null, name text not null, secret text not null, masked text not null default '', status integer not null default 1, today_cost text not null default '0', total_cost text not null default '0')",
@@ -202,6 +202,9 @@ func (s *Studio) migrate() error {
 	}
 	// Early desktop builds did not persist the selected provider token.
 	if _, err := s.db.Exec("alter table settings add column token_id text not null default ''"); err != nil && !strings.Contains(err.Error(), "duplicate column") {
+		return err
+	}
+	if _, err := s.db.Exec("alter table asset_versions add column generation_started_at integer"); err != nil && !strings.Contains(err.Error(), "duplicate column") {
 		return err
 	}
 	return nil

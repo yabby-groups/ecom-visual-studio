@@ -22,6 +22,7 @@ export type AssetVersion = {
   id: string;
   asset_id: string;
   file_path: string;
+  generation_started_at: number | null;
   created_at: number;
 };
 export type LatestCreation = {

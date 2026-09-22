@@ -36,7 +36,7 @@ func imageSize(ratio string) ([2]int, error) {
 	}
 	return size, nil
 }
-func validPNG(data []byte, expected [2]int) error {
+func validPNG(data []byte) error {
 	if len(data) < 24 || !bytes.Equal(data[:8], []byte{137, 80, 78, 71, 13, 10, 26, 10}) || !bytes.Equal(data[12:16], []byte("IHDR")) {
 		return fmt.Errorf("图像服务未按请求返回 PNG 图片（收到 %s，%d 字节）", imageFormat(data), len(data))
 	}
@@ -44,9 +44,6 @@ func validPNG(data []byte, expected [2]int) error {
 	h := int(data[20])<<24 | int(data[21])<<16 | int(data[22])<<8 | int(data[23])
 	if w < 1 || h < 1 {
 		return errors.New("图像服务返回的 PNG 尺寸无效")
-	}
-	if w*expected[1] != h*expected[0] {
-		return fmt.Errorf("图像服务返回比例 %d:%d，但请求的是 %d:%d", w, h, expected[0], expected[1])
 	}
 	return nil
 }
@@ -140,8 +137,9 @@ func (s *Studio) generateAsset(id, providerUserID string) {
 	if err := s.db.QueryRow("select a.project_id,a.prompt,a.ratio,p.reference from assets a join projects p on p.id=a.project_id where a.id=?", id).Scan(&projectID, &prompt, &ratio, &reference); err != nil {
 		return
 	}
+	startedAt := time.Now().Unix()
 	if err := s.writeTransaction(func(tx *sql.Tx) error {
-		_, err := tx.Exec("update assets set status='generating',generation_started_at=? where id=?", time.Now().Unix(), id)
+		_, err := tx.Exec("update assets set status='generating',generation_started_at=? where id=?", startedAt, id)
 		return err
 	}); err != nil {
 		return
@@ -169,7 +167,7 @@ func (s *Studio) generateAsset(id, providerUserID string) {
 				})
 			}
 			if err == nil {
-				err = s.saveImageResponse(raw, projectID, id, size, "asset_versions", "asset_id")
+				err = s.saveImageResponse(raw, projectID, id, size, "asset_versions", startedAt)
 			}
 		}
 	}
@@ -247,7 +245,7 @@ func safeUpload(dataDir, path string) (*os.File, error) {
 	}
 	return os.Open(full)
 }
-func (s *Studio) saveImageResponse(raw *openai.ImagesResponse, folder, entity string, size [2]int, table, column string) error {
+func (s *Studio) saveImageResponse(raw *openai.ImagesResponse, folder, entity string, size [2]int, table string, startedAt int64) error {
 	if raw == nil || len(raw.Data) == 0 {
 		return errors.New("图像服务没有返回图片")
 	}
@@ -255,7 +253,7 @@ func (s *Studio) saveImageResponse(raw *openai.ImagesResponse, folder, entity st
 	if err != nil {
 		return err
 	}
-	if err = validPNG(image, size); err != nil {
+	if err = validPNG(image); err != nil {
 		return err
 	}
 	dir := filepath.Join(s.dataDir, "storage", "generated", folder)
@@ -268,14 +266,17 @@ func (s *Studio) saveImageResponse(raw *openai.ImagesResponse, folder, entity st
 	}
 	path := filepath.ToSlash(filepath.Join("generated", folder, name))
 	return s.writeTransaction(func(tx *sql.Tx) error {
-		if _, err := tx.Exec(fmt.Sprintf("insert into %s(id,%s,file_path,created_at) values(?,?,?,?)", table, column), newID("version"), entity, path, time.Now().Unix()); err != nil {
-			return err
-		}
 		switch table {
 		case "asset_versions":
+			if _, err := tx.Exec("insert into asset_versions(id,asset_id,file_path,generation_started_at,created_at) values(?,?,?,?,?)", newID("version"), entity, path, startedAt, time.Now().Unix()); err != nil {
+				return err
+			}
 			_, err := tx.Exec("update assets set file_path=?,status='ready' where id=?", path, entity)
 			return err
 		case "try_on_versions":
+			if _, err := tx.Exec("insert into try_on_versions(id,job_id,file_path,created_at) values(?,?,?,?)", newID("version"), entity, path, time.Now().Unix()); err != nil {
+				return err
+			}
 			_, err := tx.Exec("update try_on_jobs set status='ready',file_path=? where id=?", path, entity)
 			return err
 		default:
@@ -381,8 +382,9 @@ func (s *Studio) generateTryOn(id, providerUserID string) {
 	if err := s.db.QueryRow("select person_paths,garment_paths,instructions,ratio from try_on_jobs where id=?", id).Scan(&persons, &garments, &instructions, &ratio); err != nil {
 		return
 	}
+	startedAt := time.Now().Unix()
 	if err := s.writeTransaction(func(tx *sql.Tx) error {
-		_, err := tx.Exec("update try_on_jobs set status='generating',generation_started_at=? where id=?", time.Now().Unix(), id)
+		_, err := tx.Exec("update try_on_jobs set status='generating',generation_started_at=? where id=?", startedAt, id)
 		return err
 	}); err != nil {
 		return
@@ -403,7 +405,7 @@ func (s *Studio) generateTryOn(id, providerUserID string) {
 			raw, requestErr := s.imageEdit(requestContext, client, image, prompt, size, append(pp, gg...))
 			err = requestErr
 			if err == nil {
-				err = s.saveImageResponse(raw, filepath.Join("try-on", localWorkspaceID), id, size, "try_on_versions", "job_id")
+				err = s.saveImageResponse(raw, filepath.Join("try-on", localWorkspaceID), id, size, "try_on_versions", startedAt)
 			}
 		}
 	}

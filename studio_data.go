@@ -370,7 +370,7 @@ func (s *Studio) localProject(id string) (map[string]any, error) {
 	return map[string]any{"id": pid, "user_id": uid, "name": name, "product": product, "description": description, "benefits": benefits, "color": color, "reference": reference, "created_at": created}, nil
 }
 func (s *Studio) assetVersions(id string) ([]map[string]any, error) {
-	rows, err := s.db.Query("select id,asset_id,file_path,created_at from asset_versions where asset_id=? order by created_at desc", id)
+	rows, err := s.db.Query("select id,asset_id,file_path,generation_started_at,created_at from asset_versions where asset_id=? order by created_at desc", id)
 	if err != nil {
 		return nil, err
 	}
@@ -378,11 +378,12 @@ func (s *Studio) assetVersions(id string) ([]map[string]any, error) {
 	result := []map[string]any{}
 	for rows.Next() {
 		var vid, asset, path string
+		var started sql.NullInt64
 		var created int64
-		if err := rows.Scan(&vid, &asset, &path, &created); err != nil {
+		if err := rows.Scan(&vid, &asset, &path, &started, &created); err != nil {
 			return nil, err
 		}
-		result = append(result, map[string]any{"id": vid, "asset_id": asset, "file_path": path, "created_at": created})
+		result = append(result, map[string]any{"id": vid, "asset_id": asset, "file_path": path, "generation_started_at": nullableInt(started), "created_at": created})
 	}
 	return result, rows.Err()
 }
