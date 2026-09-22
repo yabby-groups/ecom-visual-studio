@@ -17,7 +17,7 @@ import {
   setThemePreference,
   subscribeTheme,
 } from "../theme";
-import type { StorageLocation, TokenSettings } from "../types";
+import type { Model, StorageLocation, TokenSettings } from "../types";
 import { LogoutButton } from "./LogoutButton";
 import { Notice } from "./Notice";
 import { Shell } from "./Shell";
@@ -49,7 +49,6 @@ const EMPTY_VALUES: SettingsValues = {
 const tokenCostFormatter = new Intl.NumberFormat("zh-CN", {
   maximumFractionDigits: 2,
 });
-
 function formatTokenCost(value: string): string {
   if (!value.trim()) return "0";
   const number = Number(value);
@@ -72,11 +71,18 @@ function timeout<T>(request: Promise<T>, message: string): Promise<T> {
   });
 }
 
+function selectResponsesModel(value: string, models: Model[]): string {
+  if (models.length === 0) return value;
+  return models.some((model) => model.id === value)
+    ? value
+    : models[0]?.id || "";
+}
+
 export function SettingsPage() {
   const user = useAppStore((state) => state.user);
   const requireAiAuth = useRequireAiAuth();
   const [settings, setSettings] = useState<TokenSettings>(EMPTY_SETTINGS);
-  const [models, setModels] = useState<{ id: string; name: string }[]>([]);
+  const [models, setModels] = useState<Model[]>([]);
   const [values, setValues] = useState<SettingsValues>(EMPTY_VALUES);
   const [notice, setNotice] = useState("");
   const [settingsReady, setSettingsReady] = useState(false);
@@ -87,6 +93,7 @@ export function SettingsPage() {
   const [storage, setStorage] = useState<StorageLocation | null>(null);
   const [migratingStorage, setMigratingStorage] = useState(false);
   const dirtyFields = useRef(new Set<keyof SettingsValues>());
+  const modelsRef = useRef<Model[]>([]);
   const retryRefresh = useRef<(() => void) | null>(null);
   const themePreference = useSyncExternalStore(
     subscribeTheme,
@@ -94,6 +101,9 @@ export function SettingsPage() {
   );
   const imageModels = models.filter((model) =>
     model.id.startsWith("gpt-image-"),
+  );
+  const responsesModels = models.filter((model) =>
+    model.api_modes.includes("responses"),
   );
   useEffect(() => {
     let active = true;
@@ -105,6 +115,7 @@ export function SettingsPage() {
     setRefreshingModels(false);
     setSettings(EMPTY_SETTINGS);
     setModels([]);
+    modelsRef.current = [];
     setValues(EMPTY_VALUES);
 
     if (!user) {
@@ -122,34 +133,56 @@ export function SettingsPage() {
           text_model: next.text_model,
           chat_model: next.chat_model,
         };
-        if (!preserveEdits) return nextValues;
-        for (const field of dirtyFields.current) nextValues[field] = current[field];
+        if (preserveEdits) {
+          for (const field of dirtyFields.current) nextValues[field] = current[field];
+        }
+        const availableResponsesModels = modelsRef.current.filter((model) =>
+          model.api_modes.includes("responses"),
+        );
+        nextValues.text_model = selectResponsesModel(
+          nextValues.text_model,
+          availableResponsesModels,
+        );
+        nextValues.chat_model = selectResponsesModel(
+          nextValues.chat_model,
+          availableResponsesModels,
+        );
         return nextValues;
       });
     };
     const applyModels = (
-      next: { id: string; name: string }[],
+      next: Model[],
       preserveEdits: boolean,
     ) => {
+      modelsRef.current = next;
       setModels(next);
       setModelsReady(true);
       const nextImageModels = next.filter((model) =>
         model.id.startsWith("gpt-image-"),
       );
+      const nextResponsesModels = next.filter((model) =>
+        model.api_modes.includes("responses"),
+      );
       setValues((current) => {
-        if (
-          preserveEdits &&
-          dirtyFields.current.has("image_model")
-        ) {
-          return current;
-        }
-        if (
-          !current.image_model ||
-          !nextImageModels.some((model) => model.id === current.image_model)
-        ) {
-          return { ...current, image_model: nextImageModels[0]?.id || "" };
-        }
-        return current;
+        const image_model =
+          preserveEdits && dirtyFields.current.has("image_model")
+            ? current.image_model
+            : !current.image_model ||
+                !nextImageModels.some((model) => model.id === current.image_model)
+              ? nextImageModels[0]?.id || ""
+              : current.image_model;
+        return {
+          ...current,
+          image_model,
+          text_model: selectResponsesModel(
+            current.text_model,
+            nextResponsesModels,
+          ),
+          chat_model: selectResponsesModel(
+            current.chat_model,
+            nextResponsesModels,
+          ),
+        };
       });
     };
     const refreshSettings = () => {
@@ -240,7 +273,12 @@ export function SettingsPage() {
         // Storage selection is supplementary; do not block account settings if its bridge is unavailable.
       });
   }, []);
-  const canSave = settingsReady && modelsReady && models.length > 0;
+  const canSave =
+    settingsReady &&
+    modelsReady &&
+    imageModels.length > 0 &&
+    responsesModels.length > 0 &&
+    Boolean(values.image_model && values.text_model && values.chat_model);
   const refreshing = refreshingSettings || refreshingModels;
   return (
     <Shell>
@@ -339,12 +377,17 @@ export function SettingsPage() {
                       value={value}
                       options={(name === "image_model"
                         ? imageModels
-                        : models
+                        : responsesModels
                       ).map((model) => ({
                         value: model.id,
                         label: model.name,
                       }))}
-                      disabled={!modelsReady || models.length === 0}
+                      disabled={
+                        !modelsReady ||
+                        (name === "image_model"
+                          ? imageModels.length === 0
+                          : responsesModels.length === 0)
+                      }
                       onChange={(nextValue) => {
                         const field = name as keyof SettingsValues;
                         dirtyFields.current.add(field);

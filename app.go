@@ -173,7 +173,7 @@ func (s *Studio) migrate() error {
 		"create table if not exists custom_templates (id text primary key, user_id text not null, name text not null, ratio text not null, direction text not null, created_at integer not null)",
 		"create table if not exists settings (user_id text primary key, token_id text not null default '', image_model text not null default '', text_model text not null default '', chat_model text not null default '')",
 		"create table if not exists tokens (id text primary key, user_id text not null, name text not null, secret text not null, masked text not null default '', status integer not null default 1, today_cost text not null default '0', total_cost text not null default '0')",
-		"create table if not exists models (id text primary key, user_id text not null, name text not null, alias text not null)",
+		"create table if not exists models (id text primary key, user_id text not null, name text not null, alias text not null, api_modes text not null default '[]')",
 		"create table if not exists auth_credentials (user_id text primary key references users(id) on delete cascade, kind text not null, secret text not null)",
 		"create table if not exists try_on_jobs (id text primary key, user_id text not null, person_paths text not null, garment_paths text not null, generation_mode text not null, instructions text not null default '', ratio text not null, status text not null, file_path text, generation_started_at integer, created_at integer not null)",
 		"create table if not exists try_on_versions (id text primary key, job_id text not null, file_path text not null, generation_started_at integer, created_at integer not null)",
@@ -208,6 +208,9 @@ func (s *Studio) migrate() error {
 		return err
 	}
 	if _, err := s.db.Exec("alter table try_on_versions add column generation_started_at integer"); err != nil && !strings.Contains(err.Error(), "duplicate column") {
+		return err
+	}
+	if _, err := s.db.Exec("alter table models add column api_modes text not null default '[]'"); err != nil && !strings.Contains(err.Error(), "duplicate column") {
 		return err
 	}
 	return nil

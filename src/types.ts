@@ -73,7 +73,7 @@ export type Token = {
   today_cost: string;
   total_cost: string;
 };
-export type Model = { id: string; name: string };
+export type Model = { id: string; name: string; api_modes: string[] };
 export type TokenSettings = {
   tokens: Token[];
   active_token_id: string;

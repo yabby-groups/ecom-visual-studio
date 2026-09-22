@@ -22,7 +22,10 @@ type providerToken struct {
 	Status                int
 	TodayCost, TotalCost  string
 }
-type providerModel struct{ ID, Name, Alias string }
+type providerModel struct {
+	ID, Name, Alias string
+	APIModes        []string
+}
 
 const (
 	oauthDeviceGrantType       = "urn:ietf:params:oauth:grant-type:device_code"
@@ -147,9 +150,40 @@ func parseModels(raw map[string]any) []providerModel {
 		if alias == "" {
 			continue
 		}
-		result = append(result, providerModel{ID: stringValue(first(value, "id", "uuid", "alias")), Name: stringValue(first(value, "title", "alias")), Alias: alias})
+		result = append(result, providerModel{
+			ID:       stringValue(first(value, "id", "uuid", "alias")),
+			Name:     stringValue(first(value, "title", "alias")),
+			Alias:    alias,
+			APIModes: parseAPIModes(value["api_modes"]),
+		})
 	}
 	return result
+}
+
+func parseAPIModes(value any) []string {
+	items, ok := value.([]any)
+	if !ok {
+		return nil
+	}
+	seen := map[string]bool{}
+	modes := []string{}
+	for _, item := range items {
+		mode := strings.ToLower(strings.TrimSpace(stringValue(item)))
+		if mode != "" && !seen[mode] {
+			seen[mode] = true
+			modes = append(modes, mode)
+		}
+	}
+	return modes
+}
+
+func supportsAPIMode(modes []string, wanted string) bool {
+	for _, mode := range modes {
+		if mode == wanted {
+			return true
+		}
+	}
+	return false
 }
 func first(value map[string]any, keys ...string) any {
 	for _, key := range keys {
@@ -367,7 +401,11 @@ func (s *Studio) syncAccount(user User, tokens []providerToken, models []provide
 		}
 	}
 	for _, model := range models {
-		if _, err = tx.Exec("insert into models(id,user_id,name,alias) values(?,?,?,?)", model.ID, user.ID, model.Name, model.Alias); err != nil {
+		modes, marshalErr := json.Marshal(model.APIModes)
+		if marshalErr != nil {
+			return marshalErr
+		}
+		if _, err = tx.Exec("insert into models(id,user_id,name,alias,api_modes) values(?,?,?,?,?)", model.ID, user.ID, model.Name, model.Alias, string(modes)); err != nil {
 			return err
 		}
 	}
@@ -379,7 +417,23 @@ func (s *Studio) syncAccount(user User, tokens []providerToken, models []provide
 		}
 		return fallback
 	}
-	image, text, chat = valid(image, "gpt-image-2"), valid(text, "gpt-5.6-luna"), valid(chat, "gpt-5.6-luna")
+	validResponses := func(value string) string {
+		for _, model := range models {
+			if value == model.ID || value == model.Name || value == model.Alias {
+				if supportsAPIMode(model.APIModes, "responses") {
+					return model.Alias
+				}
+				break
+			}
+		}
+		for _, model := range models {
+			if supportsAPIMode(model.APIModes, "responses") {
+				return model.Alias
+			}
+		}
+		return ""
+	}
+	image, text, chat = valid(image, "gpt-image-2"), validResponses(text), validResponses(chat)
 	if oldToken == "" {
 		oldToken = tokens[0].ID
 	}
@@ -565,20 +619,24 @@ func (s *Studio) models() (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.db.Query("select alias,name from models where user_id=? order by name", user.ID)
+	rows, err := s.db.Query("select alias,name,api_modes from models where user_id=? order by name", user.ID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	result := []map[string]string{}
+	result := []map[string]any{}
 	for rows.Next() {
-		var alias, name string
-		if err := rows.Scan(&alias, &name); err != nil {
+		var alias, name, rawModes string
+		if err := rows.Scan(&alias, &name, &rawModes); err != nil {
 			return nil, err
 		}
-		result = append(result, map[string]string{"id": alias, "name": name})
+		modes := []string{}
+		if err := json.Unmarshal([]byte(rawModes), &modes); err != nil {
+			return nil, fmt.Errorf("本地模型能力数据无效: %w", err)
+		}
+		result = append(result, map[string]any{"id": alias, "name": name, "api_modes": modes})
 	}
-	sort.Slice(result, func(i, j int) bool { return result[i]["name"] < result[j]["name"] })
+	sort.Slice(result, func(i, j int) bool { return result[i]["name"].(string) < result[j]["name"].(string) })
 	return map[string]any{"models": result}, rows.Err()
 }
 
@@ -614,7 +672,11 @@ func (s *Studio) replaceModels(userID string, models []providerModel) error {
 		return err
 	}
 	for _, model := range models {
-		if _, err = tx.Exec("insert into models(id,user_id,name,alias) values(?,?,?,?)", model.ID, userID, model.Name, model.Alias); err != nil {
+		modes, marshalErr := json.Marshal(model.APIModes)
+		if marshalErr != nil {
+			return marshalErr
+		}
+		if _, err = tx.Exec("insert into models(id,user_id,name,alias,api_modes) values(?,?,?,?,?)", model.ID, userID, model.Name, model.Alias, string(modes)); err != nil {
 			return err
 		}
 	}
@@ -626,7 +688,23 @@ func (s *Studio) replaceModels(userID string, models []providerModel) error {
 		}
 		return fallback
 	}
-	_, err = tx.Exec("insert into settings(user_id,token_id,image_model,text_model,chat_model) values(?,?,?,?,?) on conflict(user_id) do update set image_model=excluded.image_model,text_model=excluded.text_model,chat_model=excluded.chat_model", userID, tokenID, selected(image, "gpt-image-2"), selected(text, "gpt-5.6-luna"), selected(chat, "gpt-5.6-luna"))
+	selectedResponse := func(value string) string {
+		for _, model := range models {
+			if value == model.ID || value == model.Name || value == model.Alias {
+				if supportsAPIMode(model.APIModes, "responses") {
+					return model.Alias
+				}
+				break
+			}
+		}
+		for _, model := range models {
+			if supportsAPIMode(model.APIModes, "responses") {
+				return model.Alias
+			}
+		}
+		return ""
+	}
+	_, err = tx.Exec("insert into settings(user_id,token_id,image_model,text_model,chat_model) values(?,?,?,?,?) on conflict(user_id) do update set image_model=excluded.image_model,text_model=excluded.text_model,chat_model=excluded.chat_model", userID, tokenID, selected(image, "gpt-image-2"), selectedResponse(text), selectedResponse(chat))
 	if err != nil {
 		return err
 	}
@@ -655,6 +733,16 @@ func (s *Studio) saveSettings(input SettingsInput) (map[string]bool, error) {
 		}
 		if exists == 0 {
 			return nil, errors.New("请选择当前账号可用的模型")
+		}
+	}
+	for _, alias := range []string{input.TextModel, input.ChatModel} {
+		var rawModes string
+		if err = s.db.QueryRow("select api_modes from models where user_id=? and alias=?", user.ID, alias).Scan(&rawModes); err != nil {
+			return nil, err
+		}
+		var modes []string
+		if err = json.Unmarshal([]byte(rawModes), &modes); err != nil || !supportsAPIMode(modes, "responses") {
+			return nil, errors.New("商品分析和创作对话模型必须支持 Responses API")
 		}
 	}
 	_, err = s.execDataWrite("insert into settings(user_id,token_id,image_model,text_model,chat_model) values(?,?,?,?,?) on conflict(user_id) do update set token_id=excluded.token_id,image_model=excluded.image_model,text_model=excluded.text_model,chat_model=excluded.chat_model", user.ID, input.TokenID, input.ImageModel, input.TextModel, input.ChatModel)

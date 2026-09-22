@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -695,7 +696,7 @@ func TestHuabotLoginUsesWebBaseAndEncryptsToken(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(map[string]any{"tokens": []map[string]any{{"id": "token-1", "token_name": "Primary", "token_key": "sk-secret", "token_key_masked": "sk-...", "status": 1, "today_used_cost": todayCost, "total_used_cost": totalCost}}})
 		case "/api/token_base/model/list/":
 			modelRequests++
-			_ = json.NewEncoder(w).Encode(map[string]any{"models": []map[string]any{{"id": "image", "alias": "gpt-image-2", "title": "Image"}, {"id": "chat", "alias": "gpt-5.6-luna", "title": "Chat"}}})
+			_ = json.NewEncoder(w).Encode(map[string]any{"models": []map[string]any{{"id": "image", "alias": "gpt-image-2", "title": "Image"}, {"id": "chat", "alias": "gpt-5.6-luna", "title": "Chat", "api_modes": []string{"chat_completions", "responses"}}}})
 		case "/api/signout/":
 			signoutRequests++
 			if r.Method != http.MethodPost || r.Header.Get("Authorization") != "Bearer session" {
@@ -742,8 +743,13 @@ func TestHuabotLoginUsesWebBaseAndEncryptsToken(t *testing.T) {
 	if listRequests != 1 {
 		t.Fatalf("token requests after cached read = %d, want 1", listRequests)
 	}
-	if _, err := studio.Models(); err != nil {
+	models, err := studio.Models()
+	if err != nil {
 		t.Fatal(err)
+	}
+	cachedModels := models["models"].([]map[string]any)
+	if len(cachedModels) != 2 || !reflect.DeepEqual(cachedModels[0]["api_modes"], []string{"chat_completions", "responses"}) {
+		t.Fatalf("cached models = %#v", cachedModels)
 	}
 	if modelRequests != 1 {
 		t.Fatalf("model requests after cached read = %d, want 1", modelRequests)
@@ -929,8 +935,11 @@ func TestSaveSettingsPersistsModelsForCurrentUser(t *testing.T) {
 	if _, err := db.Exec("insert into tokens(id,user_id,name,secret,status) values(?,?,?,?,1)", "token-1", "user-1", "Token", secret); err != nil {
 		t.Fatal(err)
 	}
-	for _, model := range []string{"gpt-image-2", "gpt-5.6-luna"} {
-		if _, err := db.Exec("insert into models(id,user_id,name,alias) values(?,?,?,?)", model, "user-1", model, model); err != nil {
+	for _, model := range []struct {
+		alias string
+		modes string
+	}{{"gpt-image-2", "[]"}, {"gpt-5.6-luna", `["responses"]`}} {
+		if _, err := db.Exec("insert into models(id,user_id,name,alias,api_modes) values(?,?,?,?,?)", model.alias, "user-1", model.alias, model.alias, model.modes); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -948,6 +957,63 @@ func TestSaveSettingsPersistsModelsForCurrentUser(t *testing.T) {
 	}
 	if settings["image_model"] != "gpt-image-2" || settings["text_model"] != "gpt-5.6-luna" || settings["chat_model"] != "gpt-5.6-luna" {
 		t.Fatalf("saved settings = %#v", settings)
+	}
+}
+
+func TestReplaceModelsSelectsResponsesModelsForTextAndChat(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	studio := &Studio{db: db, user: &User{ID: "user-1"}}
+	if err := studio.migrate(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("insert into settings(user_id,token_id,image_model,text_model,chat_model) values(?,?,?,?,?)", "user-1", "token-1", "gpt-image-2", "legacy-chat", "legacy-chat"); err != nil {
+		t.Fatal(err)
+	}
+	if err := studio.replaceModels("user-1", []providerModel{
+		{ID: "image", Name: "Image", Alias: "gpt-image-2"},
+		{ID: "legacy", Name: "Legacy", Alias: "legacy-chat", APIModes: []string{"chat_completions"}},
+		{ID: "responses", Name: "Responses", Alias: "gpt-5.6-luna", APIModes: []string{"responses"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	settings, err := studio.TokenSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settings["text_model"] != "gpt-5.6-luna" || settings["chat_model"] != "gpt-5.6-luna" {
+		t.Fatalf("responses settings = %#v", settings)
+	}
+}
+
+func TestSaveSettingsRejectsModelsWithoutResponses(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	studio := &Studio{db: db, user: &User{ID: "user-1"}}
+	if err := studio.migrate(); err != nil {
+		t.Fatal(err)
+	}
+	secret, err := seal(make([]byte, 32), "sk-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("insert into tokens(id,user_id,name,secret,status) values(?,?,?,?,1)", "token-1", "user-1", "Token", secret); err != nil {
+		t.Fatal(err)
+	}
+	for _, model := range []struct{ alias, modes string }{{"gpt-image-2", "[]"}, {"legacy-chat", `["chat_completions"]`}} {
+		if _, err := db.Exec("insert into models(id,user_id,name,alias,api_modes) values(?,?,?,?,?)", model.alias, "user-1", model.alias, model.alias, model.modes); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, err = studio.SaveSettings(SettingsInput{TokenID: "token-1", ImageModel: "gpt-image-2", TextModel: "legacy-chat", ChatModel: "legacy-chat"})
+	if err == nil || !strings.Contains(err.Error(), "Responses API") {
+		t.Fatalf("save error = %v, want Responses API validation error", err)
 	}
 }
 
