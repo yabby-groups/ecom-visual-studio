@@ -338,7 +338,7 @@ func (s *Studio) saveImageResponse(raw *openai.ImagesResponse, folder, entity st
 			_, err := tx.Exec("update assets set file_path=?,status='ready' where id=?", path, entity)
 			return err
 		case "try_on_versions":
-			if _, err := tx.Exec("insert into try_on_versions(id,job_id,file_path,created_at) values(?,?,?,?)", newID("version"), entity, path, time.Now().Unix()); err != nil {
+			if _, err := tx.Exec("insert into try_on_versions(id,job_id,file_path,generation_started_at,created_at) values(?,?,?,?,?)", newID("version"), entity, path, startedAt, time.Now().Unix()); err != nil {
 				return err
 			}
 			_, err := tx.Exec("update try_on_jobs set status='ready',file_path=? where id=?", path, entity)
@@ -538,7 +538,7 @@ func scanTryOnRow(row rowScanner) (map[string]any, error) {
 }
 
 func (s *Studio) populateTryOnVersions(job map[string]any) error {
-	rows, err := s.db.Query("select id,job_id,file_path,created_at from try_on_versions where job_id=? order by created_at desc, id desc", job["id"])
+	rows, err := s.db.Query("select id,job_id,file_path,generation_started_at,created_at from try_on_versions where job_id=? order by created_at desc, id desc", job["id"])
 	if err != nil {
 		return err
 	}
@@ -546,11 +546,12 @@ func (s *Studio) populateTryOnVersions(job map[string]any) error {
 	versions := []map[string]any{}
 	for rows.Next() {
 		var id, jobID, path string
+		var started sql.NullInt64
 		var created int64
-		if err = rows.Scan(&id, &jobID, &path, &created); err != nil {
+		if err = rows.Scan(&id, &jobID, &path, &started, &created); err != nil {
 			return err
 		}
-		versions = append(versions, map[string]any{"id": id, "job_id": jobID, "file_path": path, "created_at": created})
+		versions = append(versions, map[string]any{"id": id, "job_id": jobID, "file_path": path, "generation_started_at": nullableInt(started), "created_at": created})
 	}
 	if err = rows.Err(); err != nil {
 		return err
@@ -681,7 +682,7 @@ func (s *Studio) Analyze(input map[string]string) (map[string]any, error) {
 	}
 	client := s.openAIClient(config, key)
 	response, err := client.Responses.New(context.Background(), responses.ResponseNewParams{
-		Model:       text,
+		Model: text,
 		// Temperature: openai.Float(0.35),
 		Input: responses.ResponseNewParamsInputUnion{OfInputItemList: responses.ResponseInputParam{
 			responses.ResponseInputItemParamOfMessage(content, responses.EasyInputMessageRoleUser),

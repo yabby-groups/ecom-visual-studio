@@ -176,7 +176,7 @@ func (s *Studio) migrate() error {
 		"create table if not exists models (id text primary key, user_id text not null, name text not null, alias text not null)",
 		"create table if not exists auth_credentials (user_id text primary key references users(id) on delete cascade, kind text not null, secret text not null)",
 		"create table if not exists try_on_jobs (id text primary key, user_id text not null, person_paths text not null, garment_paths text not null, generation_mode text not null, instructions text not null default '', ratio text not null, status text not null, file_path text, generation_started_at integer, created_at integer not null)",
-		"create table if not exists try_on_versions (id text primary key, job_id text not null, file_path text not null, created_at integer not null)",
+		"create table if not exists try_on_versions (id text primary key, job_id text not null, file_path text not null, generation_started_at integer, created_at integer not null)",
 		"create index if not exists projects_user_created_idx on projects(user_id, created_at desc)",
 		"create index if not exists assets_project_idx on assets(project_id)",
 		"create index if not exists try_on_jobs_user_created_idx on try_on_jobs(user_id, created_at desc)",
@@ -205,6 +205,9 @@ func (s *Studio) migrate() error {
 		return err
 	}
 	if _, err := s.db.Exec("alter table asset_versions add column generation_started_at integer"); err != nil && !strings.Contains(err.Error(), "duplicate column") {
+		return err
+	}
+	if _, err := s.db.Exec("alter table try_on_versions add column generation_started_at integer"); err != nil && !strings.Contains(err.Error(), "duplicate column") {
 		return err
 	}
 	return nil

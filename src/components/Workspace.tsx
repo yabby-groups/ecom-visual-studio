@@ -451,11 +451,6 @@ export function Workspace() {
                                 ? "当前"
                                 : `v${versions.length - index}`}
                             </b>
-                            <small>
-                              {formatGeneratedAt(version.created_at)}
-                              {version.generation_started_at !== null &&
-                                ` · 耗时 ${formatDuration(Math.max(0, version.created_at - version.generation_started_at))}`}
-                            </small>
                           </span>
                         </button>
                       );

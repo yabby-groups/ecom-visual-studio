@@ -306,6 +306,7 @@ export function TryOn() {
   }, [navigate, selectedJob, selectedJobId]);
   useEffect(() => {
     if (!selectedJob) return;
+    setSelectedVersionPath(null);
     setPersonPaths(selectedJob.person_paths);
     setGarmentPaths(selectedJob.garment_paths);
     setGenerationMode(selectedJob.generation_mode);
@@ -462,14 +463,21 @@ export function TryOn() {
     return () => window.clearInterval(timer);
   }, [pendingJob?.generation_started_at]);
   const displayedPath = selectedVersionPath ?? selectedJob?.file_path ?? null;
-  const currentVersion = selectedJob?.versions.find(
-    (version) => version.file_path === selectedJob.file_path,
+  const displayedVersion = selectedJob?.versions.find(
+    (version) => version.file_path === displayedPath,
   );
+  const displayedGenerationStartedAt =
+    displayedVersion?.generation_started_at ??
+    selectedJob?.generation_started_at ??
+    null;
   const generationDuration =
     selectedJob?.status === "ready" &&
-    currentVersion &&
-    selectedJob.generation_started_at !== null
-      ? Math.max(0, currentVersion.created_at - selectedJob.generation_started_at)
+    displayedVersion &&
+    displayedGenerationStartedAt !== null
+      ? Math.max(
+          0,
+          displayedVersion.created_at - displayedGenerationStartedAt,
+        )
       : null;
   const referencePersonPaths = selectedJob?.person_paths ?? personPaths;
   const referenceGarmentPaths = selectedJob?.garment_paths ?? garmentPaths;
@@ -660,10 +668,11 @@ export function TryOn() {
               </div>
             ) : null}
           </div>
-          {currentVersion && generationDuration !== null && (
+          {displayedVersion && (
             <p className="generation-completed-at">
-              生成于 {formatGeneratedAt(currentVersion.created_at)} · 耗时{" "}
-              {formatDuration(generationDuration)}
+              生成于 {formatGeneratedAt(displayedVersion.created_at)}
+              {generationDuration !== null &&
+                ` · 耗时 ${formatDuration(generationDuration)}`}
             </p>
           )}
           <div className="variant-strip" aria-label="试穿版本">

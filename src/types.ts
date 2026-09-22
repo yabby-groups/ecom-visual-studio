@@ -107,6 +107,7 @@ export type TryOnVersion = {
   id: string;
   job_id: string;
   file_path: string;
+  generation_started_at: number | null;
   created_at: number;
 };
 export type TryOnPage = {

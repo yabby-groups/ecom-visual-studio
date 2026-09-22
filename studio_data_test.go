@@ -1267,7 +1267,7 @@ func TestTryOnJobsReturnVersionHistoryInStableOrder(t *testing.T) {
 	if _, err := db.Exec("insert into try_on_jobs(id,user_id,person_paths,garment_paths,generation_mode,ratio,status,file_path,created_at) values('job-1','alice','[\"uploads/person.png\"]','[\"uploads/garment.png\"]','combined','2:3','ready','generated/try-on/alice/current.png',2)"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec("insert into try_on_versions(id,job_id,file_path,created_at) values('version-old','job-1','generated/try-on/alice/old.png',1),('version-current','job-1','generated/try-on/alice/current.png',2)"); err != nil {
+	if _, err := db.Exec("insert into try_on_versions(id,job_id,file_path,generation_started_at,created_at) values('version-old','job-1','generated/try-on/alice/old.png',0,1),('version-current','job-1','generated/try-on/alice/current.png',1,2)"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1278,6 +1278,9 @@ func TestTryOnJobsReturnVersionHistoryInStableOrder(t *testing.T) {
 	versions := job["versions"].([]map[string]any)
 	if len(versions) != 2 || versions[0]["file_path"] != "generated/try-on/alice/current.png" || versions[1]["file_path"] != "generated/try-on/alice/old.png" {
 		t.Fatalf("TryOnJob versions = %#v", versions)
+	}
+	if versions[0]["generation_started_at"] != int64(1) || versions[1]["generation_started_at"] != int64(0) {
+		t.Fatalf("TryOnJob version start times = %#v", versions)
 	}
 	page, err := studio.TryOnJobs(12, 0)
 	if err != nil {
