@@ -933,6 +933,190 @@ func TestHuabotDeviceAuthorizationPollsAndSyncsAccount(t *testing.T) {
 	}
 }
 
+func TestCurrentHuabotBearerRefreshesExpiredOAuthToken(t *testing.T) {
+	refreshes := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/oauth/token" {
+			t.Fatalf("unexpected URL %s", r.URL.String())
+		}
+		refreshes++
+		if err := r.ParseForm(); err != nil {
+			t.Fatal(err)
+		}
+		if r.Form.Get("grant_type") != "refresh_token" || r.Form.Get("refresh_token") != "old-refresh" {
+			t.Fatalf("refresh form = %#v", r.Form)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"access_token": "new-access", "refresh_token": "new-refresh", "expires_in": 3600})
+	}))
+	defer server.Close()
+	t.Setenv("HUABOT_WEB_BASE_URL", server.URL)
+
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	masterKey := make([]byte, 32)
+	credential, err := seal(masterKey, "old-refresh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	studio := &Studio{db: db, dataDir: t.TempDir(), httpClient: server.Client(), masterKey: masterKey, user: &User{ID: "user-1"}, huabotBearer: "expired-access", huabotBearerExpiry: time.Now().Add(-time.Minute)}
+	if err := studio.migrate(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("insert into users(id,username,created_at,nick_name,avatar_url) values('user-1','alice',1,'','')"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("insert into auth_credentials(user_id,kind,secret) values(?,?,?)", "user-1", oauthRefreshCredentialKind, credential); err != nil {
+		t.Fatal(err)
+	}
+
+	bearer, err := studio.currentHuabotBearer("user-1")
+	if err != nil || bearer != "new-access" {
+		t.Fatalf("currentHuabotBearer() = %q, %v", bearer, err)
+	}
+	if refreshes != 1 {
+		t.Fatalf("refresh requests = %d, want 1", refreshes)
+	}
+	var stored string
+	if err := db.QueryRow("select secret from auth_credentials where user_id='user-1'").Scan(&stored); err != nil {
+		t.Fatal(err)
+	}
+	storedRefresh, err := unseal(masterKey, stored)
+	if err != nil || storedRefresh != "new-refresh" {
+		t.Fatalf("stored refresh = %q, %v", storedRefresh, err)
+	}
+}
+
+func TestInvalidRefreshTokenClearsAuthorizationOnly(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/oauth/token" {
+			t.Fatalf("unexpected URL %s", r.URL.String())
+		}
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"error": "invalid_grant"})
+	}))
+	defer server.Close()
+	t.Setenv("HUABOT_WEB_BASE_URL", server.URL)
+
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	masterKey := make([]byte, 32)
+	credential, err := seal(masterKey, "revoked-refresh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	studio := &Studio{db: db, dataDir: t.TempDir(), httpClient: server.Client(), masterKey: masterKey, user: &User{ID: "user-1"}}
+	if err := studio.migrate(); err != nil {
+		t.Fatal(err)
+	}
+	for _, statement := range []string{
+		"insert into users(id,username,created_at,nick_name,avatar_url) values('user-1','alice',1,'','')",
+		"insert into desktop_session(singleton,user_id) values(1,'user-1')",
+		"insert into projects(id,user_id,name,product,created_at) values('project-1','desktop-workspace','Local','Desk',1)",
+	} {
+		if _, err := db.Exec(statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := db.Exec("insert into auth_credentials(user_id,kind,secret) values(?,?,?)", "user-1", oauthRefreshCredentialKind, credential); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = studio.currentHuabotBearer("user-1")
+	if err == nil || err.Error() != authorizationExpiredMessage {
+		t.Fatalf("currentHuabotBearer() error = %v, want %q", err, authorizationExpiredMessage)
+	}
+	if studio.Me()["user"] != nil {
+		t.Fatalf("Me() = %#v, want logged out", studio.Me())
+	}
+	for _, table := range []string{"desktop_session", "auth_credentials"} {
+		var count int
+		if err := db.QueryRow("select count(*) from " + table).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		if count != 0 {
+			t.Fatalf("%s count = %d, want 0", table, count)
+		}
+	}
+	var projects int
+	if err := db.QueryRow("select count(*) from projects where id='project-1'").Scan(&projects); err != nil {
+		t.Fatal(err)
+	}
+	if projects != 1 {
+		t.Fatalf("local project count = %d, want 1", projects)
+	}
+}
+
+func TestRefreshTokenSettingsRetriesAfterUnauthorizedAccessToken(t *testing.T) {
+	refreshes := 0
+	listRequests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/token_base/token/my/list/":
+			listRequests++
+			if r.Header.Get("Authorization") == "Bearer stale-access" {
+				w.WriteHeader(http.StatusUnauthorized)
+				_ = json.NewEncoder(w).Encode(map[string]any{"error": "unauthorized"})
+				return
+			}
+			if r.Header.Get("Authorization") != "Bearer fresh-access" {
+				t.Fatalf("token authorization = %q", r.Header.Get("Authorization"))
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"tokens": []any{}})
+		case "/api/wallet/my/one/":
+			if r.Header.Get("Authorization") != "Bearer fresh-access" {
+				t.Fatalf("wallet authorization = %q", r.Header.Get("Authorization"))
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"wallet": map[string]any{"amount": "1"}, "overview": map[string]any{"total_consumed_cost": "2", "today_consumed_cost": "3"}})
+		case "/oauth/token":
+			refreshes++
+			_ = json.NewEncoder(w).Encode(map[string]any{"access_token": "fresh-access", "expires_in": 3600})
+		default:
+			t.Fatalf("unexpected URL %s", r.URL.String())
+		}
+	}))
+	defer server.Close()
+	t.Setenv("HUABOT_WEB_BASE_URL", server.URL)
+
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	masterKey := make([]byte, 32)
+	credential, err := seal(masterKey, "refresh-token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	studio := &Studio{db: db, dataDir: t.TempDir(), httpClient: server.Client(), masterKey: masterKey, user: &User{ID: "user-1"}, huabotBearer: "stale-access", huabotBearerExpiry: time.Now().Add(time.Hour)}
+	if err := studio.migrate(); err != nil {
+		t.Fatal(err)
+	}
+	for _, statement := range []string{
+		"insert into users(id,username,created_at,nick_name,avatar_url) values('user-1','alice',1,'','')",
+		"insert into settings(user_id,token_id,image_model,text_model,chat_model) values('user-1','','','','')",
+	} {
+		if _, err := db.Exec(statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := db.Exec("insert into auth_credentials(user_id,kind,secret) values(?,?,?)", "user-1", oauthRefreshCredentialKind, credential); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := studio.RefreshTokenSettings(); err != nil {
+		t.Fatal(err)
+	}
+	if listRequests != 2 || refreshes != 1 {
+		t.Fatalf("list requests = %d, refresh requests = %d; want 2, 1", listRequests, refreshes)
+	}
+}
+
 func TestLogoutKeepsLocalCredentialsWhenRemoteSignoutFails(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/signout/" {

@@ -30,17 +30,19 @@ const (
 )
 
 type Studio struct {
-	ctx              context.Context
-	db               *sql.DB
-	dataDir          string
-	masterKey        []byte
-	httpClient       *http.Client
-	mu               sync.RWMutex
-	dbWriteMu        sync.Mutex
-	storageMu        sync.RWMutex
-	migrationPending bool
-	user             *User
-	huabotBearer     string
+	ctx                context.Context
+	db                 *sql.DB
+	dataDir            string
+	masterKey          []byte
+	httpClient         *http.Client
+	mu                 sync.RWMutex
+	dbWriteMu          sync.Mutex
+	storageMu          sync.RWMutex
+	migrationPending   bool
+	user               *User
+	huabotBearer       string
+	huabotBearerExpiry time.Time
+	huabotRefreshMu    sync.Mutex
 }
 
 type User struct {
@@ -317,6 +319,7 @@ func (s *Studio) Logout() (map[string]bool, error) {
 	s.mu.Lock()
 	s.user = nil
 	s.huabotBearer = ""
+	s.huabotBearerExpiry = time.Time{}
 	s.mu.Unlock()
 	return map[string]bool{"ok": true}, nil
 }

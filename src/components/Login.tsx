@@ -13,7 +13,11 @@ export function Login() {
   const initialize = useAppStore((state) => state.initialize);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [error, setError] = useState("");
+  const [error, setError] = useState(() =>
+    searchParams.get("reason") === "authorization_expired"
+      ? "Huabot 授权已失效，请重新授权"
+      : "",
+  );
   const [totpRequired, setTotpRequired] = useState(false);
   const [loading, setLoading] = useState(false);
   const [passwordVisible, setPasswordVisible] = useState(false);

@@ -14,6 +14,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 type huabotConfig struct{ APIBase, WebBase string }
@@ -31,9 +33,11 @@ type walletSummary struct {
 }
 
 const (
-	oauthDeviceGrantType       = "urn:ietf:params:oauth:grant-type:device_code"
-	oauthRefreshCredentialKind = "oauth_refresh"
-	passwordCredentialKind     = "password_session"
+	oauthDeviceGrantType        = "urn:ietf:params:oauth:grant-type:device_code"
+	oauthRefreshCredentialKind  = "oauth_refresh"
+	passwordCredentialKind      = "password_session"
+	authorizationExpiredMessage = "Huabot 授权已失效，请重新授权"
+	accessTokenRefreshLeeway    = time.Minute
 )
 
 type authCredential struct {
@@ -238,10 +242,10 @@ func (s *Studio) loginHuabot(name, password, totp string) (map[string]any, error
 	if account, ok := login["user"].(map[string]any); ok && stringValue(account["name"]) == "" {
 		account["name"] = name
 	}
-	return s.completeHuabotLogin(bearer, login, authCredential{Kind: passwordCredentialKind, Secret: bearer})
+	return s.completeHuabotLogin(bearer, login, authCredential{Kind: passwordCredentialKind, Secret: bearer}, time.Time{})
 }
 
-func (s *Studio) completeHuabotLogin(bearer string, login map[string]any, credential authCredential) (map[string]any, error) {
+func (s *Studio) completeHuabotLogin(bearer string, login map[string]any, credential authCredential, expiresAt time.Time) (map[string]any, error) {
 	config := s.huabotConfig()
 	var listed map[string]any
 	if err := s.webRequest(http.MethodGet, config.WebBase+"/api/token_base/token/my/list/", bearer, nil, &listed); err != nil {
@@ -308,6 +312,7 @@ func (s *Studio) completeHuabotLogin(bearer string, login map[string]any, creden
 	s.mu.Lock()
 	s.user = &user
 	s.huabotBearer = bearer
+	s.huabotBearerExpiry = expiresAt
 	s.mu.Unlock()
 	return map[string]any{"user": user}, nil
 }
@@ -364,7 +369,7 @@ func (s *Studio) pollHuabotAuthorization(deviceCode string) (map[string]any, err
 	if err := s.webRequest(http.MethodGet, config.WebBase+"/api/user/me/", bearer, nil, &login); err != nil {
 		return nil, err
 	}
-	result, err := s.completeHuabotLogin(bearer, login, authCredential{Kind: oauthRefreshCredentialKind, Secret: refreshToken})
+	result, err := s.completeHuabotLogin(bearer, login, authCredential{Kind: oauthRefreshCredentialKind, Secret: refreshToken}, tokenExpiry(exchanged))
 	if err != nil {
 		return nil, err
 	}
@@ -522,6 +527,13 @@ func (s *Studio) refreshTokenSettings() (map[string]any, error) {
 		return nil, err
 	}
 	summary, err := s.refreshTokenUsage(user.ID, bearer)
+	if isAuthenticationFailure(err) {
+		s.clearHuabotBearer(user.ID)
+		bearer, err = s.currentHuabotBearer(user.ID)
+		if err == nil {
+			summary, err = s.refreshTokenUsage(user.ID, bearer)
+		}
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -536,13 +548,15 @@ func (s *Studio) refreshTokenSettings() (map[string]any, error) {
 }
 
 func (s *Studio) currentHuabotBearer(userID string) (string, error) {
-	s.mu.RLock()
-	if s.user != nil && s.user.ID == userID && s.huabotBearer != "" {
-		bearer := s.huabotBearer
-		s.mu.RUnlock()
+	if bearer := s.cachedHuabotBearer(userID); bearer != "" {
 		return bearer, nil
 	}
-	s.mu.RUnlock()
+
+	s.huabotRefreshMu.Lock()
+	defer s.huabotRefreshMu.Unlock()
+	if bearer := s.cachedHuabotBearer(userID); bearer != "" {
+		return bearer, nil
+	}
 
 	var credential authCredential
 	if err := s.db.QueryRow("select kind,secret from auth_credentials where user_id=?", userID).Scan(&credential.Kind, &credential.Secret); err != nil {
@@ -556,6 +570,7 @@ func (s *Studio) currentHuabotBearer(userID string) (string, error) {
 		return "", err
 	}
 	bearer := secret
+	var expiresAt time.Time
 	if credential.Kind == oauthRefreshCredentialKind {
 		config := s.huabotConfig()
 		var exchanged map[string]any
@@ -564,6 +579,12 @@ func (s *Studio) currentHuabotBearer(userID string) (string, error) {
 			"client_id":     {s.oauthClientID()},
 			"refresh_token": {secret},
 		}, &exchanged); err != nil {
+			if isRefreshCredentialInvalid(err) {
+				if invalidateErr := s.invalidateHuabotAuthorization(userID); invalidateErr != nil {
+					return "", invalidateErr
+				}
+				return "", errors.New(authorizationExpiredMessage)
+			}
 			return "", err
 		}
 		bearer = stringValue(exchanged["access_token"])
@@ -579,15 +600,95 @@ func (s *Studio) currentHuabotBearer(userID string) (string, error) {
 				return "", err
 			}
 		}
+		expiresAt = tokenExpiry(exchanged)
 	} else if credential.Kind != passwordCredentialKind {
 		return "", fmt.Errorf("未知的登录凭据类型 %q", credential.Kind)
 	}
 	s.mu.Lock()
 	if s.user != nil && s.user.ID == userID {
 		s.huabotBearer = bearer
+		s.huabotBearerExpiry = expiresAt
 	}
 	s.mu.Unlock()
 	return bearer, nil
+}
+
+func tokenExpiry(exchanged map[string]any) time.Time {
+	seconds, ok := exchanged["expires_in"].(float64)
+	if !ok || seconds <= 0 {
+		return time.Time{}
+	}
+	return time.Now().Add(time.Duration(seconds * float64(time.Second)))
+}
+
+func (s *Studio) cachedHuabotBearer(userID string) string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.user == nil || s.user.ID != userID || s.huabotBearer == "" {
+		return ""
+	}
+	if !s.huabotBearerExpiry.IsZero() && time.Until(s.huabotBearerExpiry) <= accessTokenRefreshLeeway {
+		return ""
+	}
+	return s.huabotBearer
+}
+
+func (s *Studio) clearHuabotBearer(userID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.user != nil && s.user.ID == userID {
+		s.huabotBearer = ""
+		s.huabotBearerExpiry = time.Time{}
+	}
+}
+
+func (s *Studio) invalidateHuabotAuthorization(userID string) error {
+	done, err := s.beginDataWrite()
+	if err != nil {
+		return err
+	}
+	defer done()
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec("delete from desktop_session where singleton=1 and user_id=?", userID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec("delete from auth_credentials where user_id=?", userID); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	if s.user != nil && s.user.ID == userID {
+		s.user = nil
+		s.huabotBearer = ""
+		s.huabotBearerExpiry = time.Time{}
+	}
+	s.mu.Unlock()
+	if s.ctx != nil {
+		runtime.EventsEmit(s.ctx, "auth:expired")
+	}
+	return nil
+}
+
+func isRefreshCredentialInvalid(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "invalid_grant") || strings.Contains(message, "invalid token") || strings.Contains(message, "token revoked")
+}
+
+func isAuthenticationFailure(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "http 401") || strings.Contains(message, "unauthorized")
 }
 
 func (s *Studio) refreshTokenUsage(userID, bearer string) (walletSummary, error) {
