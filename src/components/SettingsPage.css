@@ -245,6 +245,21 @@
   white-space: nowrap;
 }
 
+.settings-wallet-recharge {
+  margin-top: 8px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #aaf7df;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.settings-wallet-recharge:hover {
+  color: #fff;
+}
+
 .settings-token-usage {
   min-height: 38px;
   display: inline-flex;

@@ -1382,6 +1382,14 @@ button:active {
   color: var(--ink);
 }
 
+:root[data-theme="light"] .settings-wallet-recharge {
+  color: var(--accent-text);
+}
+
+:root[data-theme="light"] .settings-wallet-recharge:hover {
+  color: var(--accent-dark);
+}
+
 :root[data-theme="light"] .settings-sync-status {
   color: var(--muted);
 }

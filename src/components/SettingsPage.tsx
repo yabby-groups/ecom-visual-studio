@@ -354,6 +354,17 @@ export function SettingsPage() {
                 <div>
                   <span>钱包余额</span>
                   <strong>{walletBalance}</strong>
+                  <button
+                    className="settings-wallet-recharge"
+                    type="button"
+                    onClick={() =>
+                      BrowserOpenURL(
+                        "https://huabot.com/myna/console/my-wallet?openRecharge=1",
+                      )
+                    }
+                  >
+                    充值
+                  </button>
                 </div>
                 <div>
                   <span>总消耗</span>
