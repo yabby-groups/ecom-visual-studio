@@ -1378,8 +1378,21 @@ button:active {
   color: var(--muted);
 }
 
+:root[data-theme="light"] .settings-usage-heading {
+  color: var(--muted);
+}
+
 :root[data-theme="light"] .settings-usage-summary strong {
   color: var(--ink);
+}
+
+:root[data-theme="light"] .settings-usage-refresh {
+  color: var(--accent-text);
+}
+
+:root[data-theme="light"] .settings-usage-refresh:hover:not(:disabled) {
+  background: var(--soft);
+  color: var(--accent-dark);
 }
 
 :root[data-theme="light"] .settings-wallet-recharge {

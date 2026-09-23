@@ -100,6 +100,7 @@ export function SettingsPage() {
   const dirtyFields = useRef(new Set<keyof SettingsValues>());
   const modelsRef = useRef<Model[]>([]);
   const retryRefresh = useRef<(() => void) | null>(null);
+  const refreshUsage = useRef<(() => void) | null>(null);
   const themePreference = useSyncExternalStore(
     subscribeTheme,
     getThemePreference,
@@ -219,6 +220,7 @@ export function SettingsPage() {
           if (active) setRefreshingSettings(false);
         });
     };
+    refreshUsage.current = refreshSettings;
     const refreshModels = () => {
       setRefreshingModels(true);
       void timeout(client.refreshModels(), "模型刷新服务未响应")
@@ -277,6 +279,7 @@ export function SettingsPage() {
     return () => {
       active = false;
       retryRefresh.current = null;
+      refreshUsage.current = null;
     };
   }, [user]);
   useEffect(() => {
@@ -350,29 +353,47 @@ export function SettingsPage() {
                   </p>
                 </div>
               </div>
-              <div className="settings-usage-summary" aria-label="账户消耗汇总">
-                <div>
-                  <span>钱包余额</span>
-                  <strong>{walletBalance}</strong>
+              <div className="settings-usage" aria-label="账户消耗汇总">
+                <div className="settings-usage-heading">
+                  <span>账户用量</span>
                   <button
-                    className="settings-wallet-recharge"
+                    className="settings-usage-refresh"
                     type="button"
-                    onClick={() =>
-                      BrowserOpenURL(
-                        "https://huabot.com/myna/console/my-wallet?openRecharge=1",
-                      )
-                    }
+                    aria-label="刷新账户用量"
+                    title="刷新账户用量"
+                    disabled={refreshingSettings}
+                    onClick={() => refreshUsage.current?.()}
                   >
-                    充值
+                    <RefreshCw
+                      className={refreshingSettings ? "spin" : undefined}
+                      size={15}
+                    />
                   </button>
                 </div>
-                <div>
-                  <span>总消耗</span>
-                  <strong>{totalCost}</strong>
-                </div>
-                <div>
-                  <span>今日消耗</span>
-                  <strong>{todayCost}</strong>
+                <div className="settings-usage-summary">
+                  <div>
+                    <span>钱包余额</span>
+                    <strong>{walletBalance}</strong>
+                    <button
+                      className="settings-wallet-recharge"
+                      type="button"
+                      onClick={() =>
+                        BrowserOpenURL(
+                          "https://huabot.com/myna/console/my-wallet?openRecharge=1",
+                        )
+                      }
+                    >
+                      充值
+                    </button>
+                  </div>
+                  <div>
+                    <span>总消耗</span>
+                    <strong>{totalCost}</strong>
+                  </div>
+                  <div>
+                    <span>今日消耗</span>
+                    <strong>{todayCost}</strong>
+                  </div>
                 </div>
               </div>
               <label>

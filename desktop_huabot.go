@@ -502,9 +502,10 @@ func (s *Studio) tokenSettings() (map[string]any, error) {
 		tokens = append(tokens, map[string]any{"id": id, "name": name, "masked": masked, "status": status, "today_cost": today, "total_cost": total})
 	}
 	result["tokens"] = tokens
-	var token, image, text, chat string
-	if err := s.db.QueryRow("select token_id,image_model,text_model,chat_model from settings where user_id=?", user.ID).Scan(&token, &image, &text, &chat); err == nil {
+	var token, image, text, chat, walletBalance, totalConsumedCost, todayConsumedCost string
+	if err := s.db.QueryRow("select token_id,image_model,text_model,chat_model,wallet_balance,total_consumed_cost,today_consumed_cost from settings where user_id=?", user.ID).Scan(&token, &image, &text, &chat, &walletBalance, &totalConsumedCost, &todayConsumedCost); err == nil {
 		result["active_token_id"], result["image_model"], result["text_model"], result["chat_model"] = token, image, text, chat
+		result["wallet_balance"], result["total_consumed_cost"], result["today_consumed_cost"] = walletBalance, totalConsumedCost, todayConsumedCost
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return nil, err
 	}
@@ -642,7 +643,14 @@ func (s *Studio) refreshTokenUsage(userID, bearer string) (walletSummary, error)
 				return err
 			}
 		}
-		return nil
+		_, err := tx.Exec(
+			"update settings set wallet_balance=?,total_consumed_cost=?,today_consumed_cost=? where user_id=?",
+			summary.Balance,
+			summary.TotalConsumedCost,
+			summary.TodayConsumedCost,
+			userID,
+		)
+		return err
 	})
 	return summary, err
 }

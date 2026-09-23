@@ -208,11 +208,25 @@
   padding-left: 20px;
 }
 
+.settings-usage {
+  margin-bottom: 18px;
+}
+
+.settings-usage-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: #c5cde0;
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .settings-usage-summary {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1px;
-  margin-bottom: 18px;
   overflow: hidden;
   border: 1px solid rgba(68, 221, 183, 0.28);
   border-radius: 10px;
@@ -243,6 +257,29 @@
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.settings-usage-refresh {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  padding: 0;
+  background: transparent;
+  color: #aaf7df;
+}
+
+.settings-usage-refresh:hover:not(:disabled) {
+  background: rgba(68, 221, 183, 0.16);
+  color: #fff;
+}
+
+.settings-usage-refresh:disabled {
+  cursor: wait;
+  opacity: 0.6;
 }
 
 .settings-wallet-recharge {

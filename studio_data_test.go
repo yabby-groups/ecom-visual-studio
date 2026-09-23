@@ -119,6 +119,45 @@ func TestLocalWorkspaceMigrationKeepsDataAvailableWithoutLogin(t *testing.T) {
 	}
 }
 
+func TestSettingsMigrationAddsUsageSummarySnapshot(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec("create table settings (user_id text primary key, token_id text not null default '', image_model text not null default '', text_model text not null default '', chat_model text not null default '')"); err != nil {
+		t.Fatal(err)
+	}
+	studio := &Studio{db: db}
+	if err := studio.migrate(); err != nil {
+		t.Fatal(err)
+	}
+	columns := map[string]bool{}
+	rows, err := db.Query("pragma table_info(settings)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid int
+		var name, columnType string
+		var notNull, primaryKey int
+		var defaultValue any
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+			t.Fatal(err)
+		}
+		columns[name] = true
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"wallet_balance", "total_consumed_cost", "today_consumed_cost"} {
+		if !columns[name] {
+			t.Fatalf("missing settings column %q", name)
+		}
+	}
+}
+
 func TestBuiltInTemplatesCoverEveryBundledTemplatePreview(t *testing.T) {
 	want := map[string]struct {
 		name  string
@@ -783,6 +822,13 @@ func TestHuabotLoginUsesWebBaseAndEncryptsToken(t *testing.T) {
 	}
 	if settings["total_consumed_cost"] != "34.5" || settings["today_consumed_cost"] != "12.25" {
 		t.Fatalf("usage overview = %#v", settings)
+	}
+	settings, err = studio.TokenSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settings["wallet_balance"] != "56.78" || settings["total_consumed_cost"] != "34.5" || settings["today_consumed_cost"] != "12.25" {
+		t.Fatalf("cached usage overview = %#v", settings)
 	}
 	if listRequests != 2 {
 		t.Fatalf("token requests after refresh = %d, want 2", listRequests)
