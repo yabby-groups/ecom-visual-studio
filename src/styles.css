@@ -1359,6 +1359,45 @@ button:active {
   opacity: 1;
 }
 
+:root[data-theme="light"] :is(.settings-token-usage, .settings-token-usage:hover) {
+  border-color: #c7a76d;
+  background: var(--soft);
+  color: var(--accent-text);
+}
+
+:root[data-theme="light"] .settings-usage-summary {
+  border-color: var(--line);
+  background: var(--line);
+}
+
+:root[data-theme="light"] .settings-usage-summary > div {
+  background: var(--surface-inset);
+}
+
+:root[data-theme="light"] .settings-usage-summary span {
+  color: var(--muted);
+}
+
+:root[data-theme="light"] .settings-usage-summary strong {
+  color: var(--ink);
+}
+
+:root[data-theme="light"] .settings-sync-status {
+  color: var(--muted);
+}
+
+:root[data-theme="light"] .settings-sync-status.is-error {
+  color: var(--danger);
+}
+
+:root[data-theme="light"] .settings-sync-retry {
+  color: var(--accent-text);
+}
+
+:root[data-theme="light"] .settings-sync-retry:hover {
+  color: var(--accent-dark);
+}
+
 :root[data-theme="light"] :is(.settings-logout-button, .settings-logout-button:hover:not(:disabled)) {
   border-color: #d9a49e;
   background: var(--danger-soft);

@@ -26,6 +26,9 @@ type providerModel struct {
 	ID, Name, Alias string
 	APIModes        []string
 }
+type walletSummary struct {
+	Balance, TotalConsumedCost, TodayConsumedCost string
+}
 
 const (
 	oauthDeviceGrantType       = "urn:ietf:params:oauth:grant-type:device_code"
@@ -313,7 +316,7 @@ func (s *Studio) startHuabotAuthorization() (deviceAuthorization, error) {
 	config := s.huabotConfig()
 	form := url.Values{
 		"client_id": {s.oauthClientID()},
-		"scope":     {"profile:read token_base:read token_base:write offline_access"},
+		"scope":     {"profile:read token_base:read token_base:write wallet:read offline_access"},
 	}
 	var authorization deviceAuthorization
 	if err := s.webRequest(http.MethodPost, config.WebBase+"/oauth/device/code", "", form, &authorization); err != nil {
@@ -517,10 +520,18 @@ func (s *Studio) refreshTokenSettings() (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := s.refreshTokenUsage(user.ID, bearer); err != nil {
+	summary, err := s.refreshTokenUsage(user.ID, bearer)
+	if err != nil {
 		return nil, err
 	}
-	return s.tokenSettings()
+	settings, err := s.tokenSettings()
+	if err != nil {
+		return nil, err
+	}
+	settings["wallet_balance"] = summary.Balance
+	settings["total_consumed_cost"] = summary.TotalConsumedCost
+	settings["today_consumed_cost"] = summary.TodayConsumedCost
+	return settings, nil
 }
 
 func (s *Studio) currentHuabotBearer(userID string) (string, error) {
@@ -578,14 +589,35 @@ func (s *Studio) currentHuabotBearer(userID string) (string, error) {
 	return bearer, nil
 }
 
-func (s *Studio) refreshTokenUsage(userID, bearer string) error {
+func (s *Studio) refreshTokenUsage(userID, bearer string) (walletSummary, error) {
 	config := s.huabotConfig()
 	var listed map[string]any
 	if err := s.webRequest(http.MethodGet, config.WebBase+"/api/token_base/token/my/list/", bearer, nil, &listed); err != nil {
-		return err
+		return walletSummary{}, err
+	}
+	var walletResponse map[string]any
+	if err := s.webRequest(http.MethodGet, config.WebBase+"/api/wallet/my/one/", bearer, nil, &walletResponse); err != nil {
+		return walletSummary{}, err
+	}
+	wallet, ok := walletResponse["wallet"].(map[string]any)
+	if !ok {
+		return walletSummary{}, errors.New("huabot 未返回钱包信息")
+	}
+	summary := walletSummary{Balance: stringValue(wallet["amount"])}
+	if summary.Balance == "" {
+		return walletSummary{}, errors.New("huabot 未返回钱包余额")
+	}
+	overview, ok := walletResponse["overview"].(map[string]any)
+	if !ok {
+		return walletSummary{}, errors.New("huabot 未返回用量汇总")
+	}
+	summary.TotalConsumedCost = stringValue(overview["total_consumed_cost"])
+	summary.TodayConsumedCost = stringValue(overview["today_consumed_cost"])
+	if summary.TotalConsumedCost == "" || summary.TodayConsumedCost == "" {
+		return walletSummary{}, errors.New("huabot 未返回完整用量汇总")
 	}
 	rawTokens, _ := listed["tokens"].([]any)
-	return s.writeTransaction(func(tx *sql.Tx) error {
+	err := s.writeTransaction(func(tx *sql.Tx) error {
 		for _, item := range rawTokens {
 			value, ok := item.(map[string]any)
 			if !ok {
@@ -612,6 +644,7 @@ func (s *Studio) refreshTokenUsage(userID, bearer string) error {
 		}
 		return nil
 	})
+	return summary, err
 }
 
 func (s *Studio) models() (map[string]any, error) {

@@ -673,6 +673,7 @@ func TestLogoutDeletesProviderCredentialsButKeepsLocalProjects(t *testing.T) {
 func TestHuabotLoginUsesWebBaseAndEncryptsToken(t *testing.T) {
 	listRequests := 0
 	modelRequests := 0
+	walletRequests := 0
 	signoutRequests := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -694,6 +695,18 @@ func TestHuabotLoginUsesWebBaseAndEncryptsToken(t *testing.T) {
 				todayCost, totalCost = "12", "34"
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"tokens": []map[string]any{{"id": "token-1", "token_name": "Primary", "token_key": "sk-secret", "token_key_masked": "sk-...", "status": 1, "today_used_cost": todayCost, "total_used_cost": totalCost}}})
+		case "/api/wallet/my/one/":
+			walletRequests++
+			if r.Header.Get("Authorization") != "Bearer session" {
+				t.Fatalf("wallet authorization = %q", r.Header.Get("Authorization"))
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"wallet": map[string]any{"amount": "56.78"},
+				"overview": map[string]any{
+					"total_consumed_cost": "34.5",
+					"today_consumed_cost": "12.25",
+				},
+			})
 		case "/api/token_base/model/list/":
 			modelRequests++
 			_ = json.NewEncoder(w).Encode(map[string]any{"models": []map[string]any{{"id": "image", "alias": "gpt-image-2", "title": "Image"}, {"id": "chat", "alias": "gpt-5.6-luna", "title": "Chat", "api_modes": []string{"chat_completions", "responses"}}}})
@@ -765,8 +778,17 @@ func TestHuabotLoginUsesWebBaseAndEncryptsToken(t *testing.T) {
 	if refreshed["today_cost"] != "12" || refreshed["total_cost"] != "34" {
 		t.Fatalf("refreshed usage = %#v", refreshed)
 	}
+	if settings["wallet_balance"] != "56.78" {
+		t.Fatalf("wallet balance = %#v", settings)
+	}
+	if settings["total_consumed_cost"] != "34.5" || settings["today_consumed_cost"] != "12.25" {
+		t.Fatalf("usage overview = %#v", settings)
+	}
 	if listRequests != 2 {
 		t.Fatalf("token requests after refresh = %d, want 2", listRequests)
+	}
+	if walletRequests != 1 {
+		t.Fatalf("wallet requests after refresh = %d, want 1", walletRequests)
 	}
 	if _, err := studio.RefreshModels(); err != nil {
 		t.Fatal(err)
@@ -790,7 +812,7 @@ func TestHuabotDeviceAuthorizationPollsAndSyncsAccount(t *testing.T) {
 			if err := r.ParseForm(); err != nil {
 				t.Fatal(err)
 			}
-			if r.Form.Get("client_id") != "desktop-client" || r.Form.Get("scope") != "profile:read token_base:read token_base:write offline_access" {
+			if r.Form.Get("client_id") != "desktop-client" || r.Form.Get("scope") != "profile:read token_base:read token_base:write wallet:read offline_access" {
 				t.Fatalf("device form = %#v", r.Form)
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"device_code": "device-secret", "user_code": "ABCD-EFGH", "verification_uri": serverURL(r) + "/oauth/device", "verification_uri_complete": serverURL(r) + "/oauth/device?user_code=ABCD-EFGH", "expires_in": 600, "interval": 3})

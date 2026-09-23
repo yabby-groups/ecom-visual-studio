@@ -3,12 +3,14 @@ import {
   LoaderCircle,
   LogOut,
   Database,
+  ExternalLink,
   FolderOpen,
   Settings,
   ShieldCheck,
   Sparkles,
   RefreshCw,
 } from "lucide-react";
+import { BrowserOpenURL } from "../../wailsjs/runtime/runtime";
 import { client } from "../api";
 import { useRequireAiAuth } from "../auth";
 import { useAppStore } from "../store";
@@ -33,6 +35,9 @@ type SettingsValues = {
 
 const EMPTY_SETTINGS: TokenSettings = {
   tokens: [],
+  wallet_balance: "",
+  total_consumed_cost: "",
+  today_consumed_cost: "",
   active_token_id: "",
   image_model: "",
   text_model: "",
@@ -47,7 +52,7 @@ const EMPTY_VALUES: SettingsValues = {
 };
 
 const tokenCostFormatter = new Intl.NumberFormat("zh-CN", {
-  maximumFractionDigits: 2,
+  maximumFractionDigits: 4,
 });
 function formatTokenCost(value: string): string {
   if (!value.trim()) return "0";
@@ -105,6 +110,15 @@ export function SettingsPage() {
   const responsesModels = models.filter((model) =>
     model.api_modes.includes("responses"),
   );
+  const walletBalance = settings.wallet_balance
+    ? formatTokenCost(settings.wallet_balance)
+    : "--";
+  const totalCost = settings.total_consumed_cost
+    ? formatTokenCost(settings.total_consumed_cost)
+    : "--";
+  const todayCost = settings.today_consumed_cost
+    ? formatTokenCost(settings.today_consumed_cost)
+    : "--";
   useEffect(() => {
     let active = true;
     dirtyFields.current.clear();
@@ -289,7 +303,10 @@ export function SettingsPage() {
           <p>管理创作所使用的 Token 与模型配置，变更会在保存后生效。</p>
         </header>
         {user && (refreshing || refreshError) && (
-          <div className="settings-sync-status" role="status">
+          <div
+            className={`settings-sync-status${refreshError ? " is-error" : ""}`}
+            role="status"
+          >
             {refreshing && <LoaderCircle className="spin" size={16} />}
             <span>
               {refreshError || "正在后台刷新 Token 用量和可用模型..."}
@@ -333,6 +350,20 @@ export function SettingsPage() {
                   </p>
                 </div>
               </div>
+              <div className="settings-usage-summary" aria-label="账户消耗汇总">
+                <div>
+                  <span>钱包余额</span>
+                  <strong>{walletBalance}</strong>
+                </div>
+                <div>
+                  <span>总消耗</span>
+                  <strong>{totalCost}</strong>
+                </div>
+                <div>
+                  <span>今日消耗</span>
+                  <strong>{todayCost}</strong>
+                </div>
+              </div>
               <label>
                 当前 Token
                 <SettingsSelect
@@ -350,6 +381,16 @@ export function SettingsPage() {
                   }}
                 />
               </label>
+              <button
+                className="settings-token-usage"
+                type="button"
+                onClick={() =>
+                  BrowserOpenURL("https://huabot.com/myna/console/token-usage")
+                }
+              >
+                <ExternalLink size={16} />
+                查看消耗
+              </button>
             </section>
             <section className="settings-card">
               <div className="settings-card-heading">

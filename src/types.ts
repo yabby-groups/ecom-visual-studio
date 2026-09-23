@@ -76,6 +76,9 @@ export type Token = {
 export type Model = { id: string; name: string; api_modes: string[] };
 export type TokenSettings = {
   tokens: Token[];
+  wallet_balance: string;
+  total_consumed_cost: string;
+  today_consumed_cost: string;
   active_token_id: string;
   image_model: string;
   text_model: string;

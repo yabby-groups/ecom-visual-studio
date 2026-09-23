@@ -208,6 +208,64 @@
   padding-left: 20px;
 }
 
+.settings-usage-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  margin-bottom: 18px;
+  overflow: hidden;
+  border: 1px solid rgba(68, 221, 183, 0.28);
+  border-radius: 10px;
+  background: rgba(68, 221, 183, 0.2);
+}
+
+.settings-usage-summary > div {
+  min-width: 0;
+  padding: 12px 14px;
+  background: rgba(23, 29, 56, 0.86);
+}
+
+.settings-usage-summary span,
+.settings-usage-summary strong {
+  display: block;
+}
+
+.settings-usage-summary span {
+  color: #c5cde0;
+  font-size: 12px;
+}
+
+.settings-usage-summary strong {
+  margin-top: 5px;
+  overflow: hidden;
+  color: #fff;
+  font-size: 17px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-token-usage {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 14px;
+  border: 1px solid rgba(68, 221, 183, 0.5);
+  border-radius: 10px;
+  padding: 8px 12px;
+  background: rgba(68, 221, 183, 0.12);
+  color: #aaf7df;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.settings-token-usage:hover {
+  background: rgba(68, 221, 183, 0.22);
+  color: #fff;
+}
+
 .settings-storage-action {
   display: flex;
   align-items: center;
@@ -315,6 +373,12 @@
 
   .settings-logout-button {
     width: 100%;
+  }
+}
+
+@media (max-width: 520px) {
+  .settings-usage-summary {
+    grid-template-columns: 1fr;
   }
 }
 
