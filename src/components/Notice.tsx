@@ -6,10 +6,12 @@ export function Notice({
   text,
   onClose,
   autoCloseMs = 3500,
+  tone = "success",
 }: {
   text: string;
   onClose: () => void;
   autoCloseMs?: number | null;
+  tone?: "success" | "error";
 }) {
   useEffect(() => {
     if (autoCloseMs === null) return;
@@ -17,7 +19,10 @@ export function Notice({
     return () => window.clearTimeout(timer);
   }, [autoCloseMs, onClose]);
   return (
-    <div className="notice" role="status">
+    <div
+      className={`notice${tone === "error" ? " notice-error" : ""}`}
+      role={tone === "error" ? "alert" : "status"}
+    >
       <span>{text}</span>
       <button onClick={onClose} aria-label="关闭提示">
         <X size={16} />

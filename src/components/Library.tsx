@@ -16,7 +16,10 @@ export function Library() {
   const navigate = useNavigate();
   const { registerPage } = useAiInteraction();
   const [filter, setFilter] = useState("全部作品");
-  const [notice, setNotice] = useState("");
+  const [notice, setNotice] = useState<{
+    text: string;
+    tone: "success" | "error";
+  } | null>(null);
   const visibleProjects = filterProjects(projects, filter);
   useEffect(
     () =>
@@ -39,9 +42,12 @@ export function Library() {
     try {
       await client.deleteProject(id);
       await refresh();
-      setNotice("项目已删除");
+      setNotice({ text: "项目已删除", tone: "success" });
     } catch (reason) {
-      setNotice(reason instanceof Error ? reason.message : "删除项目失败");
+      setNotice({
+        text: reason instanceof Error ? reason.message : "删除项目失败",
+        tone: "error",
+      });
     }
   }
   return (
@@ -101,7 +107,13 @@ export function Library() {
             </button>
           </div>
         )}
-        {notice && <Notice text={notice} onClose={() => setNotice("")} />}
+        {notice && (
+          <Notice
+            text={notice.text}
+            tone={notice.tone}
+            onClose={() => setNotice(null)}
+          />
+        )}
       </div>
     </Shell>
   );

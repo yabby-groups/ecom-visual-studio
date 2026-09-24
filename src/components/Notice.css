@@ -23,5 +23,11 @@
   place-items: center;
   border: 0;
   background: none;
-  color: #d8f5ec;
+  color: inherit;
+}
+.notice-error {
+  border-color: #98565e;
+  background: #442a31;
+  color: #ffe7e3;
+  box-shadow: 0 14px 32px rgba(15, 7, 12, 0.42);
 }

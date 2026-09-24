@@ -1517,6 +1517,12 @@ button:active {
   color: #fffdf9;
   box-shadow: 0 14px 32px rgba(29, 75, 59, 0.28);
 }
+:root[data-theme="light"] .notice-error {
+  border-color: #d9a49e;
+  background: var(--danger-soft);
+  color: var(--danger);
+  box-shadow: 0 14px 32px rgba(99, 38, 34, 0.16);
+}
 
 :root[data-theme="light"] :is(.auth-page, .login-page) {
   background: var(--paper);

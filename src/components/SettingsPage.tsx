@@ -91,7 +91,10 @@ export function SettingsPage() {
   const [settings, setSettings] = useState<TokenSettings>(EMPTY_SETTINGS);
   const [models, setModels] = useState<Model[]>([]);
   const [values, setValues] = useState<SettingsValues>(EMPTY_VALUES);
-  const [notice, setNotice] = useState("");
+  const [notice, setNotice] = useState<{
+    text: string;
+    tone: "success" | "error";
+  } | null>(null);
   const [settingsReady, setSettingsReady] = useState(false);
   const [modelsReady, setModelsReady] = useState(false);
   const [refreshingSettings, setRefreshingSettings] = useState(false);
@@ -358,11 +361,13 @@ export function SettingsPage() {
               try {
                 await client.saveSettings(values);
                 dirtyFields.current.clear();
-                setNotice("AI 设置已保存");
+                setNotice({ text: "AI 设置已保存", tone: "success" });
               } catch (error) {
-                setNotice(
-                  error instanceof Error ? error.message : "AI 设置保存失败",
-                );
+                setNotice({
+                  text:
+                    error instanceof Error ? error.message : "AI 设置保存失败",
+                  tone: "error",
+                });
               }
             }}
           >
@@ -589,11 +594,16 @@ export function SettingsPage() {
                   const result = await client.chooseStorageDirectory();
                   if (result.cancelled) return;
                   setStorage(result);
-                  setNotice("数据已迁移，请重启应用以使用新目录。");
+                  setNotice({
+                    text: "数据已迁移，请重启应用以使用新目录。",
+                    tone: "success",
+                  });
                 } catch (error) {
-                  setNotice(
-                    error instanceof Error ? error.message : "数据迁移失败",
-                  );
+                  setNotice({
+                    text:
+                      error instanceof Error ? error.message : "数据迁移失败",
+                    tone: "error",
+                  });
                 } finally {
                   setMigratingStorage(false);
                 }
@@ -636,7 +646,13 @@ export function SettingsPage() {
           </section>
         )}
       </div>
-      {notice && <Notice text={notice} onClose={() => setNotice("")} />}
+      {notice && (
+        <Notice
+          text={notice.text}
+          tone={notice.tone}
+          onClose={() => setNotice(null)}
+        />
+      )}
     </Shell>
   );
 }

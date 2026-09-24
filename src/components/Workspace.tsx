@@ -56,6 +56,7 @@ export function Workspace() {
   const [notice, setNotice] = useState<{
     text: string;
     autoCloseMs?: number | null;
+    tone?: "success" | "error";
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -70,8 +71,12 @@ export function Workspace() {
   const [now, setNow] = useState(() => Date.now());
   const promptRef = useRef<HTMLTextAreaElement>(null);
   const shownFailureRef = useRef("");
-  function showNotice(text: string, autoCloseMs?: number | null) {
-    setNotice({ text, autoCloseMs });
+  function showNotice(
+    text: string,
+    autoCloseMs?: number | null,
+    tone: "success" | "error" = "success",
+  ) {
+    setNotice({ text, autoCloseMs, tone });
   }
   async function load(selectedAssetId?: string) {
     try {
@@ -148,7 +153,7 @@ export function Workspace() {
     if (failureKey === shownFailureRef.current) return;
     shownFailureRef.current = failureKey;
     const message = failureReason(failures?.[0]?.status ?? "failed");
-    showNotice(`图片生成失败：${message}`, null);
+    showNotice(`图片生成失败：${message}`, null, "error");
   }, [
     project?.assets?.map((asset) => `${asset.id}:${asset.status}`).join("|"),
   ]);
@@ -244,6 +249,7 @@ export function Workspace() {
       showNotice(
         reason instanceof Error ? reason.message : "保存提示词失败",
         null,
+        "error",
       );
     }
   }
@@ -257,7 +263,11 @@ export function Workspace() {
       await load();
       showNotice(one ? "已加入生成队列" : "全部画面已加入生成队列", 2000);
     } catch (reason) {
-      showNotice(reason instanceof Error ? reason.message : "生成失败", null);
+      showNotice(
+        reason instanceof Error ? reason.message : "生成失败",
+        null,
+        "error",
+      );
     }
   }
   async function rebuildPrompt() {
@@ -270,6 +280,7 @@ export function Workspace() {
       showNotice(
         reason instanceof Error ? reason.message : "生成提示词失败",
         null,
+        "error",
       );
     }
   }
@@ -280,7 +291,11 @@ export function Workspace() {
         showNotice("图片已导出");
       }
     } catch (reason) {
-      showNotice(reason instanceof Error ? reason.message : "导出失败", null);
+      showNotice(
+        reason instanceof Error ? reason.message : "导出失败",
+        null,
+        "error",
+      );
     }
   }
   function openAddAsset() {
@@ -299,6 +314,7 @@ export function Workspace() {
       showNotice(
         reason instanceof Error ? reason.message : "添加画面失败",
         null,
+        "error",
       );
     } finally {
       setAddingAsset(false);
@@ -567,6 +583,7 @@ export function Workspace() {
                           ? reason.message
                           : "保存画面比例失败",
                         null,
+                        "error",
                       ),
                     )
                   }
@@ -725,6 +742,7 @@ export function Workspace() {
         <Notice
           text={notice.text}
           autoCloseMs={notice.autoCloseMs}
+          tone={notice.tone}
           onClose={() => setNotice(null)}
         />
       )}
