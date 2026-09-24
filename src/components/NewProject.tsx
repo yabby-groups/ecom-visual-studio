@@ -66,6 +66,7 @@ export function NewProject() {
     draft?.brandColor ?? "#137a65",
   );
   const formRef = useRef<HTMLFormElement>(null);
+  const createdProjectId = useRef("");
 
   useEffect(
     () =>
@@ -232,24 +233,34 @@ export function NewProject() {
     setError("");
     const form = new FormData(event.currentTarget);
     try {
-      const project = await client.createProject({
-        name: String(form.get("name")),
-        product: String(form.get("product")),
-        description: String(form.get("description")),
-        benefits: String(form.get("benefits")),
-        color: String(form.get("color")),
-        reference,
-      });
-      await client.createPack(project.id, {
-        kind,
-        scene_template_ids: selectedTemplates,
-        template_id: kind === "custom" ? selectedTemplate?.id : undefined,
-      });
-      await refreshProjects();
+      if (!createdProjectId.current) {
+        const project = await client.createProject({
+          name: String(form.get("name")),
+          product: String(form.get("product")),
+          description: String(form.get("description")),
+          benefits: String(form.get("benefits")),
+          color: String(form.get("color")),
+          reference,
+        });
+        createdProjectId.current = project.id;
+      }
+      try {
+        await client.createPack(createdProjectId.current, {
+          kind,
+          scene_template_ids: selectedTemplates,
+          template_id: kind === "custom" ? selectedTemplate?.id : undefined,
+        });
+      } catch (reason) {
+        const message = reason instanceof Error ? reason.message : "请重试";
+        throw new Error(`项目已保存，但画面创建失败：${message}`);
+      }
       sessionStorage.removeItem(NEW_PROJECT_DRAFT);
-      navigate(`/projects/${project.id}`);
+      await refreshProjects().catch(() => {});
+      navigate(`/projects/${createdProjectId.current}`, {
+        state: { justCreated: true },
+      });
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "创建失败");
+      setError(reason instanceof Error ? reason.message : "保存失败");
     } finally {
       setBusy(false);
     }
@@ -260,16 +271,7 @@ export function NewProject() {
       : kind === "social"
         ? 3
         : 1;
-  const creationSummary =
-    kind === "amazon"
-      ? selectedTemplates.length
-        ? `将创建 ${count} 个画面，含 ${selectedTemplates.length} 个自定义场景`
-        : "将创建 7 个可单独编辑的画面"
-      : kind === "social"
-        ? "将创建 3 个社媒画面"
-        : selectedTemplate
-          ? `将创建 1 个画面：${selectedTemplate.name}`
-          : "将创建 1 个商品主图画面";
+  const creationSummary = `将保存 ${count} 个待生成画面，暂不开始生成`;
   return (
     <Shell>
       <header className="topbar">
@@ -282,19 +284,17 @@ export function NewProject() {
             返回创作台
           </button>
           <span className="eyebrow">新建项目</span>
-          <h1>
-            先确定你想让商品
-            <br />
-            被怎样看见。
-          </h1>
-          <p>选择创作目标并创建画面，进入项目后可逐张调整并开始生成。</p>
+          <h1>从商品信息开始创作</h1>
+          <p>
+            填写商品信息、选择画面组合。保存后进入项目工作台，检查画面并开始生成。
+          </p>
         </div>
         <form ref={formRef} onSubmit={submit} className="creation-form">
           <section className="step">
             <span className="step-index">01</span>
             <div className="step-body">
-              <h2>添加商品参考图</h2>
-              <p>选择本机图片或导入公开图片链接，图片会保存在本机。</p>
+              <h2>填写商品信息</h2>
+              <p>输入商品名称，可选添加参考图；图片会保存在本机。</p>
               <label className="product-name-field">
                 商品名称
                 <input
@@ -343,7 +343,7 @@ export function NewProject() {
           <section className="step">
             <span className="step-index">03</span>
             <div className="step-body">
-              <h2>给它一个方向</h2>
+              <h2>命名项目并补充卖点</h2>
               <div className="two-col">
                 <label>
                   项目名称
@@ -408,7 +408,7 @@ export function NewProject() {
             <span>{creationSummary}</span>
             <button className="button primary" disabled={busy}>
               {busy && <LoaderCircle className="spin" size={16} />}
-              创建并进入项目
+              保存并进入项目工作台
             </button>
           </footer>
         </form>

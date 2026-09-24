@@ -12,7 +12,7 @@ import {
   WandSparkles,
   X,
 } from "lucide-react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { client } from "../api";
 import { useRequireAiAuth } from "../auth";
 import { useAiInteraction } from "../aiInteraction";
@@ -44,6 +44,10 @@ function formatGeneratedAt(timestamp: number) {
 export function Workspace() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [showCreationGuide, setShowCreationGuide] = useState(
+    () => location.state?.justCreated === true,
+  );
   const requireAiAuth = useRequireAiAuth();
   const { registerPage } = useAiInteraction();
   const templates = useAppStore((state) => state.templates);
@@ -121,6 +125,11 @@ export function Workspace() {
   useEffect(() => {
     void load();
   }, [id]);
+  useEffect(() => {
+    if (location.state?.justCreated) {
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [location.pathname, location.state, navigate]);
   useEffect(() => {
     if (!project?.assets?.some((asset) => isPending(asset.status))) return;
     const timer = window.setInterval(() => void load(), 2400);
@@ -244,6 +253,7 @@ export function Workspace() {
       if (one) setSelectedVersionPath(null);
       if (one && asset) await client.generateAsset(asset.id);
       else await client.generatePack(currentProject.id);
+      setShowCreationGuide(false);
       await load();
       showNotice(one ? "已加入生成队列" : "全部画面已加入生成队列", 2000);
     } catch (reason) {
@@ -302,7 +312,7 @@ export function Workspace() {
           创作台
         </button>
         <div>
-          <span className="eyebrow">项目工作区</span>
+          <span className="eyebrow">项目工作台</span>
           <h1>{project.name}</h1>
         </div>
         <button
@@ -358,6 +368,24 @@ export function Workspace() {
               <header>
                 <div>
                   <h2>{asset.title}</h2>
+                  {showCreationGuide && asset.status === "draft" && (
+                    <div className="workspace-creation-guide" role="status">
+                      <div>
+                        <b>项目已保存，画面待生成</b>
+                        <p>
+                          检查画面比例和提示词；如有修改，先保存提示词，再点击“生成第一版”。也可选择“生成全部”。
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowCreationGuide(false)}
+                        aria-label="关闭创建引导"
+                        title="关闭创建引导"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  )}
                 </div>
               </header>
               <div className={`artboard ${displayedPath ? "with-image" : ""}`}>

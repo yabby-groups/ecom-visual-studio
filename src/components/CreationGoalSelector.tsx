@@ -30,7 +30,7 @@ export function CreationGoalSelector({
     <section className="step">
       <span className="step-index">02</span>
       <div className="step-body">
-        <h2>选择创作目标</h2>
+        <h2>选择画面组合</h2>
         <div className="goal-grid">
           {goals.map(([id, title, detail, amount]) => (
             <button

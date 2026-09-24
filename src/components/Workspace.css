@@ -231,6 +231,41 @@
   color: #fff;
   font-size: 16px;
 }
+.stage header > div {
+  min-width: 0;
+  width: 100%;
+}
+.workspace-creation-guide {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+  border-left: 2px solid #48d8ba;
+  padding: 3px 0 3px 11px;
+  color: #eef9f6;
+  font-size: 12px;
+}
+.workspace-creation-guide p {
+  margin: 4px 0 0;
+  color: #c1cadb;
+  line-height: 1.5;
+}
+.workspace-creation-guide button {
+  display: grid;
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: #c1cadb;
+  cursor: pointer;
+}
+.workspace-creation-guide button:hover,
+.workspace-creation-guide button:focus-visible {
+  color: #fff;
+}
 .workspace .button.secondary {
   border-color: #4f5c74;
   border-radius: 13px;

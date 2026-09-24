@@ -1416,6 +1416,21 @@ button:active {
   color: var(--ink);
 }
 
+:root[data-theme="light"] .workspace-creation-guide {
+  border-color: var(--accent);
+  color: var(--ink);
+}
+
+:root[data-theme="light"] .workspace-creation-guide p,
+:root[data-theme="light"] .workspace-creation-guide button {
+  color: var(--muted);
+}
+
+:root[data-theme="light"] .workspace-creation-guide button:hover,
+:root[data-theme="light"] .workspace-creation-guide button:focus-visible {
+  color: var(--ink);
+}
+
 :root[data-theme="light"] :is(.sequence-head small, .sequence-item small, .controls-head span, .artboard-empty p, .try-on-reference-head small, .try-on-controls label, .try-on-mode-options small, .try-on-pagination) {
   color: var(--muted);
 }
