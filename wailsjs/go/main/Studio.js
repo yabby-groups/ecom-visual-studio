@@ -14,6 +14,10 @@ export function Analyze(arg1) {
   return window['go']['main']['Studio']['Analyze'](arg1);
 }
 
+export function ChangeAssetTemplate(arg1, arg2, arg3) {
+  return window['go']['main']['Studio']['ChangeAssetTemplate'](arg1, arg2, arg3);
+}
+
 export function Chat(arg1, arg2, arg3) {
   return window['go']['main']['Studio']['Chat'](arg1, arg2, arg3);
 }

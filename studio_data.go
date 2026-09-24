@@ -162,6 +162,19 @@ func (s *Studio) DeleteProject(id string) (map[string]bool, error) {
 }
 
 func (s *Studio) UpdateAsset(id string, patch AssetPatch) (map[string]bool, error) {
+	if patch.Template != "" && patch.Prompt == "" {
+		if patch.Title != "" || patch.Ratio != "" {
+			return nil, errors.New("更换模板请单独操作")
+		}
+		result, err := s.ChangeAssetTemplate(id, patch.Template, false)
+		if err != nil {
+			return nil, err
+		}
+		if result["requires_confirmation"] == true {
+			return nil, errors.New("提示词已修改，请在工作区确认是否覆盖")
+		}
+		return map[string]bool{"ok": true}, nil
+	}
 	var owned int
 	err := s.db.QueryRow("select count(*) from assets where id=?", id).Scan(&owned)
 	if err != nil {
@@ -178,6 +191,72 @@ func (s *Studio) UpdateAsset(id string, patch AssetPatch) (map[string]bool, erro
 		return nil, err
 	}
 	return map[string]bool{"ok": true}, nil
+}
+
+func (s *Studio) ChangeAssetTemplate(id, templateID string, overwrite bool) (map[string]any, error) {
+	if err := validateRequired(templateID, "模板标识", maxTemplateNameRunes); err != nil {
+		return nil, err
+	}
+	templates, err := s.Templates()
+	if err != nil {
+		return nil, err
+	}
+	directions := make(map[string]string, len(templates))
+	for _, item := range templates {
+		directions[item["id"].(string)] = item["direction"].(string)
+	}
+	newDirection, ok := directions[templateID]
+	if !ok {
+		return nil, errors.New("模板不存在或已删除")
+	}
+	result := map[string]any{}
+	err = s.writeTransaction(func(tx *sql.Tx) error {
+		var title, currentTemplate, currentPrompt, product, description, benefits, color string
+		err := tx.QueryRow("select a.title,a.template,a.prompt,p.product,p.description,p.benefits,p.color from assets a join projects p on p.id=a.project_id where a.id=?", id).Scan(&title, &currentTemplate, &currentPrompt, &product, &description, &benefits, &color)
+		if errors.Is(err, sql.ErrNoRows) {
+			return errors.New("画面不存在")
+		}
+		if err != nil {
+			return err
+		}
+		if currentTemplate == templateID {
+			result = map[string]any{"requires_confirmation": false, "prompt": currentPrompt}
+			return nil
+		}
+		project := map[string]any{"product": product, "description": description, "benefits": benefits, "color": color}
+		oldDirection, exists := directions[currentTemplate]
+		generated := false
+		titles := []string{title}
+		if _, packTitle, found := strings.Cut(title, " · "); found {
+			titles = append(titles, packTitle)
+		}
+		for _, candidateTitle := range titles {
+			if exists && currentPrompt == makePrompt(project, candidateTitle, oldDirection) {
+				generated = true
+			}
+			for _, direction := range packPromptDirections[currentTemplate] {
+				if currentPrompt == makePrompt(project, candidateTitle, direction) {
+					generated = true
+					break
+				}
+			}
+		}
+		modified := !generated
+		if modified && !overwrite {
+			result = map[string]any{"requires_confirmation": true}
+			return nil
+		}
+		prompt := makePrompt(project, title, newDirection)
+		if err := validateOptional(prompt, "画面提示词", maxPromptRunes); err != nil {
+			return err
+		}
+		if _, err := tx.Exec("update assets set template=?,prompt=? where id=?", templateID, prompt, id); err != nil {
+			return err
+		}
+		result = map[string]any{"requires_confirmation": false, "prompt": prompt}
+		return nil
+	})
+	return result, err
 }
 
 func (s *Studio) Templates() ([]map[string]any, error) {
@@ -393,6 +472,28 @@ func (s *Studio) ResetPrompt(id string) (map[string]string, error) {
 }
 func makePrompt(project map[string]any, title, direction string) string {
 	return fmt.Sprintf("E-commerce commercial image. Purpose: %s. Art direction: %s. Product: %v. Description: %v. Benefits: %v. Campaign Style Lock: brand accent %v, premium commercial lighting, clean composition and conversion focus. Preserve exact product identity from the supplied reference. Leave intentional whitespace. No watermark, unrelated products, fake logo or unreadable extra text.", title, direction, project["product"], project["description"], project["benefits"], project["color"])
+}
+
+// Existing packs use these directions instead of the template catalog directions.
+var packPromptDirections = map[string][]string{
+	"hero-image": {
+		"A clean hero shot on #FFFFFF, product occupies 38%, with clear price-overlay whitespace.",
+		"A clear ecommerce hero shot on a clean background, centered and fully visible.",
+	},
+	"detail-macro": {
+		"A macro close-up of material, texture and construction.",
+		"An elevated detail scene emphasizing material and purchase confidence.",
+		"A tactile close-up that highlights craftsmanship and product details.",
+	},
+	"lifestyle-scene": {
+		"The product naturally used in a believable everyday setting.",
+		"A polished lifestyle scene showing daily value.",
+		"A scroll-stopping lifestyle image with the product naturally featured.",
+	},
+	"poster-banner": {
+		"A benefit-led product poster with reserved copy space.",
+		"A premium campaign composition with generous copy space.",
+	},
 }
 
 func (s *Studio) localProject(id string) (map[string]any, error) {

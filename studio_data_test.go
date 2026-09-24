@@ -438,6 +438,91 @@ func TestAddAssetAppendsTemplateFrameWithoutReplacingExistingAssets(t *testing.T
 	}
 }
 
+func TestChangeAssetTemplatePreservesCustomPromptUntilConfirmed(t *testing.T) {
+	db, err := sql.Open("sqlite", sqliteDSN(filepath.Join(t.TempDir(), "studio.db")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	studio := &Studio{db: db}
+	if err := studio.migrate(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("insert into projects(id,user_id,name,product,created_at) values('project-template',?,'Local','Desk',1)", localWorkspaceID); err != nil {
+		t.Fatal(err)
+	}
+	created, err := studio.AddAsset("project-template", "hero-image")
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := created["id"]
+	read := func() (string, string, string) {
+		var template, prompt, ratio string
+		if err := db.QueryRow("select template,prompt,ratio from assets where id=?", id).Scan(&template, &prompt, &ratio); err != nil {
+			t.Fatal(err)
+		}
+		return template, prompt, ratio
+	}
+	result, err := studio.ChangeAssetTemplate(id, "detail-macro", false)
+	if err != nil || result["requires_confirmation"] != false {
+		t.Fatalf("default prompt switch = %#v, %v", result, err)
+	}
+	template, prompt, ratio := read()
+	if template != "detail-macro" || ratio != "1:1" || !strings.Contains(prompt, "Art direction: 特写呈现") {
+		t.Fatalf("switched asset = %q, %q, %q", template, prompt, ratio)
+	}
+	if _, err := studio.UpdateAsset(id, AssetPatch{Prompt: "Handwritten prompt"}); err != nil {
+		t.Fatal(err)
+	}
+	result, err = studio.ChangeAssetTemplate(id, "lifestyle-scene", false)
+	if err != nil || result["requires_confirmation"] != true {
+		t.Fatalf("custom prompt switch = %#v, %v", result, err)
+	}
+	template, prompt, _ = read()
+	if template != "detail-macro" || prompt != "Handwritten prompt" {
+		t.Fatalf("unconfirmed switch changed asset = %q, %q", template, prompt)
+	}
+	if _, err := studio.UpdateAsset(id, AssetPatch{Template: "lifestyle-scene"}); err == nil {
+		t.Fatal("UpdateAsset silently replaced a custom prompt")
+	}
+	if _, err := studio.ChangeAssetTemplate(id, "missing-template", true); err == nil {
+		t.Fatal("missing template was accepted")
+	}
+	template, prompt, _ = read()
+	if template != "detail-macro" || prompt != "Handwritten prompt" {
+		t.Fatalf("invalid switch changed asset = %q, %q", template, prompt)
+	}
+	result, err = studio.ChangeAssetTemplate(id, "lifestyle-scene", true)
+	if err != nil || result["requires_confirmation"] != false {
+		t.Fatalf("confirmed switch = %#v, %v", result, err)
+	}
+	template, prompt, ratio = read()
+	if template != "lifestyle-scene" || ratio != "1:1" || prompt == "Handwritten prompt" || !strings.Contains(prompt, "Art direction:") {
+		t.Fatalf("confirmed switch asset = %q, %q, %q", template, prompt, ratio)
+	}
+	if _, err := studio.UpdateAsset(id, AssetPatch{Template: "hero-image"}); err != nil {
+		t.Fatalf("UpdateAsset default prompt switch: %v", err)
+	}
+	template, prompt, _ = read()
+	if template != "hero-image" || !strings.Contains(prompt, "Art direction: 干净背景") {
+		t.Fatalf("UpdateAsset switch asset = %q, %q", template, prompt)
+	}
+	if _, err := db.Exec("insert into projects(id,user_id,name,product,created_at) values('project-pack',?,'Pack','Desk',2)", localWorkspaceID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := studio.CreatePack("project-pack", PackInput{Kind: "amazon"}); err != nil {
+		t.Fatal(err)
+	}
+	var packAssetID string
+	if err := db.QueryRow("select id from assets where project_id='project-pack' and title='H1 · 商品主图'").Scan(&packAssetID); err != nil {
+		t.Fatal(err)
+	}
+	result, err = studio.ChangeAssetTemplate(packAssetID, "detail-macro", false)
+	if err != nil || result["requires_confirmation"] != false {
+		t.Fatalf("generated pack prompt switch = %#v, %v", result, err)
+	}
+}
+
 func TestExportStorageCopiesConsistentDatabaseAndFiles(t *testing.T) {
 	source := t.TempDir()
 	if err := ensureDataDir(source); err != nil {

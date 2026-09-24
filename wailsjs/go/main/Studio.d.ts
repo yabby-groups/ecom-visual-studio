@@ -8,6 +8,8 @@ export function AddTemplate(arg1:main.TemplateInput):Promise<Record<string, stri
 
 export function Analyze(arg1:Record<string, string>):Promise<Record<string, any>>;
 
+export function ChangeAssetTemplate(arg1:string,arg2:string,arg3:boolean):Promise<Record<string, any>>;
+
 export function Chat(arg1:string,arg2:Array<Record<string, string>>,arg3:Record<string, any>):Promise<main.chatResult>;
 
 export function ChooseStorageDirectory():Promise<Record<string, any>>;

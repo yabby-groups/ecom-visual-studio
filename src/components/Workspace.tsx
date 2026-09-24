@@ -9,7 +9,6 @@ import {
   Plus,
   Save,
   Sparkles,
-  WandSparkles,
   X,
 } from "lucide-react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
@@ -18,6 +17,7 @@ import { useRequireAiAuth } from "../auth";
 import { useAiInteraction } from "../aiInteraction";
 import { imageRatioLabel } from "../constants/imageSizes";
 import { ImageRatioPicker } from "./ImageRatioPicker";
+import { ConfirmDialog } from "./ConfirmDialog";
 import { Notice } from "./Notice";
 import { Shell } from "./Shell";
 import { useAppStore } from "../store";
@@ -65,6 +65,12 @@ export function Workspace() {
   const [addAssetOpen, setAddAssetOpen] = useState(false);
   const [templateId, setTemplateId] = useState("");
   const [addingAsset, setAddingAsset] = useState(false);
+  const [pendingTemplate, setPendingTemplate] = useState<{
+    assetId: string;
+    templateId: string;
+  } | null>(null);
+  const [templateBusy, setTemplateBusy] = useState(false);
+  const [templateError, setTemplateError] = useState("");
   const [selectedVersionPath, setSelectedVersionPath] = useState<string | null>(
     null,
   );
@@ -171,6 +177,8 @@ export function Workspace() {
     setOriginalOpen(false);
     setReferenceOpen(false);
     setSelectedVersionPath(null);
+    setPendingTemplate(null);
+    setTemplateError("");
   }, [assetId]);
   useEffect(() => {
     if (!originalOpen && !referenceOpen) return;
@@ -270,19 +278,51 @@ export function Workspace() {
       );
     }
   }
-  async function rebuildPrompt() {
-    if (!asset) return;
+  async function applyTemplate(
+    assetID: string,
+    nextTemplate: string,
+    overwrite: boolean,
+  ) {
+    setTemplateBusy(true);
     try {
-      const result = await client.resetPrompt(asset.id);
-      await updateAsset({ prompt: result.prompt });
-      showNotice("已生成提示词");
-    } catch (reason) {
-      showNotice(
-        reason instanceof Error ? reason.message : "生成提示词失败",
-        null,
-        "error",
+      const result = await client.changeAssetTemplate(
+        assetID,
+        nextTemplate,
+        overwrite,
       );
+      if (result.requires_confirmation) {
+        if (promptRef.current?.dataset.assetId === assetID) {
+          setPendingTemplate({ assetId: assetID, templateId: nextTemplate });
+        }
+        return;
+      }
+      if (
+        promptRef.current?.dataset.assetId === assetID &&
+        result.prompt !== undefined
+      ) {
+        promptRef.current.value = result.prompt;
+      }
+      await load();
+      setPendingTemplate((current) =>
+        current?.assetId === assetID ? null : current,
+      );
+      if (promptRef.current?.dataset.assetId === assetID) setTemplateError("");
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : "更换模板失败";
+      if (overwrite) setTemplateError(message);
+      else showNotice(message, null, "error");
+    } finally {
+      setTemplateBusy(false);
     }
+  }
+  function selectTemplate(nextTemplate: string) {
+    if (!asset || nextTemplate === asset.template) return;
+    setTemplateError("");
+    if (promptRef.current?.value !== asset.prompt) {
+      setPendingTemplate({ assetId: asset.id, templateId: nextTemplate });
+      return;
+    }
+    void applyTemplate(asset.id, nextTemplate, false);
   }
   async function downloadAsset() {
     if (!displayedPath) return;
@@ -528,13 +568,6 @@ export function Workspace() {
                   参考图
                 </button>
                 <button
-                  className="button secondary"
-                  onClick={() => void rebuildPrompt()}
-                >
-                  <WandSparkles size={16} />
-                  根据模板重写提示词
-                </button>
-                <button
                   className="button primary workspace-generate-button"
                   type="button"
                   disabled={isPending(asset.status)}
@@ -555,9 +588,8 @@ export function Workspace() {
                 <span className="workspace-template-select">
                   <select
                     value={asset.template}
-                    onChange={(event) =>
-                      void updateAsset({ template: event.target.value })
-                    }
+                    disabled={templateBusy}
+                    onChange={(event) => selectTemplate(event.target.value)}
                   >
                     {templates.map((item) => (
                       <option value={item.id} key={item.id}>
@@ -567,9 +599,6 @@ export function Workspace() {
                   </select>
                   <ChevronDown size={16} aria-hidden="true" />
                 </span>
-                <small>
-                  更换模板后，可点击“根据模板重写提示词”应用模板说明。
-                </small>
               </label>
               <fieldset>
                 <legend>画面比例</legend>
@@ -600,6 +629,7 @@ export function Workspace() {
                 画面提示词
                 <textarea
                   defaultValue={asset.prompt}
+                  data-asset-id={asset.id}
                   key={asset.id}
                   ref={promptRef}
                   rows={10}
@@ -744,6 +774,26 @@ export function Workspace() {
           autoCloseMs={notice.autoCloseMs}
           tone={notice.tone}
           onClose={() => setNotice(null)}
+        />
+      )}
+      {pendingTemplate && (
+        <ConfirmDialog
+          title="覆盖已修改的提示词？"
+          message="更换模板会按新模板重新生成提示词，当前修改将被覆盖。"
+          confirmLabel="覆盖并更换"
+          error={templateError}
+          loading={templateBusy}
+          onCancel={() => {
+            setPendingTemplate(null);
+            setTemplateError("");
+          }}
+          onConfirm={() =>
+            void applyTemplate(
+              pendingTemplate.assetId,
+              pendingTemplate.templateId,
+              true,
+            )
+          }
         />
       )}
     </Shell>

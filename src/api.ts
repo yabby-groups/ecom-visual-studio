@@ -71,6 +71,13 @@ export const client = {
   deleteProject: (id: string) => call("DeleteProject", id),
   updateAsset: (id: string, body: Partial<Asset>) =>
     call("UpdateAsset", id, body),
+  changeAssetTemplate: (id: string, templateId: string, overwrite: boolean) =>
+    call<{ requires_confirmation: boolean; prompt?: string }>(
+      "ChangeAssetTemplate",
+      id,
+      templateId,
+      overwrite,
+    ),
   resetPrompt: (id: string) => call<{ prompt: string }>("ResetPrompt", id),
   downloadAsset: (path: string) => call<boolean>("DownloadAsset", path),
   generateAsset: (id: string) => call("GenerateAsset", id),
