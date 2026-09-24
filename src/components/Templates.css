@@ -36,87 +36,176 @@
   font-size: 11px;
   line-height: 1.65;
 }
-.custom-template-form {
-  display: grid;
-  grid-template-columns: 1.1fr 1fr 130px 1.6fr auto;
+.template-page-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+}
+.template-page-heading .library-heading {
+  min-width: 0;
+}
+.template-create-trigger,
+.template-create-actions .create-button {
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
-  margin: 0 0 22px;
-  padding: 14px;
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.09);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.13);
+  justify-content: center;
+  gap: 8px;
+  white-space: nowrap;
 }
-.custom-template-form > div {
+.template-create-trigger {
+  flex: none;
+  margin-bottom: 27px;
+}
+.template-create-backdrop {
+  position: fixed;
+  z-index: 30;
+  inset: 0;
   display: grid;
-  gap: 4px;
+  place-items: center;
+  padding: 20px;
+  background: rgba(4, 6, 10, 0.78);
+  backdrop-filter: blur(8px);
 }
-.custom-template-form span {
-  color: #fff;
-  font-weight: 800;
+.template-create-dialog {
+  width: min(100%, 520px);
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
+  border: 1px solid #3d4859;
+  border-radius: 8px;
+  padding: 24px;
+  background: #1b212b;
+  color: #f3f5f7;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.52);
 }
-.custom-template-form small {
-  color: #c5cde0;
-  font-size: 10px;
-  line-height: 1.35;
+.template-create-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
 }
-.custom-template-form input,
-.custom-template-form select,
-.custom-template-form textarea {
+.template-create-head h2 {
+  margin: 0;
+  font-size: 22px;
+}
+.template-create-head p {
+  margin: 8px 0 0;
+  color: #bfc9d8;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.template-create-head .icon-button {
+  flex: none;
+  border-color: #465266;
+  background: #293240;
+  color: #d5ddea;
+}
+.template-create-form {
+  display: grid;
+  gap: 18px;
+  margin-top: 24px;
+}
+.template-create-form label {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 700;
+}
+.template-create-form input,
+.template-create-form select,
+.template-create-form textarea {
   width: 100%;
   min-width: 0;
-  border: 1px solid rgba(255, 255, 255, 0.24);
-  border-radius: 10px;
-  padding: 10px;
-  background: rgba(5, 8, 24, 0.28);
-  color: #fff;
+  border: 1px solid #3f4b5d;
+  border-radius: 8px;
+  padding: 11px 13px;
+  background: #252d39;
+  color: #f3f5f7;
+  font-weight: 400;
+}
+.template-create-form :is(input, select, textarea):focus-visible {
+  border-color: #72cdb8;
+  outline: 2px solid rgba(114, 205, 184, 0.25);
+  outline-offset: 1px;
+}
+.template-create-form textarea {
+  min-height: 148px;
+  resize: vertical;
+  line-height: 1.55;
 }
 .template-ratio-select {
   position: relative;
   min-width: 0;
 }
-.custom-template-form .template-ratio-select select {
+.template-create-form .template-ratio-select select {
   appearance: none;
   cursor: pointer;
   padding-right: 42px;
-  font-weight: 750;
-  letter-spacing: 0.01em;
-  transition:
-    border-color 160ms ease,
-    background 160ms ease,
-    box-shadow 160ms ease;
 }
 .template-ratio-select svg {
   position: absolute;
   top: 50%;
   right: 13px;
   pointer-events: none;
-  color: #9ff1dd;
+  color: #8fe1cd;
   transform: translateY(-50%);
-  transition:
-    transform 160ms ease,
-    color 160ms ease;
 }
-.template-ratio-select:focus-within select {
-  border-color: #9ff1dd;
-  background: rgba(5, 8, 24, 0.5);
-  box-shadow:
-    0 0 0 3px rgba(159, 241, 221, 0.14),
-    inset 0 1px 0 rgba(255, 255, 255, 0.13);
-  outline: none;
-}
-.template-ratio-select:focus-within svg {
-  color: #fff;
-  transform: translateY(-42%) rotate(180deg);
-}
-.custom-template-form select option {
+.template-create-form select option {
   background: #171a2b;
   color: #fff;
 }
-.custom-template-form textarea {
-  height: 42px;
-  resize: vertical;
+.template-create-form .form-error {
+  margin: 0;
+}
+.template-create-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 4px;
+}
+.template-create-actions .button,
+.template-create-actions .create-button {
+  min-height: 42px;
+}
+.template-create-actions .button.secondary {
+  border-color: #526176;
+  background: #293240;
+  color: #edf2f7;
+}
+.template-create-actions .button.secondary:hover:not(:disabled) {
+  border-color: #71839c;
+  background: #354153;
+}
+:root[data-theme="light"] .template-create-backdrop {
+  background: var(--scrim);
+}
+:root[data-theme="light"] .template-create-dialog {
+  border-color: var(--line);
+  background: var(--surface-raised);
+  color: var(--ink);
+  box-shadow: 0 24px 64px rgba(42, 32, 23, 0.22);
+}
+:root[data-theme="light"] .template-create-head p {
+  color: var(--muted);
+}
+:root[data-theme="light"] .template-create-head .icon-button,
+:root[data-theme="light"] .template-create-form :is(input, select, textarea) {
+  border-color: var(--line);
+  background: var(--surface-muted);
+  color: var(--ink);
+}
+:root[data-theme="light"] .template-ratio-select svg {
+  color: var(--accent);
+}
+:root[data-theme="light"] .template-create-form select option {
+  background: var(--surface-raised);
+  color: var(--ink);
+}
+:root[data-theme="light"] .template-create-actions .button.secondary {
+  border-color: var(--line);
+  background: var(--surface-raised);
+  color: var(--ink);
 }
 .template-wall {
   position: relative;
@@ -202,14 +291,16 @@
   .template-page > h1 {
     font-size: 38px;
   }
-  .custom-template-form {
-    grid-template-columns: 1fr;
-    gap: 10px;
-    padding: 14px;
+  .template-page-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0;
   }
-  .custom-template-form > div,
-  .custom-template-form textarea {
-    grid-column: auto;
+  .template-create-trigger {
+    margin: 0 0 27px;
+  }
+  .template-create-dialog {
+    padding: 20px;
   }
   .template-wall {
     display: grid;

@@ -5,7 +5,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { ChevronDown, Sparkles } from "lucide-react";
+import { ChevronDown, LoaderCircle, Plus, Sparkles, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { client } from "../api";
 import { nativeImageRatios } from "../constants/imageSizes";
@@ -20,6 +20,12 @@ export function Templates() {
   const navigate = useNavigate();
   const { registerPage } = useAiInteraction();
   const [error, setError] = useState("");
+  const [createOpen, setCreateOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  const createButtonRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLElement>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
   const wallRef = useRef<HTMLDivElement>(null);
   const tileRefs = useRef(new Map<string, HTMLButtonElement>());
   const [masonry, setMasonry] = useState({
@@ -106,8 +112,11 @@ export function Templates() {
   };
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (savingRef.current) return;
     const form = new FormData(event.currentTarget);
     setError("");
+    savingRef.current = true;
+    setSaving(true);
     try {
       await client.addTemplate({
         name: String(form.get("name")),
@@ -115,11 +124,43 @@ export function Templates() {
         direction: String(form.get("direction")),
       });
       await refresh();
-      event.currentTarget.reset();
+      setCreateOpen(false);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "保存失败");
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
     }
   }
+  useEffect(() => {
+    if (!createOpen) return;
+    nameRef.current?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !savingRef.current) {
+        setCreateOpen(false);
+      }
+      if (event.key !== "Tab" || !dialogRef.current) return;
+      const focusable = Array.from(
+        dialogRef.current.querySelectorAll<HTMLElement>(
+          'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled)',
+        ),
+      );
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last?.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first?.focus();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      createButtonRef.current?.focus();
+    };
+  }, [createOpen]);
   useLayoutEffect(() => {
     const wall = wallRef.current;
     if (!wall) return;
@@ -182,41 +223,25 @@ export function Templates() {
         <strong>灵感模板</strong>
       </div>
       <div className="page template-page">
-        <div className="library-heading">
-          <span className="eyebrow">画面模板</span>
-          <h1>从一个画面方向开始</h1>
-          <p>选择模板创建画面，进入项目后可调整提示词和比例。</p>
+        <div className="template-page-heading">
+          <div className="library-heading">
+            <span className="eyebrow">画面模板</span>
+            <h1>从一个画面方向开始</h1>
+            <p>选择模板创建画面，进入项目后可调整提示词和比例。</p>
+          </div>
+          <button
+            className="create-button template-create-trigger"
+            type="button"
+            ref={createButtonRef}
+            onClick={() => {
+              setError("");
+              setCreateOpen(true);
+            }}
+          >
+            <Plus size={18} aria-hidden="true" />
+            新建场景模板
+          </button>
         </div>
-        <form className="custom-template-form" onSubmit={submit}>
-          <div>
-            <span>自定义场景模板</span>
-            <small>保存后可在新建项目或项目工作区中使用</small>
-          </div>
-          <input
-            name="name"
-            maxLength={80}
-            placeholder="模板名称，例如：户外跑步场景"
-            required
-          />
-          <div className="template-ratio-select">
-            <select name="ratio" defaultValue="1:1" aria-label="画面比例">
-              {nativeImageRatios.map(({ ratio, label, size }) => (
-                <option value={ratio} key={ratio}>
-                  {ratio} {label} · {size}
-                </option>
-              ))}
-            </select>
-            <ChevronDown aria-hidden="true" size={18} strokeWidth={2.5} />
-          </div>
-          <textarea
-            name="direction"
-            maxLength={1800}
-            placeholder="描述背景、光线、构图和商品如何出现"
-            required
-          />
-          <button className="create-button">保存模板</button>
-        </form>
-        {error && <p className="form-error">{error}</p>}
         <div
           className="template-wall"
           ref={wallRef}
@@ -268,6 +293,95 @@ export function Templates() {
           })}
         </div>
       </div>
+      {createOpen && (
+        <div
+          className="template-create-backdrop"
+          role="presentation"
+          onClick={() => !saving && setCreateOpen(false)}
+        >
+          <section
+            className="template-create-dialog"
+            ref={dialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="template-create-title"
+            aria-describedby="template-create-description"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="template-create-head">
+              <div>
+                <h2 id="template-create-title">新建场景模板</h2>
+                <p id="template-create-description">保存后可在新建项目或项目工作区中使用</p>
+              </div>
+              <button
+                className="icon-button"
+                type="button"
+                aria-label="关闭"
+                title="关闭"
+                onClick={() => setCreateOpen(false)}
+                disabled={saving}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <form className="template-create-form" onSubmit={submit}>
+              <label>
+                模板名称
+                <input
+                  ref={nameRef}
+                  name="name"
+                  maxLength={80}
+                  placeholder="例如：户外跑步场景"
+                  required
+                />
+              </label>
+              <label>
+                画面比例
+                <span className="template-ratio-select">
+                  <select name="ratio" defaultValue="1:1">
+                    {nativeImageRatios.map(({ ratio, label, size }) => (
+                      <option value={ratio} key={ratio}>
+                        {ratio} {label} · {size}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown aria-hidden="true" size={18} strokeWidth={2.5} />
+                </span>
+              </label>
+              <label>
+                场景描述
+                <textarea
+                  name="direction"
+                  maxLength={1800}
+                  placeholder="描述背景、光线、构图和商品如何出现"
+                  required
+                />
+              </label>
+              {error && (
+                <p className="form-error" role="alert">
+                  {error}
+                </p>
+              )}
+              <div className="template-create-actions">
+                <button
+                  className="button secondary"
+                  type="button"
+                  onClick={() => setCreateOpen(false)}
+                  disabled={saving}
+                >
+                  取消
+                </button>
+                <button className="create-button" type="submit" disabled={saving}>
+                  {saving && (
+                    <LoaderCircle className="spin" size={16} aria-hidden="true" />
+                  )}
+                  保存模板
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
     </Shell>
   );
 }

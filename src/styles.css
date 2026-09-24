@@ -478,25 +478,19 @@ select:focus {
 :root[data-theme="light"] .settings-intro h1,
 :root[data-theme="light"] .settings-card h2,
 :root[data-theme="light"] .settings-form label,
-:root[data-theme="light"] .custom-template-form span,
 :root[data-theme="light"] .creation-form .pack-composer-head h3,
 :root[data-theme="light"] .creation-form .pack-scene-option b { color: var(--ink); }
 :root[data-theme="light"] .library-heading p:last-child,
 :root[data-theme="light"] .library-empty,
 :root[data-theme="light"] .settings-intro p,
 :root[data-theme="light"] .settings-card p,
-:root[data-theme="light"] .custom-template-form small,
 :root[data-theme="light"] .creation-form .pack-composer-head small,
 :root[data-theme="light"] .creation-form .pack-scene-option small,
 :root[data-theme="light"] .creation-form .pack-composer-empty { color: var(--muted); }
 :root[data-theme="light"] .filter { background: #fff; color: var(--muted); }
 :root[data-theme="light"] .filter.active { background: var(--soft); color: var(--accent-dark); }
 :root[data-theme="light"] .library-empty,
-:root[data-theme="light"] .custom-template-form,
 :root[data-theme="light"] .settings-card { border-color: var(--line); background: #fff; box-shadow: 0 8px 24px rgba(23, 34, 41, .06); }
-:root[data-theme="light"] .custom-template-form input,
-:root[data-theme="light"] .custom-template-form select,
-:root[data-theme="light"] .custom-template-form textarea,
 :root[data-theme="light"] .settings-form select,
 :root[data-theme="light"] .settings-select-trigger,
 :root[data-theme="light"] .settings-select-menu { border-color: #cbd7d3; background: #fff; color: var(--ink); }
@@ -706,17 +700,7 @@ button:active {
 .library-art-grid .project-card span {
   color: #c4cde0;
 }
-.custom-template-form .create-button {
-  white-space: nowrap;
-}
 @media (max-width: 1040px) {
-  .custom-template-form {
-    grid-template-columns: 1fr 1fr;
-  }
-  .custom-template-form > div,
-  .custom-template-form textarea {
-    grid-column: 1 / -1;
-  }
   .template-wall {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -738,16 +722,6 @@ button:active {
   .library-art-grid,
   .template-wall {
     grid-template-columns: 1fr;
-  }
-  .custom-template-form {
-    grid-template-columns: 1fr;
-  }
-  .custom-template-form > div,
-  .custom-template-form textarea {
-    grid-column: auto;
-  }
-  .custom-template-form .create-button {
-    width: 100%;
   }
 }
 .creation-form .brand-color-control {
@@ -1012,7 +986,7 @@ button:active {
 :root[data-theme="light"] main :is(h1, h2, h3, h4, p, label, small, .text-button) {
   color: var(--ink);
 }
-:root[data-theme="light"] main :is(.muted, .page-lead, .settings-card p, .settings-intro p, .library-heading p:last-child, .custom-template-form small, .creation-form .pack-composer-head small, .creation-form .pack-scene-option small, .creation-form .pack-composer-empty) {
+:root[data-theme="light"] main :is(.muted, .page-lead, .settings-card p, .settings-intro p, .library-heading p:last-child, .creation-form .pack-composer-head small, .creation-form .pack-scene-option small, .creation-form .pack-composer-empty) {
   color: var(--muted);
 }
 :root[data-theme="light"] main .button.primary,
@@ -1166,7 +1140,7 @@ button:active {
   color: var(--ink);
 }
 
-:root[data-theme="light"] :is(.shortcut-card, .template-card, .project-preview, .library-empty, .settings-card, .custom-template-form, .creation-form .step) {
+:root[data-theme="light"] :is(.shortcut-card, .template-card, .project-preview, .library-empty, .settings-card, .creation-form .step) {
   border-color: var(--line);
   background: var(--surface-raised);
   box-shadow: 0 8px 24px rgba(55, 41, 25, 0.06);
@@ -1626,22 +1600,11 @@ button:active {
   color: var(--accent-text);
 }
 
-:root[data-theme="light"] :is(.template-tile small, .template-tile span, .template-card p, .custom-template-form small) {
+:root[data-theme="light"] :is(.template-tile small, .template-tile span, .template-card p) {
   color: var(--muted);
 }
 
-:root[data-theme="light"] :is(.template-tile b, .template-tile p, .custom-template-form span) {
-  color: var(--ink);
-}
-
-:root[data-theme="light"] :is(.custom-template-form input, .custom-template-form select, .custom-template-form textarea) {
-  border-color: var(--line);
-  background: var(--surface-raised);
-  color: var(--ink);
-}
-
-:root[data-theme="light"] .custom-template-form select option {
-  background: var(--surface-raised);
+:root[data-theme="light"] :is(.template-tile b, .template-tile p) {
   color: var(--ink);
 }
 
