@@ -49,7 +49,7 @@ export function CreationGoalSelector({
           <section className="pack-composer" aria-label="当前灵感方向">
             <div className="pack-composer-head">
               <div>
-                <p className="analysis-kicker">SELECTED INSPIRATION</p>
+                <p className="analysis-kicker">已选模板</p>
                 <h3>当前灵感方向：{selectedTemplate.name}</h3>
                 <small>
                   {selectedTemplate.ratio} · {selectedTemplate.direction}
@@ -66,11 +66,10 @@ export function CreationGoalSelector({
           >
             <div className="pack-composer-head">
               <div>
-                <p className="analysis-kicker">CUSTOM SCENES</p>
+                <p className="analysis-kicker">自定义场景</p>
                 <h3 id="pack-composer-title">扩展商品视觉包</h3>
                 <small>
-                  默认 7
-                  张核心画面；勾选的自定义场景会作为独立画面加入生成队列。
+                  默认创建 7 个画面；勾选的自定义场景将作为独立画面加入项目。
                 </small>
               </div>
               <strong aria-live="polite">

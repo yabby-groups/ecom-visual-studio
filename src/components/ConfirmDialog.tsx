@@ -35,7 +35,7 @@ export function ConfirmDialog({
         onClick={(event) => event.stopPropagation()}
       >
         <div>
-          <span className="eyebrow">ACCOUNT</span>
+          <span className="eyebrow">确认操作</span>
           <h2 id="confirm-dialog-title">{title}</h2>
           <p id="confirm-dialog-message">{message}</p>
         </div>

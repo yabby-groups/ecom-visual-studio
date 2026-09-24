@@ -1,5 +1,11 @@
-import { type FormEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ChevronDown } from "lucide-react";
+import {
+  type FormEvent,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
+import { ChevronDown, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { client } from "../api";
 import { nativeImageRatios } from "../constants/imageSizes";
@@ -177,16 +183,14 @@ export function Templates() {
       </div>
       <div className="page template-page">
         <div className="library-heading">
-          <span className="eyebrow">CREATIVE STARTING POINTS</span>
+          <span className="eyebrow">画面模板</span>
           <h1>从一个画面方向开始</h1>
-          <p>
-            每个方向都定义了画面的商业目的、构图重点和主要内容。选择后可继续调整风格与细节。
-          </p>
+          <p>选择模板创建画面，进入项目后可调整提示词和比例。</p>
         </div>
         <form className="custom-template-form" onSubmit={submit}>
           <div>
             <span>自定义场景模板</span>
-            <small>保存后可在画布右侧的场景模板中选择</small>
+            <small>保存后可在新建项目或项目工作区中使用</small>
           </div>
           <input
             name="name"
@@ -219,7 +223,7 @@ export function Templates() {
           style={{ height: masonry.height }}
         >
           {templates.map((item) => {
-            const direction = guide[item.id] || guide["hero-image"];
+            const direction = guide[item.id];
             const position = masonry.positions[item.id];
             return (
               <button
@@ -238,20 +242,26 @@ export function Templates() {
                     : undefined
                 }
               >
-                <img
-                  className="template-photo"
-                  src={direction[0]}
-                  alt={`${item.name} 模板示例`}
-                  loading="lazy"
-                />
+                {direction ? (
+                  <img
+                    className="template-photo"
+                    src={direction[0]}
+                    alt={`${item.name} 模板示例`}
+                    loading="lazy"
+                  />
+                ) : (
+                  <div className="template-custom-preview" aria-hidden="true">
+                    <Sparkles size={28} />
+                  </div>
+                )}
                 <div>
                   <small>
                     {item.group} · {item.ratio}
                   </small>
                   <b>{item.name}</b>
-                  <p>{direction[1]}</p>
-                  <span>{direction[2]}</span>
-                  <i>使用此方向</i>
+                  <p>{direction?.[1] || item.direction}</p>
+                  {direction && <span>{direction[2]}</span>}
+                  <i>使用此模板</i>
                 </div>
               </button>
             );

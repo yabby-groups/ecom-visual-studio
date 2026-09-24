@@ -65,7 +65,7 @@ export function SettingsSelect({
       >
         <span className="settings-select-content">
           <span className="settings-select-label">
-            {selected?.label || "暂无可用选项"}
+            {selected?.label || "暂无可选项"}
           </span>
           {selected?.detail && (
             <span className="settings-select-detail">{selected.detail}</span>

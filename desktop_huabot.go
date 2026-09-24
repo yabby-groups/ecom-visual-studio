@@ -126,10 +126,10 @@ func decodeResponse(response *http.Response, target any) error {
 				return errors.New(text)
 			}
 		}
-		return fmt.Errorf("huabot request failed: HTTP %d", response.StatusCode)
+		return fmt.Errorf("Huabot 请求失败：HTTP %d", response.StatusCode)
 	}
 	if err := json.Unmarshal(body, target); err != nil {
-		return fmt.Errorf("invalid huabot response: %w", err)
+		return fmt.Errorf("Huabot 响应无效：%w", err)
 	}
 	return nil
 }
@@ -151,7 +151,7 @@ func (s *Studio) webRequest(method, rawURL, bearer string, body url.Values, targ
 	}
 	response, err := s.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("无法连接 huabot: %w", err)
+		return fmt.Errorf("无法连接 Huabot：%w", err)
 	}
 	return decodeResponse(response, target)
 }
@@ -230,7 +230,7 @@ func (s *Studio) fetchModels() ([]providerModel, error) {
 	}
 	models := parseModels(raw)
 	if len(models) == 0 {
-		return nil, errors.New("huabot 没有返回可用模型")
+		return nil, errors.New("Huabot 没有返回可用模型")
 	}
 	return models, nil
 }
@@ -251,7 +251,7 @@ func (s *Studio) loginHuabot(name, password, totp string) (map[string]any, error
 	}
 	bearer, _ := login["token"].(string)
 	if bearer == "" {
-		return nil, errors.New("huabot 未返回会话令牌")
+		return nil, errors.New("Huabot 未返回会话令牌")
 	}
 	if account, ok := login["user"].(map[string]any); ok && stringValue(account["name"]) == "" {
 		account["name"] = name
@@ -296,7 +296,7 @@ func (s *Studio) completeHuabotLogin(bearer string, login map[string]any, creden
 		}
 	}
 	if len(tokens) == 0 {
-		return nil, errors.New("huabot 没有返回可用 Token")
+		return nil, errors.New("Huabot 没有返回可用 Token")
 	}
 	models, err := s.fetchModels()
 	if err != nil {
@@ -311,7 +311,7 @@ func (s *Studio) completeHuabotLogin(bearer string, login map[string]any, creden
 		}
 	}
 	if name == "" {
-		return nil, errors.New("huabot 未返回用户资料")
+		return nil, errors.New("Huabot 未返回用户资料")
 	}
 	user := User{ID: stableID(name), Username: name, Profile: Profile{NickName: stringValue(profile["nick_name"]), AvatarURL: stringValue(profile["avatar_url"])}}
 	if user.Profile.NickName == "" {
@@ -342,7 +342,7 @@ func (s *Studio) startHuabotAuthorization() (deviceAuthorization, error) {
 		return deviceAuthorization{}, err
 	}
 	if authorization.DeviceCode == "" || authorization.VerificationURIComplete == "" {
-		return deviceAuthorization{}, errors.New("huabot 未返回有效授权请求")
+		return deviceAuthorization{}, errors.New("Huabot 未返回有效授权请求")
 	}
 	return authorization, nil
 }
@@ -373,11 +373,11 @@ func (s *Studio) pollHuabotAuthorization(deviceCode string) (map[string]any, err
 	}
 	bearer := stringValue(exchanged["access_token"])
 	if bearer == "" {
-		return nil, errors.New("huabot 未返回访问令牌")
+		return nil, errors.New("Huabot 未返回访问令牌")
 	}
 	refreshToken := stringValue(exchanged["refresh_token"])
 	if refreshToken == "" {
-		return nil, errors.New("huabot 未返回刷新令牌")
+		return nil, errors.New("Huabot 未返回刷新令牌")
 	}
 	var login map[string]any
 	if err := s.webRequest(http.MethodGet, config.WebBase+"/api/user/me/", bearer, nil, &login); err != nil {
@@ -619,7 +619,7 @@ func (s *Studio) currentHuabotBearer(userID string) (string, error) {
 		}
 		bearer = stringValue(exchanged["access_token"])
 		if bearer == "" {
-			return "", errors.New("huabot 未返回访问令牌")
+			return "", errors.New("Huabot 未返回访问令牌")
 		}
 		if nextRefresh := stringValue(exchanged["refresh_token"]); nextRefresh != "" && nextRefresh != secret {
 			encrypted, err := seal(s.masterKey, nextRefresh)
@@ -733,20 +733,20 @@ func (s *Studio) refreshTokenUsage(userID, bearer string) (walletSummary, error)
 	}
 	wallet, ok := walletResponse["wallet"].(map[string]any)
 	if !ok {
-		return walletSummary{}, errors.New("huabot 未返回钱包信息")
+		return walletSummary{}, errors.New("Huabot 未返回钱包信息")
 	}
 	summary := walletSummary{Balance: stringValue(wallet["amount"]), TokenBalances: []walletTokenBalance{}, SubscriptionDailyQuotas: []subscriptionDailyQuota{}}
 	if summary.Balance == "" {
-		return walletSummary{}, errors.New("huabot 未返回钱包余额")
+		return walletSummary{}, errors.New("Huabot 未返回钱包余额")
 	}
 	overview, ok := walletResponse["overview"].(map[string]any)
 	if !ok {
-		return walletSummary{}, errors.New("huabot 未返回用量汇总")
+		return walletSummary{}, errors.New("Huabot 未返回用量汇总")
 	}
 	summary.TotalConsumedCost = stringValue(overview["total_consumed_cost"])
 	summary.TodayConsumedCost = stringValue(overview["today_consumed_cost"])
 	if summary.TotalConsumedCost == "" || summary.TodayConsumedCost == "" {
-		return walletSummary{}, errors.New("huabot 未返回完整用量汇总")
+		return walletSummary{}, errors.New("Huabot 未返回完整用量汇总")
 	}
 	if rawBalances, ok := walletResponse["token_balances"].([]any); ok {
 		for _, item := range rawBalances {
@@ -973,7 +973,7 @@ func (s *Studio) activeProvider(userID string) (huabotConfig, string, string, st
 	var tokenID, image, text, chat, encrypted string
 	err := s.db.QueryRow("select s.token_id,s.image_model,s.text_model,s.chat_model,t.secret from settings s join tokens t on t.id=s.token_id and t.user_id=s.user_id where s.user_id=? and t.status=1", userID).Scan(&tokenID, &image, &text, &chat, &encrypted)
 	if err != nil {
-		return huabotConfig{}, "", "", "", "", errors.New("请先在设置中选择 huabot Token")
+		return huabotConfig{}, "", "", "", "", errors.New("请先在设置中选择 Huabot Token")
 	}
 	key, err := unseal(s.masterKey, encrypted)
 	if err != nil {

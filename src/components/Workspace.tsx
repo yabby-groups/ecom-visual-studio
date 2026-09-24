@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
-  Copy,
   ChevronDown,
   Download,
   Eye,
   ImagePlus,
   LoaderCircle,
   Plus,
+  Save,
   Sparkles,
   WandSparkles,
   X,
@@ -21,10 +21,8 @@ import { Notice } from "./Notice";
 import { Shell } from "./Shell";
 import { useAppStore } from "../store";
 import type { Asset, Project } from "../types";
-import { fileUrl, isPending, statusText } from "../utils/assets";
+import { failureReason, fileUrl, isPending, statusText } from "../utils/assets";
 import "./Workspace.css";
-
-const GENERATION_ESTIMATE_SECONDS = 300;
 
 function formatDuration(seconds: number) {
   const minutes = Math.floor(seconds / 60);
@@ -139,8 +137,7 @@ export function Workspace() {
     }
     if (failureKey === shownFailureRef.current) return;
     shownFailureRef.current = failureKey;
-    const message =
-      failures?.[0]?.status.replace(/^failed:\s*/, "") || "未知错误";
+    const message = failureReason(failures?.[0]?.status ?? "failed");
     showNotice(`图片生成失败：${message}`, null);
   }, [
     project?.assets?.map((asset) => `${asset.id}:${asset.status}`).join("|"),
@@ -220,24 +217,25 @@ export function Workspace() {
     asset && isPending(asset.status) && asset.generation_started_at
       ? Math.max(0, Math.floor(now / 1000 - asset.generation_started_at))
       : null;
-  const remainingSeconds =
-    elapsedSeconds === null
-      ? null
-      : GENERATION_ESTIMATE_SECONDS -
-        (elapsedSeconds % GENERATION_ESTIMATE_SECONDS);
-  const cycleProgress =
-    elapsedSeconds === null
-      ? 0
-      : (elapsedSeconds % GENERATION_ESTIMATE_SECONDS) /
-        GENERATION_ESTIMATE_SECONDS;
   const showGenerationProgress =
-    isPending(asset?.status ?? "") &&
-    elapsedSeconds !== null &&
-    remainingSeconds !== null;
+    isPending(asset?.status ?? "") && elapsedSeconds !== null;
   async function updateAsset(patch: Partial<Asset>) {
     if (!asset) return;
     await client.updateAsset(asset.id, patch);
     await load();
+  }
+  async function savePrompt() {
+    try {
+      await updateAsset({
+        prompt: promptRef.current?.value ?? asset?.prompt ?? "",
+      });
+      showNotice("提示词已保存");
+    } catch (reason) {
+      showNotice(
+        reason instanceof Error ? reason.message : "保存提示词失败",
+        null,
+      );
+    }
   }
   async function generate(one = true) {
     if (!requireAiAuth()) return;
@@ -303,7 +301,7 @@ export function Workspace() {
           创作台
         </button>
         <div>
-          <span className="eyebrow">E-commerce visuals</span>
+          <span className="eyebrow">项目工作区</span>
           <h1>{project.name}</h1>
         </div>
         <button
@@ -378,21 +376,11 @@ export function Workspace() {
                   >
                     <Sparkles className="generation-sparkle" size={38} />
                     <h3>正在构建画面</h3>
-                    <div
-                      className="generation-progress"
-                      role="progressbar"
-                      aria-label="生成预计进度"
-                      aria-valuemin={0}
-                      aria-valuemax={GENERATION_ESTIMATE_SECONDS}
-                      aria-valuenow={Math.floor(
-                        cycleProgress * GENERATION_ESTIMATE_SECONDS,
-                      )}
-                    >
-                      <i style={{ transform: `scaleX(${cycleProgress})` }} />
+                    <div className="generation-progress" aria-hidden="true">
+                      <i />
                     </div>
                     <p className="generation-timing">
-                      生成中 · 预计剩余 {formatDuration(remainingSeconds)} ·
-                      已用时 {elapsedSeconds} 秒
+                      生成中 · 已用时 {formatDuration(elapsedSeconds!)}
                     </p>
                   </div>
                 ) : !displayedPath ? (
@@ -407,7 +395,9 @@ export function Workspace() {
                         ? statusText(asset.status)
                         : "这个画面还未生成"}
                     </h3>
-                    {asset.status.startsWith("failed") && <p>{asset.status}</p>}
+                    {asset.status.startsWith("failed") && (
+                      <p>{failureReason(asset.status)}</p>
+                    )}
                     {!isPending(asset.status) && (
                       <button
                         className="button primary"
@@ -447,9 +437,7 @@ export function Workspace() {
                           <img src={fileUrl(version.file_path)} alt="" />
                           <span className="variant-meta">
                             <b>
-                              {current
-                                ? "当前"
-                                : `v${versions.length - index}`}
+                              {current ? "当前" : `v${versions.length - index}`}
                             </b>
                           </span>
                         </button>
@@ -499,19 +487,7 @@ export function Workspace() {
                   onClick={() => void rebuildPrompt()}
                 >
                   <WandSparkles size={16} />
-                  生成提示词
-                </button>
-                <button
-                  className="button secondary"
-                  onClick={() =>
-                    showNotice(
-                      asset.prompt.trim().length >= 20
-                        ? "Prompt 检查完成"
-                        : "Prompt 内容过短，请先生成提示词",
-                    )
-                  }
-                >
-                  Prompt 检查
+                  根据模板重写提示词
                 </button>
                 <button
                   className="button primary workspace-generate-button"
@@ -526,8 +502,8 @@ export function Workspace() {
                 </button>
               </div>
               <div className="controls-head">
-                <b>创作控制</b>
-                <span>自动保存</span>
+                <b>画面设置</b>
+                <span>模板与比例自动保存</span>
               </div>
               <label>
                 场景模板
@@ -546,6 +522,9 @@ export function Workspace() {
                   </select>
                   <ChevronDown size={16} aria-hidden="true" />
                 </span>
+                <small>
+                  更换模板后，可点击“根据模板重写提示词”应用模板说明。
+                </small>
               </label>
               <fieldset>
                 <legend>画面比例</legend>
@@ -566,33 +545,25 @@ export function Workspace() {
               <div className="style-lock">
                 <i style={{ background: project.color }} />
                 <div>
-                  <b>品牌风格已锁定</b>
-                  <span>柔和棚拍光 · 干净留白</span>
+                  <b>项目品牌色</b>
+                  <span>{project.color || "未设置"} · 生成时作为配色参考</span>
                 </div>
               </div>
               <label>
-                高级 Prompt
+                画面提示词
                 <textarea
                   defaultValue={asset.prompt}
                   key={asset.id}
                   ref={promptRef}
-                  onBlur={(event) =>
-                    void updateAsset({ prompt: event.target.value })
-                  }
                   rows={10}
                 />
               </label>
               <button
                 className="button secondary"
-                onClick={() => {
-                  void updateAsset({
-                    prompt: promptRef.current?.value ?? asset.prompt,
-                  });
-                  showNotice("创作控制已保存");
-                }}
+                onClick={() => void savePrompt()}
               >
-                <Copy size={16} />
-                保存创作控制
+                <Save size={16} />
+                保存提示词
               </button>
             </aside>
           </>
@@ -613,7 +584,7 @@ export function Workspace() {
           >
             <div className="add-asset-dialog-head">
               <div>
-                <span className="eyebrow">NEW FRAME</span>
+                <span className="eyebrow">新画面</span>
                 <h2 id="add-asset-title">添加画面</h2>
               </div>
               <button

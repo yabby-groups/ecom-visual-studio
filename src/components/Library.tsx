@@ -7,6 +7,7 @@ import { ProjectCard } from "./ProjectCard";
 import { Shell } from "./Shell";
 import { useAppStore } from "../store";
 import { useAiInteraction } from "../aiInteraction";
+import { filterProjects, projectFilters } from "../utils/projectFilters";
 import "./Library.css";
 
 export function Library() {
@@ -16,6 +17,7 @@ export function Library() {
   const { registerPage } = useAiInteraction();
   const [filter, setFilter] = useState("全部作品");
   const [notice, setNotice] = useState("");
+  const visibleProjects = filterProjects(projects, filter);
   useEffect(
     () =>
       registerPage({
@@ -34,11 +36,14 @@ export function Library() {
   );
   async function remove(id: string) {
     if (!window.confirm("确定删除这个项目及其生成图片吗？")) return;
-    await client.deleteProject(id);
-    await refresh();
-    setNotice("项目已删除");
+    try {
+      await client.deleteProject(id);
+      await refresh();
+      setNotice("项目已删除");
+    } catch (reason) {
+      setNotice(reason instanceof Error ? reason.message : "删除项目失败");
+    }
   }
-  const filters = ["全部作品", "商品主图", "社媒内容", "详情信息图"];
   return (
     <Shell>
       <div className="topbar">
@@ -46,24 +51,25 @@ export function Library() {
       </div>
       <div className="page library-page">
         <div className="library-heading">
-          <span className="eyebrow">YOUR OUTPUT</span>
+          <span className="eyebrow">本地项目</span>
           <h1>作品库</h1>
-          <p>每一次生成都保留画面、参考图、Prompt 和所属创作。</p>
+          <p>查看和管理已创建的项目与画面。</p>
         </div>
         <div className="filter-row">
-          {filters.map((item) => (
+          {projectFilters.map((item) => (
             <button
-              className={`filter ${filter === item ? "active" : ""}`}
-              onClick={() => setFilter(item)}
-              key={item}
+              className={`filter ${filter === item.label ? "active" : ""}`}
+              aria-pressed={filter === item.label}
+              onClick={() => setFilter(item.label)}
+              key={item.label}
             >
-              {item}
+              {item.label}
             </button>
           ))}
         </div>
-        {projects.length ? (
+        {visibleProjects.length ? (
           <div className="art-grid library-art-grid">
-            {projects.map((project) => (
+            {visibleProjects.map((project) => (
               <article className="library-item" key={project.id}>
                 <ProjectCard project={project} />
                 <button
@@ -79,10 +85,19 @@ export function Library() {
         ) : (
           <div className="first-empty library-empty">
             <div>+</div>
-            <b>作品库正在等待第一张图</b>
-            <p>创建一个商品视觉，生成结果会自动保留在这里。</p>
-            <button className="create-button" onClick={() => navigate("/new")}>
-              开始创作
+            <b>{projects.length ? `没有${filter}项目` : "还没有项目"}</b>
+            <p>
+              {projects.length
+                ? "试试其他分类，或查看全部作品。"
+                : "创建项目后，可在这里管理画面。"}
+            </p>
+            <button
+              className="create-button"
+              onClick={() =>
+                projects.length ? setFilter("全部作品") : navigate("/new")
+              }
+            >
+              {projects.length ? "查看全部作品" : "开始创作"}
             </button>
           </div>
         )}

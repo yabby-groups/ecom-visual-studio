@@ -82,7 +82,10 @@
   padding-right: 42px;
   font-weight: 750;
   letter-spacing: 0.01em;
-  transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease;
 }
 .template-ratio-select svg {
   position: absolute;
@@ -91,12 +94,16 @@
   pointer-events: none;
   color: #9ff1dd;
   transform: translateY(-50%);
-  transition: transform 160ms ease, color 160ms ease;
+  transition:
+    transform 160ms ease,
+    color 160ms ease;
 }
 .template-ratio-select:focus-within select {
   border-color: #9ff1dd;
   background: rgba(5, 8, 24, 0.5);
-  box-shadow: 0 0 0 3px rgba(159, 241, 221, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.13);
+  box-shadow:
+    0 0 0 3px rgba(159, 241, 221, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.13);
   outline: none;
 }
 .template-ratio-select:focus-within svg {
@@ -144,6 +151,14 @@
   height: auto;
   border-bottom: 1px solid rgba(255, 255, 255, 0.2);
   object-fit: cover;
+}
+.template-custom-preview {
+  height: 160px;
+  display: grid;
+  place-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  color: var(--accent);
+  background: rgba(255, 255, 255, 0.06);
 }
 .template-tile > div {
   display: grid;

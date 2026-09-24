@@ -124,12 +124,16 @@ export function SettingsPage() {
     const balance = balancesByAlias.get(model.id);
     if (balance) {
       const unit = balance.billing_mode === "per_call" ? "次" : "Token";
-      details.push(`流量包剩余 ${formatTokenCost(balance.total_tokens)} ${unit}`);
+      details.push(
+        `流量包剩余：${formatTokenCost(balance.total_tokens)} ${unit}`,
+      );
     }
     const quota = quotasByModelID.get(model.provider_id);
     if (quota) {
       const unit = quota.billing_mode === "per_call" ? "次" : "Token";
-      details.push(`订阅今日剩余 ${formatTokenCost(quota.remaining_tokens)} / ${formatTokenCost(quota.daily_tokens)} ${unit}`);
+      details.push(
+        `订阅今日剩余：${formatTokenCost(quota.remaining_tokens)} / ${formatTokenCost(quota.daily_tokens)} ${unit}`,
+      );
     }
     return details.join("\n") || undefined;
   };
@@ -171,7 +175,8 @@ export function SettingsPage() {
           chat_model: next.chat_model,
         };
         if (preserveEdits) {
-          for (const field of dirtyFields.current) nextValues[field] = current[field];
+          for (const field of dirtyFields.current)
+            nextValues[field] = current[field];
         }
         const availableResponsesModels = modelsRef.current.filter((model) =>
           model.api_modes.includes("responses"),
@@ -187,10 +192,7 @@ export function SettingsPage() {
         return nextValues;
       });
     };
-    const applyModels = (
-      next: Model[],
-      preserveEdits: boolean,
-    ) => {
+    const applyModels = (next: Model[], preserveEdits: boolean) => {
       modelsRef.current = next;
       setModels(next);
       setModelsReady(true);
@@ -205,7 +207,9 @@ export function SettingsPage() {
           preserveEdits && dirtyFields.current.has("image_model")
             ? current.image_model
             : !current.image_model ||
-                !nextImageModels.some((model) => model.id === current.image_model)
+                !nextImageModels.some(
+                  (model) => model.id === current.image_model,
+                )
               ? nextImageModels[0]?.id || ""
               : current.image_model;
         return {
@@ -224,7 +228,7 @@ export function SettingsPage() {
     };
     const refreshSettings = () => {
       setRefreshingSettings(true);
-      void timeout(client.refreshTokenSettings(), "Token 刷新服务未响应")
+      void timeout(client.refreshTokenSettings(), "连接超时，请重试")
         .then((next) => {
           if (!active) return;
           applySettings(next, true);
@@ -234,8 +238,8 @@ export function SettingsPage() {
           if (!active) return;
           setRefreshError(
             error instanceof Error
-              ? `Token 刷新失败，正在使用已保存配置：${error.message}`
-              : "Token 刷新失败，正在使用已保存配置",
+              ? `账户信息更新失败：${error.message}`
+              : "账户信息更新失败，请重试",
           );
         })
         .finally(() => {
@@ -245,7 +249,7 @@ export function SettingsPage() {
     refreshUsage.current = refreshSettings;
     const refreshModels = () => {
       setRefreshingModels(true);
-      void timeout(client.refreshModels(), "模型刷新服务未响应")
+      void timeout(client.refreshModels(), "连接超时，请重试")
         .then((result) => {
           if (!active) return;
           applyModels(result.models, true);
@@ -255,8 +259,8 @@ export function SettingsPage() {
           if (!active) return;
           setRefreshError(
             error instanceof Error
-              ? `模型刷新失败，正在使用已保存配置：${error.message}`
-              : "模型刷新失败，正在使用已保存配置",
+              ? `模型列表更新失败：${error.message}`
+              : "模型列表更新失败，请重试",
           );
         })
         .finally(() => {
@@ -270,28 +274,28 @@ export function SettingsPage() {
       refreshModels();
     };
 
-    void timeout(client.tokenSettings(), "本地 Token 设置未响应")
+    void timeout(client.tokenSettings(), "读取本机账户设置超时")
       .then((next) => {
         if (active) applySettings(next, false);
       })
       .catch((error: unknown) => {
         if (active) {
           setRefreshError(
-            error instanceof Error ? error.message : "无法读取已保存的 Token 设置",
+            error instanceof Error ? error.message : "无法读取本机账户设置",
           );
         }
       })
       .finally(() => {
         if (active) refreshSettings();
       });
-    void timeout(client.models(), "本地模型设置未响应")
+    void timeout(client.models(), "读取本机模型设置超时")
       .then((result) => {
         if (active) applyModels(result.models, false);
       })
       .catch((error: unknown) => {
         if (active) {
           setRefreshError(
-            error instanceof Error ? error.message : "无法读取已保存的模型设置",
+            error instanceof Error ? error.message : "无法读取本机模型设置",
           );
         }
       })
@@ -323,9 +327,9 @@ export function SettingsPage() {
     <Shell>
       <div className="page settings-page">
         <header className="settings-intro">
-          <span className="eyebrow">HUABOT TOKEN BASE</span>
+          <span className="eyebrow">应用设置</span>
           <h1>工作台设置</h1>
-          <p>管理创作所使用的 Token 与模型配置，变更会在保存后生效。</p>
+          <p>管理 AI 账号、创作模型和本机偏好。</p>
         </header>
         {user && (refreshing || refreshError) && (
           <div
@@ -333,9 +337,7 @@ export function SettingsPage() {
             role="status"
           >
             {refreshing && <LoaderCircle className="spin" size={16} />}
-            <span>
-              {refreshError || "正在后台刷新 Token 用量和可用模型..."}
-            </span>
+            <span>{refreshError || "正在更新账户用量和可用模型..."}</span>
             {refreshError && retryRefresh.current && (
               <button
                 type="button"
@@ -356,9 +358,11 @@ export function SettingsPage() {
               try {
                 await client.saveSettings(values);
                 dirtyFields.current.clear();
-                setNotice("配置已保存");
+                setNotice("AI 设置已保存");
               } catch (error) {
-                setNotice(error instanceof Error ? error.message : "保存失败");
+                setNotice(
+                  error instanceof Error ? error.message : "AI 设置保存失败",
+                );
               }
             }}
           >
@@ -368,10 +372,10 @@ export function SettingsPage() {
                   <ShieldCheck size={19} />
                 </span>
                 <div>
-                  <h2>Huabot Token</h2>
+                  <h2>Huabot 账号</h2>
                   <p>
-                    Token
-                    只加密保存于服务端。图像生成、商品分析和对话都会使用当前选择。
+                    授权信息加密保存在本机。图像生成、商品分析和对话使用所选
+                    Token。
                   </p>
                 </div>
               </div>
@@ -425,7 +429,7 @@ export function SettingsPage() {
                   value={values.token_id}
                   options={settings.tokens.map((token) => ({
                     value: token.id,
-                    label: `${token.name} · 今日 ${formatTokenCost(token.today_cost)} · 累计 ${formatTokenCost(token.total_cost)}${token.status === 1 ? "" : " · 不可用"}`,
+                    label: `${token.name} · 今日消耗 ${formatTokenCost(token.today_cost)} · 总消耗 ${formatTokenCost(token.total_cost)}${token.status === 1 ? "" : " · 不可用"}`,
                     disabled: token.status !== 1,
                   }))}
                   disabled={!settingsReady}
@@ -443,7 +447,7 @@ export function SettingsPage() {
                 }
               >
                 <ExternalLink size={16} />
-                查看消耗
+                查看用量明细
               </button>
             </section>
             <section className="settings-card">
@@ -455,8 +459,8 @@ export function SettingsPage() {
                   <Sparkles size={19} />
                 </span>
                 <div>
-                  <h2>模型分配</h2>
-                  <p>为每种创作任务指定可用模型，未加载完成时不会提交配置。</p>
+                  <h2>创作模型</h2>
+                  <p>选择图片生成、商品分析和对话使用的模型。</p>
                 </div>
               </div>
               <div className="form-grid">
@@ -497,12 +501,9 @@ export function SettingsPage() {
                 ))}
               </div>
             </section>
-            <button
-              className="create-button settings-save"
-              disabled={!canSave}
-            >
+            <button className="create-button settings-save" disabled={!canSave}>
               <Settings size={18} />
-              保存配置
+              保存 AI 设置
             </button>
           </form>
         ) : (
@@ -512,10 +513,10 @@ export function SettingsPage() {
                 <ShieldCheck size={19} />
               </span>
               <div>
-                <h2>Huabot AI 授权</h2>
+                <h2>Huabot 账号</h2>
                 <p>
-                  本地功能无需登录。使用图片生成、商品分析、AI
-                  换装或对话时才需要获取 Token。
+                  本地项目无需登录。使用图片生成、商品分析、AI
+                  换装或对话时再登录。
                 </p>
               </div>
             </div>
@@ -524,7 +525,7 @@ export function SettingsPage() {
               type="button"
               onClick={() => requireAiAuth()}
             >
-              登录并获取 Token
+              登录以使用 AI
             </button>
           </section>
         )}
@@ -538,7 +539,7 @@ export function SettingsPage() {
             </span>
             <div>
               <h2>外观主题</h2>
-              <p>选择界面配色。跟随系统时，会随设备的浅色或深色模式自动切换。</p>
+              <p>选择浅色、深色，或跟随系统自动切换。</p>
             </div>
           </div>
           <label>
@@ -552,9 +553,7 @@ export function SettingsPage() {
                 { value: "dark", label: "深色" },
               ]}
               onChange={(value) =>
-                setThemePreference(
-                  value as "system" | "light" | "dark",
-                )
+                setThemePreference(value as "system" | "light" | "dark")
               }
             />
           </label>
@@ -570,7 +569,7 @@ export function SettingsPage() {
             <div>
               <h2>本地存储</h2>
               <p>
-                项目、登录信息、上传参考图和生成图片均保存在此目录。切换时会自动迁移全部数据。
+                项目、参考图、生成图片和登录信息保存在本机。更换目录时会迁移数据，重启后生效。
               </p>
             </div>
           </div>
@@ -590,10 +589,10 @@ export function SettingsPage() {
                   const result = await client.chooseStorageDirectory();
                   if (result.cancelled) return;
                   setStorage(result);
-                  setNotice("数据已迁移完成，请重启应用后使用新目录。");
+                  setNotice("数据已迁移，请重启应用以使用新目录。");
                 } catch (error) {
                   setNotice(
-                    error instanceof Error ? error.message : "迁移存储目录失败",
+                    error instanceof Error ? error.message : "数据迁移失败",
                   );
                 } finally {
                   setMigratingStorage(false);
@@ -605,12 +604,12 @@ export function SettingsPage() {
               ) : (
                 <FolderOpen size={17} />
               )}
-              {migratingStorage ? "正在迁移..." : "选择目录并迁移"}
+              {migratingStorage ? "正在迁移数据..." : "更换存储目录"}
             </button>
           </div>
           {storage?.restart_required && (
             <p className="settings-storage-restart">
-              迁移完成，请重启应用后生效。
+              数据已迁移，重启应用后生效。
             </p>
           )}
         </section>
@@ -625,7 +624,7 @@ export function SettingsPage() {
               </span>
               <div>
                 <h2>账户</h2>
-                <p>退出只会停用 AI 能力，本地项目和素材仍可继续使用。</p>
+                <p>退出登录不会删除本地项目和素材；再次使用 AI 时需要登录。</p>
               </div>
             </div>
             <div className="settings-logout-action">

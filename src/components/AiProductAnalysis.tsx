@@ -16,7 +16,7 @@ export function AiProductAnalysis({
   return (
     <section className="ai-analysis" aria-labelledby="ai-analysis-title">
       <div>
-        <span className="analysis-kicker">AI PRODUCT INTELLIGENCE</span>
+        <span className="analysis-kicker">商品信息</span>
         <h3 id="ai-analysis-title">让 AI 补全商品信息</h3>
         <p>
           选择一种分析方式，生成结果将写入商品描述和核心卖点，仍可手动调整。

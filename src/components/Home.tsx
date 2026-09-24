@@ -27,7 +27,10 @@ export function Home() {
             product: project.product,
           })),
           latest_creation: latestCreation
-            ? { project_id: latestCreation.project_id, title: latestCreation.title }
+            ? {
+                project_id: latestCreation.project_id,
+                title: latestCreation.title,
+              }
             : null,
         }),
       }),
@@ -48,10 +51,10 @@ export function Home() {
     };
   }, []);
   const shortcuts = [
-    ["商品主图", "干净陈列，立即适配商城"],
-    ["品牌海报", "围绕活动主题建立视觉"],
-    ["社媒种草", "真实内容感与传播构图"],
-    ["详情信息图", "卖点、结构与使用说明"],
+    ["商品主图", "突出商品外观", "hero-image"],
+    ["品牌海报", "展示活动主题", "poster-banner"],
+    ["社媒内容", "适合社交平台分享", "social-media"],
+    ["详情信息图", "说明卖点与规格", "infographic"],
   ];
   return (
     <Shell>
@@ -61,14 +64,14 @@ export function Home() {
       <div className="page">
         <section className="studio-hero">
           <div>
-            <span className="eyebrow">AI PRODUCT IMAGE STUDIO</span>
+            <span className="eyebrow">商品图片创作</span>
             <h1>
-              把商品，做成
+              创建商品图片，
               <br />
-              能被记住的画面。
+              从这里开始。
             </h1>
             <p className="hero-copy">
-              上传一张参考图，选择创作目标。主图、广告、内容图和完整商品视觉包会在同一处完成。
+              添加商品参考图，选择画面模板，创建后可逐张编辑和生成。
             </p>
             <div className="hero-actions">
               <button
@@ -116,10 +119,10 @@ export function Home() {
             </Link>
           </div>
           <div className="shortcut-grid">
-            {shortcuts.map(([title, detail], index) => (
+            {shortcuts.map(([title, detail, templateId], index) => (
               <button
                 className="shortcut-card"
-                onClick={() => navigate("/new")}
+                onClick={() => navigate(`/new?template=${templateId}`)}
                 key={title}
               >
                 <span className="shortcut-number">
@@ -153,13 +156,13 @@ export function Home() {
           ) : (
             <div className="first-empty empty-state">
               <div>+</div>
-              <h3>还没有生成作品</h3>
-              <p>创建第一个商品视觉项目，结果会在这里沉淀。</p>
+              <h3>还没有项目</h3>
+              <p>创建项目后，可在这里继续编辑和生成画面。</p>
               <button
                 className="create-button"
                 onClick={() => navigate("/new")}
               >
-                创建第一个作品
+                创建项目
               </button>
             </div>
           )}

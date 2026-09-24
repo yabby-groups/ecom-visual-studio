@@ -263,6 +263,14 @@
 .try-on-stage .variant {
   text-decoration: none;
 }
+.try-on-stage .generation-progress i {
+  width: 35%;
+  animation: try-on-loading 1.8s ease-in-out infinite alternate;
+}
+@keyframes try-on-loading {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(290%); }
+}
 .try-on-result-preview {
   position: absolute;
   inset: 0;

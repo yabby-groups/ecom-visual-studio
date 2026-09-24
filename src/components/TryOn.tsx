@@ -1,6 +1,7 @@
 import {
   Download,
   Eye,
+  FolderOpen,
   ImagePlus,
   Link2,
   LoaderCircle,
@@ -8,7 +9,6 @@ import {
   Shirt,
   Sparkles,
   Trash2,
-  Upload,
   X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -23,7 +23,6 @@ import "./TryOn.css";
 import "./Workspace.css";
 
 const HISTORY_PAGE_SIZE = 12;
-const GENERATION_ESTIMATE_SECONDS = 300;
 const TRY_ON_DRAFT = "frameboard:try-on-draft";
 
 type TryOnDraft = {
@@ -59,6 +58,10 @@ function formatGeneratedAt(timestamp: number) {
   return `${datePart} ${timePart}`;
 }
 
+function tryOnFailureReason(status: string) {
+  return status.replace(/^failed(?::\s*)?/, "").trim() || "请重试。";
+}
+
 type ReferenceSlotProps = {
   title: string;
   hint: string;
@@ -90,31 +93,31 @@ function ReferenceSlot({
       </div>
       <div
         className="try-on-source-tabs"
-        role="tablist"
+        role="group"
         aria-label={`${title}来源`}
       >
         <button
           type="button"
           className={source === "upload" ? "active" : ""}
-          aria-selected={source === "upload"}
+          aria-pressed={source === "upload"}
           onClick={() => setSource("upload")}
         >
-          <Upload size={13} /> 本地上传
+          <FolderOpen size={13} /> 本机图片
         </button>
         <button
           type="button"
           className={source === "url" ? "active" : ""}
-          aria-selected={source === "url"}
+          aria-pressed={source === "url"}
           onClick={() => setSource("url")}
         >
-          <Link2 size={13} /> 链接导入
+          <Link2 size={13} /> 图片链接
         </button>
       </div>
       <div className="try-on-reference-images" aria-label={`${title}图片列表`}>
         {paths.map((path, index) => (
           <div className="try-on-reference-thumbnail" key={path}>
             <img src={fileUrl(path)} alt={`${title} ${index + 1}`} />
-            {index === 0 && <span>主图</span>}
+            {index === 0 && <span>首张</span>}
             <button
               type="button"
               onClick={() => onRemove(path)}
@@ -134,8 +137,10 @@ function ReferenceSlot({
           onClick={onUpload}
         >
           <ImagePlus size={28} />
-          <b>{paths.length ? "继续添加图片" : "上传图片"}</b>
-          <span>{paths.length}/4 张 · JPG、PNG、WebP，最大 15MB</span>
+          <b>{paths.length ? "添加更多图片" : "选择图片"}</b>
+          <span>
+            已添加 {paths.length}/4 张 · JPG、PNG、WebP · 每张最多 15 MB
+          </span>
           {loading && (
             <span className="try-on-upload-loading">
               <LoaderCircle className="spin" size={22} /> 上传中
@@ -145,8 +150,9 @@ function ReferenceSlot({
       ) : (
         <div className="try-on-url-import">
           <Link2 size={24} />
-          <b>导入公开图片链接</b>
-          <span>图片会先保存到当前工作区，再用于换装。</span>
+          <b>导入图片链接</b>
+          <span>请使用无需登录的图片链接，图片将保存到本机。</span>
+          <span>已添加 {paths.length}/4 张 · 每张不超过 15 MB</span>
           <input
             type="url"
             value={url}
@@ -165,7 +171,7 @@ function ReferenceSlot({
             ) : (
               <Link2 size={16} />
             )}
-            {error ? "重新导入" : `导入图片（${paths.length}/4）`}
+            {error ? "重试导入" : "导入图片"}
           </button>
           {error && (
             <p className="try-on-url-error" role="alert">
@@ -225,27 +231,53 @@ export function TryOn() {
             ratio,
             consented,
           },
-          recent_jobs: jobs.map((job) => ({ id: job.id, status: job.status, ratio: job.ratio })),
+          recent_jobs: jobs.map((job) => ({
+            id: job.id,
+            status: job.status,
+            ratio: job.ratio,
+          })),
         }),
         refresh: () => load(),
         execute: (action) => {
           if (action.type !== "fill_draft") return false;
           const payload = action.payload;
           if (Array.isArray(payload.person_paths)) {
-            setPersonPaths(payload.person_paths.filter((path): path is string => typeof path === "string"));
+            setPersonPaths(
+              payload.person_paths.filter(
+                (path): path is string => typeof path === "string",
+              ),
+            );
           }
           if (Array.isArray(payload.garment_paths)) {
-            setGarmentPaths(payload.garment_paths.filter((path): path is string => typeof path === "string"));
+            setGarmentPaths(
+              payload.garment_paths.filter(
+                (path): path is string => typeof path === "string",
+              ),
+            );
           }
-          if (payload.generation_mode === "combined" || payload.generation_mode === "combinations") {
+          if (
+            payload.generation_mode === "combined" ||
+            payload.generation_mode === "combinations"
+          ) {
             setGenerationMode(payload.generation_mode);
           }
-          if (typeof payload.instructions === "string") setInstructions(payload.instructions);
+          if (typeof payload.instructions === "string")
+            setInstructions(payload.instructions);
           if (typeof payload.ratio === "string") setRatio(payload.ratio);
           return true;
         },
       }),
-    [consented, garmentPaths, generationMode, instructions, jobs, personPaths, ratio, registerPage, selectedJobId],
+    [
+      consented,
+      garmentPaths,
+      generationMode,
+      instructions,
+      jobs,
+      personPaths,
+      ratio,
+      registerPage,
+      selectedJobId,
+    ],
   );
 
   async function load(page = historyPage) {
@@ -339,7 +371,7 @@ export function TryOn() {
       if (slot === "person") setPersonPaths((paths) => [...paths, path]);
       else setGarmentPaths((paths) => [...paths, path]);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "图片上传失败");
+      setError(reason instanceof Error ? reason.message : "选择图片失败");
     } finally {
       setUploading("");
     }
@@ -395,7 +427,7 @@ export function TryOn() {
       await load(1);
       navigate(`/try-on/${id}`);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "换装任务创建失败");
+      setError(reason instanceof Error ? reason.message : "创建换装任务失败");
     } finally {
       setCreating(false);
     }
@@ -423,7 +455,11 @@ export function TryOn() {
   }
 
   async function deleteJob(job: TryOnJob) {
-    if (!window.confirm("删除该换装记录及其生成图片？原始参考图会保留。"))
+    if (
+      !window.confirm(
+        "删除这条换装记录及其所有生成图片？人物和服装参考图会保留。",
+      )
+    )
       return;
     setError("");
     setDeletingId(job.id);
@@ -474,37 +510,29 @@ export function TryOn() {
     selectedJob?.status === "ready" &&
     displayedVersion &&
     displayedGenerationStartedAt !== null
-      ? Math.max(
-          0,
-          displayedVersion.created_at - displayedGenerationStartedAt,
-        )
+      ? Math.max(0, displayedVersion.created_at - displayedGenerationStartedAt)
       : null;
   const referencePersonPaths = selectedJob?.person_paths ?? personPaths;
   const referenceGarmentPaths = selectedJob?.garment_paths ?? garmentPaths;
   const hasOriginals =
     referencePersonPaths.length > 0 && referenceGarmentPaths.length > 0;
   const combinationCount = personPaths.length * garmentPaths.length;
+  const createLabel =
+    generationMode === "combinations"
+      ? combinationCount > 0
+        ? `新建并生成 ${combinationCount} 组`
+        : "新建并生成组合"
+      : "新建并生成换装";
   const totalPages = Math.max(1, Math.ceil(historyTotal / HISTORY_PAGE_SIZE));
   const elapsedSeconds = pendingJob?.generation_started_at
     ? Math.max(0, Math.floor(now / 1000 - pendingJob.generation_started_at))
     : null;
-  const remainingSeconds =
-    elapsedSeconds === null
-      ? null
-      : GENERATION_ESTIMATE_SECONDS -
-        (elapsedSeconds % GENERATION_ESTIMATE_SECONDS);
-  const cycleProgress =
-    elapsedSeconds === null
-      ? 0
-      : (elapsedSeconds % GENERATION_ESTIMATE_SECONDS) /
-        GENERATION_ESTIMATE_SECONDS;
-  const showGenerationProgress =
-    pendingJob !== null && elapsedSeconds !== null && remainingSeconds !== null;
+  const showGenerationProgress = pendingJob !== null && elapsedSeconds !== null;
   return (
     <Shell>
       <header className="workspace-header try-on-header">
         <div>
-          <span className="eyebrow">AI TRY-ON</span>
+          <span className="eyebrow">AI 换装</span>
           <h1>换装工作台</h1>
         </div>
         <button
@@ -517,14 +545,14 @@ export function TryOn() {
           ) : (
             <Sparkles size={17} />
           )}
-          生成试穿
+          {createLabel}
         </button>
       </header>
       <div className="workspace try-on-workspace">
         <aside className="sequence">
           <div className="sequence-head">
-            <span>换装序列</span>
-            <small>{historyTotal} 个结果</small>
+            <span>换装记录</span>
+            <small>{historyTotal} 条记录</small>
           </div>
           <button
             className={`sequence-item ${!selectedJobId ? "active" : ""}`}
@@ -532,8 +560,8 @@ export function TryOn() {
           >
             <b>＋</b>
             <span>
-              <strong>新的试穿</strong>
-              <small>添加人物与服装</small>
+              <strong>新建换装</strong>
+              <small>添加人物和服装图片</small>
             </span>
             <i />
           </button>
@@ -549,7 +577,7 @@ export function TryOn() {
                   ).padStart(2, "0")}
                 </b>
                 <span>
-                  <strong>{job.ratio} 全身试穿</strong>
+                  <strong>换装任务 · {job.ratio}</strong>
                   <small>{statusText(job.status)}</small>
                 </span>
                 {job.file_path ? (
@@ -565,7 +593,11 @@ export function TryOn() {
                 onClick={() => void deleteJob(job)}
                 aria-label="删除换装记录"
                 title={
-                  isPending(job.status) ? "生成中不能删除" : "删除换装记录"
+                  job.status === "queued"
+                    ? "排队中，暂不能删除"
+                    : isPending(job.status)
+                      ? "生成中，暂不能删除"
+                      : "删除换装记录"
                 }
               >
                 <Trash2 size={14} />
@@ -597,9 +629,9 @@ export function TryOn() {
         <section className="stage try-on-stage">
           <header>
             <div>
-              <span className="eyebrow">TRY-ON PREVIEW</span>
+              <span className="eyebrow">生成结果</span>
               <h2>
-                {selectedJob ? `${selectedJob.ratio} 全身试穿` : "试穿预览"}
+                {selectedJob ? `换装预览 · ${selectedJob.ratio}` : "换装预览"}
               </h2>
             </div>
           </header>
@@ -609,9 +641,9 @@ export function TryOn() {
                 className="try-on-result-preview"
                 type="button"
                 onClick={() => setResultOpen(true)}
-                aria-label="查看生成大图"
+                aria-label="查看换装大图"
               >
-                <img src={fileUrl(displayedPath)} alt="换装结果" />
+                <img src={fileUrl(displayedPath)} alt="已生成的换装图片" />
               </button>
             )}
             {showGenerationProgress ? (
@@ -619,22 +651,12 @@ export function TryOn() {
                 className={`artboard-empty ${displayedPath ? "generation-overlay" : ""}`}
               >
                 <Sparkles className="generation-sparkle" size={38} />
-                <h3>正在构建画面</h3>
-                <div
-                  className="generation-progress"
-                  role="progressbar"
-                  aria-label="生成预计进度"
-                  aria-valuemin={0}
-                  aria-valuemax={GENERATION_ESTIMATE_SECONDS}
-                  aria-valuenow={Math.floor(
-                    cycleProgress * GENERATION_ESTIMATE_SECONDS,
-                  )}
-                >
-                  <i style={{ transform: `scaleX(${cycleProgress})` }} />
+                <h3>{displayedPath ? "正在生成新版本" : "正在生成换装效果"}</h3>
+                <div className="generation-progress" aria-hidden="true">
+                  <i />
                 </div>
                 <p className="generation-timing">
-                  生成中 · 预计剩余 {formatDuration(remainingSeconds)} · 已用时{" "}
-                  {elapsedSeconds} 秒
+                  已用时 {formatDuration(elapsedSeconds)}
                 </p>
               </div>
             ) : !displayedPath ? (
@@ -645,16 +667,22 @@ export function TryOn() {
                   <Shirt size={38} />
                 )}
                 <h3>
-                  {isPending(selectedJob?.status ?? "")
-                    ? "正在制作试穿效果"
-                    : selectedJob?.status.startsWith("failed")
-                      ? "试穿生成失败"
-                      : "等待第一套试穿"}
+                  {selectedJob?.status === "queued"
+                    ? "已加入生成队列"
+                    : isPending(selectedJob?.status ?? "")
+                      ? "正在生成换装效果"
+                      : selectedJob?.status.startsWith("failed")
+                        ? "换装生成失败"
+                        : "尚无换装效果"}
                 </h3>
                 <p>
                   {selectedJob?.status.startsWith("failed")
-                    ? selectedJob.status
-                    : "在右侧添加人物照片与主服装，调整画面比例后开始生成。"}
+                    ? tryOnFailureReason(selectedJob.status)
+                    : selectedJob?.status === "queued"
+                      ? "轮到此任务后会自动开始生成。"
+                      : isPending(selectedJob?.status ?? "")
+                        ? "正在处理图片，请稍候。"
+                        : "添加人物和服装图片并确认授权后，可以开始生成。"}
                 </p>
                 {!selectedJob && (
                   <button
@@ -662,7 +690,7 @@ export function TryOn() {
                     disabled={!canCreate}
                     onClick={() => void create()}
                   >
-                    生成第一版
+                    {createLabel}
                   </button>
                 )}
               </div>
@@ -670,12 +698,22 @@ export function TryOn() {
           </div>
           {displayedVersion && (
             <p className="generation-completed-at">
-              生成于 {formatGeneratedAt(displayedVersion.created_at)}
+              {selectedJob?.status === "queued" &&
+                "新版本排队中，当前显示已有版本。"}
+              {selectedJob?.status === "generating" &&
+                "新版本生成中，当前显示已有版本。"}
+              {selectedJob?.status.startsWith("failed") &&
+                `最近一次生成失败：${tryOnFailureReason(selectedJob.status)} 当前显示已有版本。`}
+              {isPending(selectedJob?.status ?? "") ||
+              selectedJob?.status.startsWith("failed")
+                ? "所显示版本生成于 "
+                : "生成于 "}
+              {formatGeneratedAt(displayedVersion.created_at)}
               {generationDuration !== null &&
                 ` · 耗时 ${formatDuration(generationDuration)}`}
             </p>
           )}
-          <div className="variant-strip" aria-label="试穿版本">
+          <div className="variant-strip" aria-label="换装版本">
             <span>版本</span>
             {selectedJob?.versions.length ? (
               <>
@@ -688,7 +726,12 @@ export function TryOn() {
                       type="button"
                       onClick={() => setSelectedVersionPath(version.file_path)}
                       key={version.id}
-                      aria-label={`查看${current ? "当前" : `历史 ${selectedJob.versions.length - index}`}版本`}
+                      aria-pressed={active}
+                      aria-label={
+                        current
+                          ? "查看当前版本"
+                          : `查看历史版本 ${selectedJob.versions.length - index}`
+                      }
                     >
                       <img src={fileUrl(version.file_path)} alt="" />
                       <b>
@@ -704,7 +747,7 @@ export function TryOn() {
               <span className="variant empty">
                 {isPending(selectedJob?.status ?? "")
                   ? statusText(selectedJob?.status ?? "")
-                  : "等待第一版"}
+                  : "暂无版本"}
               </span>
             )}
           </div>
@@ -718,7 +761,7 @@ export function TryOn() {
                 onClick={() => void exportImage()}
               >
                 <Download size={16} />
-                导出
+                导出图片
               </button>
             )}
             <button
@@ -736,9 +779,10 @@ export function TryOn() {
                 type="button"
                 disabled={isPending(selectedJob.status)}
                 onClick={() => void regenerate(selectedJob.id)}
+                title="沿用这条记录的参考图和设置，生成新版本"
               >
                 <RefreshCw size={16} />
-                重新生成
+                按原设置再生成
               </button>
             )}
             <button
@@ -748,16 +792,16 @@ export function TryOn() {
               onClick={() => void create()}
             >
               <Sparkles size={16} />
-              生成画面
+              {createLabel}
             </button>
           </div>
           <div className="controls-head">
-            <b>换装控制</b>
-            <span>自动保存</span>
+            <b>换装设置</b>
+            <span>当前设置</span>
           </div>
           <ReferenceSlot
             title="人物照片"
-            hint="清晰、全身的人像效果最佳"
+            hint="建议使用清晰的全身照片"
             paths={personPaths}
             loading={uploading === "person"}
             error={importErrors.person}
@@ -766,8 +810,8 @@ export function TryOn() {
             onRemove={(path) => removeReference("person", path)}
           />
           <ReferenceSlot
-            title="主服装"
-            hint="平铺或挂拍的单件服装"
+            title="服装图片"
+            hint="建议使用清晰的单件服装照片"
             paths={garmentPaths}
             loading={uploading === "garment"}
             error={importErrors.garment}
@@ -781,29 +825,31 @@ export function TryOn() {
               <button
                 type="button"
                 className={generationMode === "combined" ? "active" : ""}
+                aria-pressed={generationMode === "combined"}
                 onClick={() => {
                   beginDraft();
                   setGenerationMode("combined");
                 }}
               >
                 <b>合并参考</b>
-                <small>全部图片共同生成 1 个结果</small>
+                <small>全部图片生成 1 个结果</small>
               </button>
               <button
                 type="button"
                 className={generationMode === "combinations" ? "active" : ""}
+                aria-pressed={generationMode === "combinations"}
                 onClick={() => {
                   beginDraft();
                   setGenerationMode("combinations");
                 }}
               >
                 <b>全部组合</b>
-                <small>将生成 {combinationCount || 0} 个独立结果</small>
+                <small>每张人物与每张服装配对，共 {combinationCount} 组</small>
               </button>
             </div>
           </fieldset>
           <fieldset>
-            <legend>画面比例</legend>
+            <legend>目标画面比例</legend>
             <div className="ratio-row">
               {[
                 ["1:1", "1024×1024"],
@@ -814,6 +860,7 @@ export function TryOn() {
                 <button
                   type="button"
                   className={ratio === value ? "active" : ""}
+                  aria-pressed={ratio === value}
                   onClick={() => {
                     beginDraft();
                     setRatio(value);
@@ -826,15 +873,8 @@ export function TryOn() {
               ))}
             </div>
           </fieldset>
-          <div className="style-lock">
-            <i style={{ background: "#e6ba73" }} />
-            <div>
-              <b>首图为主参考</b>
-              <span>其余图片将补充人物角度与服装细节</span>
-            </div>
-          </div>
           <label>
-            高级 Prompt
+            补充要求（选填）
             <textarea
               value={instructions}
               onChange={(event) => {
@@ -868,9 +908,7 @@ export function TryOn() {
             ) : (
               <Sparkles size={17} />
             )}
-            {generationMode === "combinations"
-              ? `生成 ${combinationCount} 个组合`
-              : "保存并生成试穿"}
+            {createLabel}
           </button>
         </aside>
       </div>
@@ -889,7 +927,7 @@ export function TryOn() {
           >
             <header>
               <div>
-                <span className="eyebrow">ORIGINAL REFERENCES</span>
+                <span className="eyebrow">参考原图</span>
                 <h2>人物与服装原图</h2>
               </div>
               <button
@@ -907,7 +945,7 @@ export function TryOn() {
                   <img src={fileUrl(path)} alt={`人物原图 ${index + 1}`} />
                   <figcaption>
                     人物原图 {index + 1}
-                    {index === 0 ? "（主图）" : ""}
+                    {index === 0 ? "（首张）" : ""}
                   </figcaption>
                 </figure>
               ))}
@@ -916,7 +954,7 @@ export function TryOn() {
                   <img src={fileUrl(path)} alt={`服装原图 ${index + 1}`} />
                   <figcaption>
                     服装原图 {index + 1}
-                    {index === 0 ? "（主图）" : ""}
+                    {index === 0 ? "（首张）" : ""}
                   </figcaption>
                 </figure>
               ))}

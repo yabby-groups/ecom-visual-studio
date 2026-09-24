@@ -74,7 +74,9 @@ export function NewProject() {
         data: () => {
           const fields = formRef.current
             ? Object.fromEntries(
-                [...new FormData(formRef.current).entries()].map(([key, value]) => [key, String(value)]),
+                [...new FormData(formRef.current).entries()].map(
+                  ([key, value]) => [key, String(value)],
+                ),
               )
             : {};
           return {
@@ -82,7 +84,11 @@ export function NewProject() {
             kind,
             reference: reference || undefined,
             selected_template_ids: selectedTemplates,
-            available_templates: templates.map((template) => ({ id: template.id, name: template.name, ratio: template.ratio })),
+            available_templates: templates.map((template) => ({
+              id: template.id,
+              name: template.name,
+              ratio: template.ratio,
+            })),
           };
         },
         execute: (action) => {
@@ -92,15 +98,18 @@ export function NewProject() {
             for (const [name, value] of Object.entries(fields)) {
               const field = formRef.current?.elements.namedItem(name);
               if (
-                (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) &&
+                (field instanceof HTMLInputElement ||
+                  field instanceof HTMLTextAreaElement) &&
                 typeof value === "string"
               ) {
                 field.value = value;
               }
             }
           }
-          if (typeof action.payload.kind === "string") setKind(action.payload.kind);
-          if (typeof action.payload.color === "string") setBrandColor(action.payload.color);
+          if (typeof action.payload.kind === "string")
+            setKind(action.payload.kind);
+          if (typeof action.payload.color === "string")
+            setBrandColor(action.payload.color);
           return true;
         },
       }),
@@ -205,7 +214,9 @@ export function NewProject() {
       ) as HTMLTextAreaElement;
       description.value = result.description;
       benefits.value = result.benefits.join("；");
-      setAnalysisStatus("已生成商品描述和 4 条核心卖点，可以继续编辑。");
+      setAnalysisStatus(
+        `已生成商品描述和 ${result.benefits.length} 条卖点，可继续编辑。`,
+      );
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : "AI 分析失败";
       setError(message);
@@ -252,13 +263,13 @@ export function NewProject() {
   const creationSummary =
     kind === "amazon"
       ? selectedTemplates.length
-        ? `将生成 ${count} 张商品视觉，含 ${selectedTemplates.length} 个自定义场景`
-        : "将生成 7 张可单独编辑的商品视觉"
+        ? `将创建 ${count} 个画面，含 ${selectedTemplates.length} 个自定义场景`
+        : "将创建 7 个可单独编辑的画面"
       : kind === "social"
-        ? "将生成 3 张社媒内容图"
+        ? "将创建 3 个社媒画面"
         : selectedTemplate
-          ? `将生成 1 张${selectedTemplate.name}`
-          : "将生成 1 张商品主图";
+          ? `将创建 1 个画面：${selectedTemplate.name}`
+          : "将创建 1 个商品主图画面";
   return (
     <Shell>
       <header className="topbar">
@@ -270,24 +281,20 @@ export function NewProject() {
             <ArrowLeft size={15} />
             返回创作台
           </button>
-          <span className="eyebrow">NEW CREATION</span>
+          <span className="eyebrow">新建项目</span>
           <h1>
             先确定你想让商品
             <br />
             被怎样看见。
           </h1>
-          <p>
-            信息不需要一次填完。先选择目标，生成后仍可编辑每张图的内容和风格。
-          </p>
+          <p>选择创作目标并创建画面，进入项目后可逐张调整并开始生成。</p>
         </div>
         <form ref={formRef} onSubmit={submit} className="creation-form">
           <section className="step">
             <span className="step-index">01</span>
             <div className="step-body">
-              <h2>添加商品参考</h2>
-              <p>
-                上传本地商品图，或粘贴公开网络图片地址。系统会将其保存到当前项目中。
-              </p>
+              <h2>添加商品参考图</h2>
+              <p>选择本机图片或导入公开图片链接，图片会保存在本机。</p>
               <label className="product-name-field">
                 商品名称
                 <input
@@ -343,7 +350,7 @@ export function NewProject() {
                   <input
                     name="name"
                     required
-                    placeholder="例如：北欧实木书桌 Campaign"
+                    placeholder="例如：北欧实木书桌主图"
                   />
                 </label>
                 <label>
@@ -401,7 +408,7 @@ export function NewProject() {
             <span>{creationSummary}</span>
             <button className="button primary" disabled={busy}>
               {busy && <LoaderCircle className="spin" size={16} />}
-              创建并进入画布
+              创建并进入项目
             </button>
           </footer>
         </form>

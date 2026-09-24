@@ -55,6 +55,7 @@ export type Project = {
   reference: string;
   created_at: number;
   asset_count?: number;
+  template_ids?: string[];
   assets?: Asset[];
 };
 export type Template = {
@@ -73,7 +74,12 @@ export type Token = {
   today_cost: string;
   total_cost: string;
 };
-export type Model = { id: string; provider_id: string; name: string; api_modes: string[] };
+export type Model = {
+  id: string;
+  provider_id: string;
+  name: string;
+  api_modes: string[];
+};
 export type WalletTokenBalance = {
   model_alias: string;
   billing_mode: string;

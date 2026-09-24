@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -116,6 +117,42 @@ func TestLocalWorkspaceMigrationKeepsDataAvailableWithoutLogin(t *testing.T) {
 	}
 	if len(templates) != len(builtInTemplates)+1 {
 		t.Fatalf("Templates() count = %d, want %d", len(templates), len(builtInTemplates)+1)
+	}
+}
+
+func TestProjectsIncludeDistinctTemplateIDs(t *testing.T) {
+	db, err := sql.Open("sqlite", sqliteDSN(filepath.Join(t.TempDir(), "studio.db")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	studio := &Studio{db: db}
+	if err := studio.migrate(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("insert into projects(id,user_id,name,product,created_at) values('project-1',?,'Local','Desk',1),('project-2',?,'Empty','Desk',2)", localWorkspaceID, localWorkspaceID); err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range []struct{ id, template string }{
+		{"asset-1", "hero-image"}, {"asset-2", "hero-image"}, {"asset-3", "infographic"},
+	} {
+		if _, err := db.Exec("insert into assets(id,project_id,title,template,ratio,status,created_at) values(?, 'project-1', 'Frame', ?, '1:1', 'draft', 1)", item.id, item.template); err != nil {
+			t.Fatal(err)
+		}
+	}
+	projects, err := studio.Projects()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(projects) != 2 || projects[0]["asset_count"] != int64(0) || projects[1]["asset_count"] != int64(3) {
+		t.Fatalf("Projects() counts = %#v", projects)
+	}
+	if got := projects[0]["template_ids"].([]string); len(got) != 0 {
+		t.Fatalf("empty project templates = %#v", got)
+	}
+	got := projects[1]["template_ids"].([]string)
+	if len(got) != 2 || !slices.Contains(got, "hero-image") || !slices.Contains(got, "infographic") {
+		t.Fatalf("project templates = %#v", got)
 	}
 }
 
@@ -311,6 +348,17 @@ func TestCreatePackMatchesPythonPackageConstruction(t *testing.T) {
 	}
 	if !strings.Contains(reset["prompt"], "Art direction: An orderly product grid showing useful angles and silhouette.") {
 		t.Fatalf("ResetPrompt() H4 prompt = %q", reset["prompt"])
+	}
+	var customID string
+	if err := db.QueryRow("select id from assets where project_id=? and template='scene-1'", "project-1").Scan(&customID); err != nil {
+		t.Fatal(err)
+	}
+	customReset, err := studio.ResetPrompt(customID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(customReset["prompt"], "Art direction: Custom direction.") {
+		t.Fatalf("ResetPrompt() custom prompt = %q", customReset["prompt"])
 	}
 	if _, err := studio.CreatePack("project-1", PackInput{Kind: "amazon", TemplateID: "scene-1", SceneTemplateIDs: []string{"scene-1"}}); err != nil {
 		t.Fatal(err)

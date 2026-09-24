@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"time"
 )
@@ -67,7 +68,7 @@ func newIDAt(kind string, timestamp int64, sequence uint64) string {
 }
 
 func (s *Studio) Projects() ([]map[string]any, error) {
-	rows, err := s.db.Query("select p.id,p.user_id,p.name,p.product,p.description,p.benefits,p.color,p.reference,p.created_at,count(a.id) from projects p left join assets a on a.project_id=p.id group by p.id order by p.created_at desc")
+	rows, err := s.db.Query("select p.id,p.user_id,p.name,p.product,p.description,p.benefits,p.color,p.reference,p.created_at,count(a.id),group_concat(distinct a.template) from projects p left join assets a on a.project_id=p.id group by p.id order by p.created_at desc")
 	if err != nil {
 		return nil, err
 	}
@@ -76,10 +77,15 @@ func (s *Studio) Projects() ([]map[string]any, error) {
 	for rows.Next() {
 		var id, uid, name, product, description, benefits, color, reference string
 		var created, count int64
-		if err := rows.Scan(&id, &uid, &name, &product, &description, &benefits, &color, &reference, &created, &count); err != nil {
+		var templates sql.NullString
+		if err := rows.Scan(&id, &uid, &name, &product, &description, &benefits, &color, &reference, &created, &count, &templates); err != nil {
 			return nil, err
 		}
-		projects = append(projects, map[string]any{"id": id, "user_id": uid, "name": name, "product": product, "description": description, "benefits": benefits, "color": color, "reference": reference, "created_at": created, "asset_count": count})
+		templateIDs := []string{}
+		if templates.Valid && templates.String != "" {
+			templateIDs = strings.Split(templates.String, ",")
+		}
+		projects = append(projects, map[string]any{"id": id, "user_id": uid, "name": name, "product": product, "description": description, "benefits": benefits, "color": color, "reference": reference, "created_at": created, "asset_count": count, "template_ids": templateIDs})
 	}
 	return projects, rows.Err()
 }
@@ -341,7 +347,11 @@ func (s *Studio) ResetPrompt(id string) (map[string]string, error) {
 		return nil, err
 	}
 	direction := "Create a commercially useful composition."
-	for _, item := range builtInTemplates {
+	templates, err := s.Templates()
+	if err != nil {
+		return nil, err
+	}
+	for _, item := range templates {
 		if item["id"] == template {
 			direction = item["direction"].(string)
 		}

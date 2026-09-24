@@ -34,7 +34,11 @@ export function Chat({ onClose }: { onClose: () => void }) {
       });
       setMessages([
         ...next,
-        { role: "assistant", content: result.text || reply, actions: result.actions },
+        {
+          role: "assistant",
+          content: result.text || reply,
+          actions: result.actions,
+        },
       ]);
     } catch (error) {
       setMessages([
@@ -66,7 +70,7 @@ export function Chat({ onClose }: { onClose: () => void }) {
     <aside className="chat-panel">
       <header>
         <div>
-          <span className="eyebrow">AI CREATIVE ASSISTANT</span>
+          <span className="eyebrow">AI 对话</span>
           <h3>创作助手</h3>
         </div>
         <button className="icon-button" onClick={onClose} aria-label="关闭">
@@ -103,7 +107,10 @@ export function Chat({ onClose }: { onClose: () => void }) {
                           type="button"
                           disabled={Boolean(running)}
                           onClick={() =>
-                            setActionStatus((current) => ({ ...current, [key]: "已取消" }))
+                            setActionStatus((current) => ({
+                              ...current,
+                              [key]: "已取消",
+                            }))
                           }
                         >
                           取消

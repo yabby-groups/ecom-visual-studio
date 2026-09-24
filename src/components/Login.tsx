@@ -39,7 +39,7 @@ export function Login() {
       BrowserOpenURL(next.verification_uri_complete);
     } catch (reason) {
       setError(
-        reason instanceof Error ? reason.message : "无法开始 huabot 授权",
+        reason instanceof Error ? reason.message : "无法开始 Huabot 授权",
       );
     } finally {
       setLoading(false);
@@ -114,7 +114,7 @@ export function Login() {
         setTotpRequired(true);
         setError("身份验证器验证码错误");
       } else if (message === "user or passwd invalid") {
-        setError("huabot 账号或密码错误");
+        setError("Huabot 账号或密码错误");
       } else {
         setError(message);
       }
@@ -140,10 +140,10 @@ export function Login() {
         </button>
         <div className="auth-brand">
           <img src="/ecom-visual-studio.svg" alt="" aria-hidden="true" />
-          <span className="eyebrow">ECOM VISUAL STUDIO × HUABOT</span>
+          <span className="eyebrow">Huabot 账号授权</span>
         </div>
         <h1>登录以启用 AI 能力</h1>
-        <p>通过 huabot 网页确认授权，应用不会接触你的密码或动态验证码。</p>
+        <p>使用网页授权时，在 Huabot 页面完成验证，无需在应用中输入密码。</p>
 
         {authorization ? (
           <div className="oauth-card">
@@ -175,7 +175,7 @@ export function Login() {
             onClick={() => void startAuthorization()}
           >
             {loading && <LoaderCircle className="spin" size={18} />}
-            {loading ? "正在创建授权请求..." : "使用 huabot 授权"}
+            {loading ? "正在创建授权请求..." : "使用 Huabot 网页授权"}
           </button>
         )}
 
@@ -189,7 +189,7 @@ export function Login() {
         {passwordVisible && (
           <form onSubmit={submit} className="form-stack">
             <label>
-              huabot 账号
+              Huabot 账号
               <input name="name" autoComplete="username" required />
             </label>
             <label>
@@ -215,7 +215,7 @@ export function Login() {
             )}
             <button className="button primary" disabled={loading}>
               {loading && <LoaderCircle className="spin" size={18} />}
-              {loading ? "正在登录并获取 Key..." : "登录 huabot"}
+              {loading ? "正在登录..." : "登录 Huabot"}
             </button>
           </form>
         )}

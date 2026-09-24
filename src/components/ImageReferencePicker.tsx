@@ -1,4 +1,4 @@
-import { ImagePlus, Link2, LoaderCircle, Upload } from "lucide-react";
+import { FolderOpen, ImagePlus, Link2, LoaderCircle } from "lucide-react";
 import { useState } from "react";
 
 type ImageReferencePickerProps = {
@@ -31,7 +31,7 @@ export function ImageReferencePicker({
             <span className="reference-empty-icon" aria-hidden="true">
               <ImagePlus size={24} />
             </span>
-            <b>添加商品主图</b>
+            <b>添加商品参考图</b>
             <span>清晰的正面或主体图将帮助生成更准确的视觉内容</span>
           </div>
         )}
@@ -55,8 +55,8 @@ export function ImageReferencePicker({
             className={source === "upload" ? "active" : ""}
             onClick={() => setSource("upload")}
           >
-            <Upload size={15} />
-            本地上传
+            <FolderOpen size={15} />
+            本机图片
           </button>
           <button
             type="button"
@@ -66,7 +66,7 @@ export function ImageReferencePicker({
             onClick={() => setSource("url")}
           >
             <Link2 size={15} />
-            网络链接
+            图片链接
           </button>
         </div>
 
@@ -80,14 +80,14 @@ export function ImageReferencePicker({
             {loading ? (
               <LoaderCircle className="spin" size={22} />
             ) : (
-              <Upload size={22} />
+              <FolderOpen size={22} />
             )}
             <b>
               {loading
-                ? "正在上传图片"
+                ? "正在添加图片"
                 : preview
                   ? "选择一张新图片"
-                  : "选择本地图片"}
+                  : "选择本机图片"}
             </b>
             <small>{loading ? "请稍候..." : "点击选择文件"}</small>
           </button>
@@ -108,11 +108,21 @@ export function ImageReferencePicker({
                 disabled={loading || !url.trim()}
                 onClick={() => onImport(url.trim())}
               >
-                {loading ? <LoaderCircle className="spin" size={17} /> : error ? "重新导入" : "导入"}
+                {loading ? (
+                  <LoaderCircle className="spin" size={17} />
+                ) : error ? (
+                  "重新导入"
+                ) : (
+                  "导入"
+                )}
               </button>
             </div>
             <small>请输入可公开访问的图片地址</small>
-            {error && <p className="reference-url-error" role="alert">{error}</p>}
+            {error && (
+              <p className="reference-url-error" role="alert">
+                {error}
+              </p>
+            )}
           </div>
         )}
       </div>
