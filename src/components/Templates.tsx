@@ -17,13 +17,19 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { client } from "../api";
-import { nativeImageRatios } from "../constants/imageSizes";
+import {
+  customImageSize,
+  imageRatioLabel,
+  imageSizeError,
+  nativeImageRatios,
+} from "../constants/imageSizes";
 import { Shell } from "./Shell";
 import { useAppStore } from "../store";
 import { useAiInteraction } from "../aiInteraction";
 import type { Template } from "../types";
 import { fileUrl } from "../utils/assets";
 import "./Templates.css";
+import "./ImageRatioPicker.css";
 
 export function Templates() {
   const templates = useAppStore((state) => state.templates);
@@ -38,6 +44,9 @@ export function Templates() {
   const [saving, setSaving] = useState(false);
   const [imagePath, setImagePath] = useState("");
   const [imageBusy, setImageBusy] = useState(false);
+  const [templateRatio, setTemplateRatio] = useState("1:1");
+  const [customWidth, setCustomWidth] = useState("1024");
+  const [customHeight, setCustomHeight] = useState("1024");
   const savingRef = useRef(false);
   const createButtonRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
@@ -131,12 +140,23 @@ export function Templates() {
     if (savingRef.current) return;
     const form = new FormData(event.currentTarget);
     setError("");
+    let ratio = templateRatio;
+    if (ratio === "custom") {
+      const width = Number(customWidth);
+      const height = Number(customHeight);
+      const sizeError = imageSizeError(width, height);
+      if (sizeError) {
+        setError(sizeError);
+        return;
+      }
+      ratio = `${width}x${height}`;
+    }
     savingRef.current = true;
     setSaving(true);
     try {
       const body = {
         name: String(form.get("name")),
-        ratio: String(form.get("ratio")),
+        ratio,
         direction: String(form.get("direction")),
         image_path: imagePath,
       };
@@ -288,6 +308,9 @@ export function Templates() {
               setError("");
               setEditTemplate(null);
               setImagePath("");
+              setTemplateRatio("1:1");
+              setCustomWidth("1024");
+              setCustomHeight("1024");
               setCreateOpen(true);
             }}
           >
@@ -357,6 +380,12 @@ export function Templates() {
                         setError("");
                         setEditTemplate(item);
                         setImagePath(item.image_path ?? "");
+                        const size = customImageSize(item.ratio);
+                        setTemplateRatio(size ? "custom" : item.ratio);
+                        if (size) {
+                          setCustomWidth(String(size[0]));
+                          setCustomHeight(String(size[1]));
+                        }
                         setCreateOpen(true);
                       }}
                     >
@@ -433,17 +462,56 @@ export function Templates() {
                 <span className="template-ratio-select">
                   <select
                     name="ratio"
-                    defaultValue={editTemplate?.ratio ?? "1:1"}
+                    value={templateRatio}
+                    onChange={(event) => setTemplateRatio(event.target.value)}
                   >
                     {nativeImageRatios.map(({ ratio, label, size }) => (
                       <option value={ratio} key={ratio}>
                         {ratio} {label} · {size}
                       </option>
                     ))}
+                    <option value="custom">自定义尺寸</option>
                   </select>
                   <ChevronDown aria-hidden="true" size={18} strokeWidth={2.5} />
                 </span>
               </label>
+              {templateRatio === "custom" && (
+                <div className="template-custom-size custom-image-size">
+                  <label>
+                    宽度
+                    <input
+                      type="number"
+                      min="16"
+                      max="3840"
+                      step="16"
+                      value={customWidth}
+                      onChange={(event) => setCustomWidth(event.target.value)}
+                      required
+                    />
+                  </label>
+                  <span aria-hidden="true">×</span>
+                  <label>
+                    高度
+                    <input
+                      type="number"
+                      min="16"
+                      max="3840"
+                      step="16"
+                      value={customHeight}
+                      onChange={(event) => setCustomHeight(event.target.value)}
+                      required
+                    />
+                  </label>
+                  {!imageSizeError(
+                    Number(customWidth),
+                    Number(customHeight),
+                  ) && (
+                    <small className="custom-size-ratio">
+                      {imageRatioLabel(`${customWidth}x${customHeight}`)}
+                    </small>
+                  )}
+                </div>
+              )}
               <div className="template-image-field">
                 <span>模板图片</span>
                 <div className="template-image-picker">

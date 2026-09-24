@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,7 +23,12 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-var imageSizes = map[string][2]int{"1:1": {1024, 1024}, "3:2": {1536, 1024}, "2:3": {1024, 1536}, "16:9": {1536, 864}}
+var imageSizes = map[string][2]int{
+	"3:1": {2016, 672}, "21:9": {2016, 864}, "16:9": {1536, 864},
+	"3:2": {1536, 1024}, "4:3": {1536, 1152}, "5:4": {1280, 1024},
+	"1:1": {1024, 1024}, "4:5": {1024, 1280}, "3:4": {1152, 1536},
+	"2:3": {1024, 1536}, "9:16": {864, 1536}, "1:3": {672, 2016},
+}
 
 const (
 	imageAttemptTimeout    = 3 * time.Minute
@@ -94,11 +100,33 @@ func chatInstructions(context map[string]any) string {
 }
 
 func imageSize(ratio string) ([2]int, error) {
-	size, ok := imageSizes[ratio]
-	if !ok {
-		return [2]int{}, errors.New("图像服务仅支持画面比例: 1:1、3:2、2:3、16:9")
+	if size, ok := imageSizes[ratio]; ok {
+		return size, nil
 	}
-	return size, nil
+	invalid := [2]int{}
+	widthText, heightText, ok := strings.Cut(ratio, "x")
+	if !ok {
+		return invalid, errors.New("不支持的画面比例或尺寸")
+	}
+	width, widthErr := strconv.Atoi(widthText)
+	height, heightErr := strconv.Atoi(heightText)
+	if widthErr != nil || heightErr != nil || fmt.Sprintf("%dx%d", width, height) != ratio || width <= 0 || height <= 0 {
+		return invalid, errors.New("请输入有效的宽度和高度")
+	}
+	if width%16 != 0 || height%16 != 0 {
+		return invalid, errors.New("宽度和高度必须是 16 的倍数")
+	}
+	if width > 3840 || height > 3840 {
+		return invalid, errors.New("单边不能超过 3840 像素")
+	}
+	if width > height*3 || height > width*3 {
+		return invalid, errors.New("比例须在 1:3 至 3:1 之间")
+	}
+	pixels := width * height
+	if pixels < 655360 || pixels > 8294400 {
+		return invalid, errors.New("总像素须在 655,360 至 8,294,400 之间")
+	}
+	return [2]int{width, height}, nil
 }
 func validPNG(data []byte) error {
 	if len(data) < 24 || !bytes.Equal(data[:8], []byte{137, 80, 78, 71, 13, 10, 26, 10}) || !bytes.Equal(data[12:16], []byte("IHDR")) {

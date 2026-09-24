@@ -16,7 +16,8 @@ import { useNavigate, useParams } from "react-router-dom";
 import { client } from "../api";
 import { useRequireAiAuth } from "../auth";
 import { useAiInteraction } from "../aiInteraction";
-import { nativeImageRatios } from "../constants/imageSizes";
+import { imageRatioLabel } from "../constants/imageSizes";
+import { ImageRatioPicker } from "./ImageRatioPicker";
 import { Notice } from "./Notice";
 import { Shell } from "./Shell";
 import { useAppStore } from "../store";
@@ -340,7 +341,7 @@ export function Workspace() {
               <span>
                 <strong>{item.title.replace(/^\w+\s·\s/, "")}</strong>
                 <small>
-                  {item.ratio} · {statusText(item.status)}
+                  {imageRatioLabel(item.ratio)} · {statusText(item.status)}
                 </small>
               </span>
               {item.file_path ? (
@@ -528,19 +529,20 @@ export function Workspace() {
               </label>
               <fieldset>
                 <legend>画面比例</legend>
-                <div className="ratio-row">
-                  {nativeImageRatios.map(({ ratio, size }) => (
-                    <button
-                      key={ratio}
-                      className={asset.ratio === ratio ? "active" : ""}
-                      onClick={() => void updateAsset({ ratio })}
-                      title={`${ratio} · ${size}`}
-                    >
-                      <b>{ratio}</b>
-                      <small>{size}</small>
-                    </button>
-                  ))}
-                </div>
+                <ImageRatioPicker
+                  key={asset.id}
+                  value={asset.ratio}
+                  onChange={(ratio) =>
+                    void updateAsset({ ratio }).catch((reason) =>
+                      showNotice(
+                        reason instanceof Error
+                          ? reason.message
+                          : "保存画面比例失败",
+                        null,
+                      ),
+                    )
+                  }
+                />
               </fieldset>
               <div className="style-lock">
                 <i style={{ background: project.color }} />

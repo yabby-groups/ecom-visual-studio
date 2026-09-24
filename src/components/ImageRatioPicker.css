@@ -1,0 +1,48 @@
+.custom-image-size {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.custom-image-size label {
+  display: grid;
+  gap: 4px;
+  flex: 1 1 85px;
+  min-width: 0;
+  font-size: 11px;
+}
+.custom-image-size input {
+  width: 100%;
+  min-width: 0;
+  padding: 7px;
+  border: 1px solid #526176;
+  border-radius: 6px;
+  background: #293240;
+  color: #edf2f7;
+  font-size: 13px;
+}
+.custom-image-size > span {
+  padding-bottom: 8px;
+}
+.custom-image-size .button {
+  padding: 7px 10px;
+}
+.custom-image-size > small {
+  flex-basis: 100%;
+  color: #ffb9b9;
+}
+.custom-image-size > .custom-size-ratio {
+  color: #8fe1cd;
+}
+:root[data-theme="light"] .custom-image-size input {
+  border-color: #b5c3ca;
+  background: #fff;
+  color: #263238;
+}
+:root[data-theme="light"] .custom-image-size > small {
+  color: #a32f2f;
+}
+:root[data-theme="light"] .custom-image-size > .custom-size-ratio {
+  color: #186b5b;
+}

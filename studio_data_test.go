@@ -1438,13 +1438,13 @@ func TestParseChatResultKeepsInvalidActionMarkupAsText(t *testing.T) {
 }
 
 func TestDesktopValidationMatchesWebInputLimits(t *testing.T) {
-	if err := validateTemplateInput(TemplateInput{Name: "模板", Ratio: "4:3", Direction: "说明"}); err == nil {
+	if err := validateTemplateInput(TemplateInput{Name: "模板", Ratio: "7:1", Direction: "说明"}); err == nil {
 		t.Fatal("validateTemplateInput() accepted unsupported ratio")
 	}
 	if err := validateProjectInput(ProjectInput{Name: strings.Repeat("项", maxProjectNameRunes+1), Product: "商品"}); err == nil {
 		t.Fatal("validateProjectInput() accepted an oversized name")
 	}
-	if err := validateAssetPatch(AssetPatch{Ratio: "4:3"}); err == nil {
+	if err := validateAssetPatch(AssetPatch{Ratio: "7:1"}); err == nil {
 		t.Fatal("validateAssetPatch() accepted unsupported ratio")
 	}
 	if err := validateTryOnInput(TryOnInput{PersonPaths: []string{"uploads/person.png"}, GarmentPaths: []string{"uploads/garment.png"}, GenerationMode: "combined", Ratio: "2:3", Instructions: strings.Repeat("说", maxInstructionsRunes+1)}); err == nil {
@@ -1455,6 +1455,50 @@ func TestDesktopValidationMatchesWebInputLimits(t *testing.T) {
 	}
 	if err := validateChatMessages(make([]map[string]string, maxChatMessages+1)); err == nil {
 		t.Fatal("validateChatMessages() accepted too many messages")
+	}
+}
+
+func TestImageSizePresetsAndCustomDimensions(t *testing.T) {
+	presets := map[string][2]int{
+		"3:1": {2016, 672}, "21:9": {2016, 864}, "16:9": {1536, 864},
+		"3:2": {1536, 1024}, "4:3": {1536, 1152}, "5:4": {1280, 1024},
+		"1:1": {1024, 1024}, "4:5": {1024, 1280}, "3:4": {1152, 1536},
+		"2:3": {1024, 1536}, "9:16": {864, 1536}, "1:3": {672, 2016},
+	}
+	if len(imageSizes) != len(presets) {
+		t.Fatalf("imageSizes has %d presets, want %d", len(imageSizes), len(presets))
+	}
+	for ratio, want := range presets {
+		got, err := imageSize(ratio)
+		if err != nil || got != want {
+			t.Errorf("imageSize(%q) = %v, %v; want %v", ratio, got, err, want)
+		}
+	}
+	for _, size := range []string{"1280x1024", "3840x2160", "800x819", "2016x672"} {
+		got, err := imageSize(size)
+		if size == "800x819" {
+			if err == nil {
+				t.Errorf("imageSize(%q) accepted a non-aligned height", size)
+			}
+			continue
+		}
+		if err != nil || got[0] == 0 || got[1] == 0 {
+			t.Errorf("imageSize(%q) = %v, %v", size, got, err)
+		}
+	}
+	for _, size := range []string{"7:1", "1x1024", "4000x1024", "1024x320", "1024x512", "3840x3840", "01024x1024", "1024X1024"} {
+		if _, err := imageSize(size); err == nil {
+			t.Errorf("imageSize(%q) accepted invalid dimensions", size)
+		}
+	}
+	if err := validateAssetPatch(AssetPatch{Ratio: "1280x1024"}); err != nil {
+		t.Errorf("validateAssetPatch() rejected a custom size: %v", err)
+	}
+	if err := validateTemplateInput(TemplateInput{Name: "模板", Ratio: "1280x1024", Direction: "说明"}); err != nil {
+		t.Errorf("validateTemplateInput() rejected a custom size: %v", err)
+	}
+	if err := validateTryOnInput(TryOnInput{PersonPaths: []string{"uploads/person.png"}, GarmentPaths: []string{"uploads/garment.png"}, GenerationMode: "combined", Ratio: "1280x1024"}); err != nil {
+		t.Errorf("validateTryOnInput() rejected a custom size: %v", err)
 	}
 }
 
@@ -1474,6 +1518,9 @@ func TestImageGenerationRequestsPNGOutput(t *testing.T) {
 		if request["output_format"] != "png" {
 			t.Fatalf("output_format = %#v, want png", request["output_format"])
 		}
+		if request["size"] != "1280x1024" {
+			t.Fatalf("size = %#v, want 1280x1024", request["size"])
+		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"created": 1, "data": []any{}})
 	}))
 	defer server.Close()
@@ -1484,8 +1531,41 @@ func TestImageGenerationRequestsPNGOutput(t *testing.T) {
 		Prompt:       "product image",
 		N:            openai.Int(1),
 		OutputFormat: openai.ImageGenerateParamsOutputFormatPNG,
-		Size:         openai.ImageGenerateParamsSize1024x1024,
+		Size:         openai.ImageGenerateParamsSize("1280x1024"),
 	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestImageEditRequestsCustomSize(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/images/edits" {
+			t.Errorf("request path = %q, want /v1/images/edits", r.URL.Path)
+		}
+		if err := r.ParseMultipartForm(1 << 20); err != nil {
+			t.Error(err)
+		}
+		if got := r.FormValue("size"); got != "1280x1024" {
+			t.Errorf("size = %q, want 1280x1024", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"created": 1, "data": []any{}})
+	}))
+	defer server.Close()
+	dataDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dataDir, "storage", "uploads"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dataDir, "storage", "uploads", "reference.png"), []byte("reference"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	studio := &Studio{dataDir: dataDir, httpClient: server.Client()}
+	client := studio.imageOpenAIClient(huabotConfig{APIBase: server.URL + "/v1"}, "sk-test")
+	size, err := imageSize("1280x1024")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := studio.imageEdit(context.Background(), client, "gpt-image-2", "product edit", size, []string{"uploads/reference.png"}); err != nil {
 		t.Fatal(err)
 	}
 }

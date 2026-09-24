@@ -16,8 +16,10 @@ import { useNavigate, useParams } from "react-router-dom";
 import { client } from "../api";
 import { useRequireAiAuth } from "../auth";
 import { useAiInteraction } from "../aiInteraction";
+import { imageRatioLabel } from "../constants/imageSizes";
 import type { TryOnJob } from "../types";
 import { fileUrl, isPending, statusText } from "../utils/assets";
+import { ImageRatioPicker } from "./ImageRatioPicker";
 import { Shell } from "./Shell";
 import "./TryOn.css";
 import "./Workspace.css";
@@ -577,7 +579,7 @@ export function TryOn() {
                   ).padStart(2, "0")}
                 </b>
                 <span>
-                  <strong>换装任务 · {job.ratio}</strong>
+                  <strong>换装任务 · {imageRatioLabel(job.ratio)}</strong>
                   <small>{statusText(job.status)}</small>
                 </span>
                 {job.file_path ? (
@@ -631,7 +633,9 @@ export function TryOn() {
             <div>
               <span className="eyebrow">生成结果</span>
               <h2>
-                {selectedJob ? `换装预览 · ${selectedJob.ratio}` : "换装预览"}
+                {selectedJob
+                  ? `换装预览 · ${imageRatioLabel(selectedJob.ratio)}`
+                  : "换装预览"}
               </h2>
             </div>
           </header>
@@ -850,28 +854,13 @@ export function TryOn() {
           </fieldset>
           <fieldset>
             <legend>目标画面比例</legend>
-            <div className="ratio-row">
-              {[
-                ["1:1", "1024×1024"],
-                ["3:2", "1536×1024"],
-                ["2:3", "1024×1536"],
-                ["16:9", "1536×864"],
-              ].map(([value, size]) => (
-                <button
-                  type="button"
-                  className={ratio === value ? "active" : ""}
-                  aria-pressed={ratio === value}
-                  onClick={() => {
-                    beginDraft();
-                    setRatio(value);
-                  }}
-                  key={value}
-                >
-                  <b>{value}</b>
-                  <small>{size}</small>
-                </button>
-              ))}
-            </div>
+            <ImageRatioPicker
+              value={ratio}
+              onChange={(value) => {
+                beginDraft();
+                setRatio(value);
+              }}
+            />
           </fieldset>
           <label>
             补充要求（选填）
