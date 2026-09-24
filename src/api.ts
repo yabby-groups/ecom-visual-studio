@@ -81,7 +81,7 @@ export const client = {
   resetPrompt: (id: string) => call<{ prompt: string }>("ResetPrompt", id),
   downloadAsset: (path: string) => call<boolean>("DownloadAsset", path),
   generateAsset: (id: string) => call("GenerateAsset", id),
-  generatePack: (id: string) => call("GeneratePack", id),
+  generatePack: (id: string) => call<{ queued: number }>("GeneratePack", id),
   templates: () => call<Template[]>("Templates"),
   addTemplate: (body: {
     name: string;

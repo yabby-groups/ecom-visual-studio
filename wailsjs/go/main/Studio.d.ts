@@ -30,7 +30,7 @@ export function DownloadAsset(arg1:string):Promise<boolean>;
 
 export function GenerateAsset(arg1:string):Promise<Record<string, boolean>>;
 
-export function GeneratePack(arg1:string):Promise<Record<string, boolean>>;
+export function GeneratePack(arg1:string):Promise<Record<string, number>>;
 
 export function ImportURL(arg1:string):Promise<Record<string, string>>;
 

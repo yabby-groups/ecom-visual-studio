@@ -265,11 +265,15 @@ export function Workspace() {
     if (!requireAiAuth()) return;
     try {
       if (one) setSelectedVersionPath(null);
+      let queued = 1;
       if (one && asset) await client.generateAsset(asset.id);
-      else await client.generatePack(currentProject.id);
+      else queued = (await client.generatePack(currentProject.id)).queued;
       setShowCreationGuide(false);
       await load();
-      showNotice(one ? "已加入生成队列" : "全部画面已加入生成队列", 2000);
+      showNotice(
+        one ? "已加入生成队列" : queued ? `${queued} 张画面已加入生成队列` : "没有需要生成的画面",
+        2000,
+      );
     } catch (reason) {
       showNotice(
         reason instanceof Error ? reason.message : "生成失败",
@@ -373,7 +377,10 @@ export function Workspace() {
         </div>
         <button
           className="button primary"
-          disabled={project.assets?.some((item) => isPending(item.status))}
+          disabled={
+            project.assets?.some((item) => isPending(item.status)) ||
+            !project.assets?.some((item) => item.status === "draft" || item.status.startsWith("failed"))
+          }
           onClick={() => void generate(false)}
         >
           <Sparkles size={18} />
@@ -555,7 +562,7 @@ export function Workspace() {
                     onClick={() => void downloadAsset()}
                   >
                     <Download size={16} />
-                    导出
+                    导出图片
                   </button>
                 )}
                 <button

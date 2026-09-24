@@ -31,7 +31,6 @@ var imageSizes = map[string][2]int{
 }
 
 const (
-	imageAttemptTimeout    = 3 * time.Minute
 	imageGenerationTimeout = 10 * time.Minute
 )
 
@@ -179,7 +178,7 @@ func (s *Studio) GenerateAsset(id string) (map[string]bool, error) {
 	go s.generateAsset(id, user.ID)
 	return map[string]bool{"ok": true}, nil
 }
-func (s *Studio) GeneratePack(id string) (map[string]bool, error) {
+func (s *Studio) GeneratePack(id string) (map[string]int, error) {
 	user, err := s.currentUser()
 	if err != nil {
 		return nil, err
@@ -190,39 +189,46 @@ func (s *Studio) GeneratePack(id string) (map[string]bool, error) {
 	if _, _, _, _, _, err = s.activeProvider(user.ID); err != nil {
 		return nil, err
 	}
-	rows, err := s.db.Query("select id from assets where project_id=?", id)
+	assets, err := s.queuePackAssets(id)
 	if err != nil {
 		return nil, err
 	}
+	for _, asset := range assets {
+		go s.generateAsset(asset, user.ID)
+	}
+	return map[string]int{"queued": len(assets)}, nil
+}
+
+func (s *Studio) queuePackAssets(projectID string) ([]string, error) {
 	assets := []string{}
-	for rows.Next() {
-		var asset string
-		if err = rows.Scan(&asset); err != nil {
-			rows.Close()
-			return nil, err
+	err := s.writeTransaction(func(tx *sql.Tx) error {
+		rows, err := tx.Query("select id from assets where project_id=? and (status='draft' or status like 'failed%') order by created_at,id", projectID)
+		if err != nil {
+			return err
 		}
-		assets = append(assets, asset)
-	}
-	if err = rows.Close(); err != nil {
-		return nil, err
-	}
-	if err = rows.Err(); err != nil {
-		return nil, err
-	}
-	if err = s.writeTransaction(func(tx *sql.Tx) error {
+		for rows.Next() {
+			var asset string
+			if err := rows.Scan(&asset); err != nil {
+				rows.Close()
+				return err
+			}
+			assets = append(assets, asset)
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return err
+		}
+		if err := rows.Close(); err != nil {
+			return err
+		}
 		for _, asset := range assets {
 			if _, err := tx.Exec("update assets set status='queued',generation_started_at=null where id=?", asset); err != nil {
 				return err
 			}
 		}
 		return nil
-	}); err != nil {
-		return nil, err
-	}
-	for _, asset := range assets {
-		go s.generateAsset(asset, user.ID)
-	}
-	return map[string]bool{"ok": true}, nil
+	})
+	return assets, err
 }
 func (s *Studio) generateAsset(id, providerUserID string) {
 	var projectID, prompt, ratio, reference string
@@ -284,12 +290,13 @@ func (s *Studio) openAIClient(config huabotConfig, key string) openai.Client {
 
 func (s *Studio) imageOpenAIClient(config huabotConfig, key string) openai.Client {
 	client := *s.httpClient
-	client.Timeout = imageAttemptTimeout
+	client.Timeout = imageGenerationTimeout
 	return openai.NewClient(
 		option.WithBaseURL(config.APIBase),
 		option.WithAPIKey(key),
 		option.WithHTTPClient(&client),
-		option.WithRequestTimeout(imageAttemptTimeout),
+		option.WithRequestTimeout(imageGenerationTimeout),
+		option.WithMaxRetries(0),
 	)
 }
 

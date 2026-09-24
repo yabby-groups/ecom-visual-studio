@@ -260,6 +260,74 @@ func TestGenerateAssetRequiresLoginBeforeQueueing(t *testing.T) {
 	}
 }
 
+func TestQueuePackAssetsSkipsCompletedAndPendingAssets(t *testing.T) {
+	db, err := sql.Open("sqlite", sqliteDSN(filepath.Join(t.TempDir(), "studio.db")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	studio := &Studio{db: db}
+	if err := studio.migrate(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("insert into projects(id,user_id,name,product,created_at) values('project-1',?,'Local','Desk',1)", localWorkspaceID); err != nil {
+		t.Fatal(err)
+	}
+	for index, item := range []struct {
+		id, status, path string
+	}{
+		{"draft", "draft", ""},
+		{"ready", "ready", "generated/ready.png"},
+		{"failed", "failed: timeout", "generated/older.png"},
+		{"queued", "queued", ""},
+		{"generating", "generating", ""},
+	} {
+		if _, err := db.Exec("insert into assets(id,project_id,title,template,ratio,status,file_path,generation_started_at,created_at) values(?,'project-1','Frame','hero-image','1:1',?,?,?,?)", item.id, item.status, item.path, 123, index); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := db.Exec("insert into asset_versions(id,asset_id,file_path,created_at) values('version-1','ready','generated/ready.png',100)"); err != nil {
+		t.Fatal(err)
+	}
+	queued, err := studio.queuePackAssets("project-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(queued, []string{"draft", "failed"}) {
+		t.Fatalf("queued assets = %v, want draft and failed", queued)
+	}
+	again, err := studio.queuePackAssets("project-1")
+	if err != nil || len(again) != 0 {
+		t.Fatalf("second queue = %v, %v, want no assets", again, err)
+	}
+	for _, item := range []struct {
+		id, status, path string
+		startedAt        int64
+	}{
+		{"draft", "queued", "", 0},
+		{"ready", "ready", "generated/ready.png", 123},
+		{"failed", "queued", "generated/older.png", 0},
+		{"queued", "queued", "", 123},
+		{"generating", "generating", "", 123},
+	} {
+		var status, path string
+		var startedAt sql.NullInt64
+		if err := db.QueryRow("select status,file_path,generation_started_at from assets where id=?", item.id).Scan(&status, &path, &startedAt); err != nil {
+			t.Fatal(err)
+		}
+		if status != item.status || path != item.path || (startedAt.Valid && startedAt.Int64 != item.startedAt) || (!startedAt.Valid && item.startedAt != 0) {
+			t.Errorf("asset %s = (%q, %q, %v), want (%q, %q, %d)", item.id, status, path, startedAt, item.status, item.path, item.startedAt)
+		}
+	}
+	var versionCount int
+	if err := db.QueryRow("select count(*) from asset_versions where asset_id='ready' and file_path='generated/ready.png'").Scan(&versionCount); err != nil {
+		t.Fatal(err)
+	}
+	if versionCount != 1 {
+		t.Fatalf("ready versions = %d, want 1", versionCount)
+	}
+}
+
 func TestProjectIncludesAssetVersionGenerationStart(t *testing.T) {
 	db, err := sql.Open("sqlite", sqliteDSN(filepath.Join(t.TempDir(), "studio.db")))
 	if err != nil {
@@ -1655,10 +1723,10 @@ func TestImageEditRequestsCustomSize(t *testing.T) {
 	}
 }
 
-func TestImageGenerationUsesPerAttemptTimeoutAndActionableTimeoutError(t *testing.T) {
+func TestImageGenerationUsesFullTimeoutAndActionableTimeoutError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if got := r.Header.Get("X-Stainless-Timeout"); got != "180" {
-			t.Fatalf("X-Stainless-Timeout = %q, want 180", got)
+		if got := r.Header.Get("X-Stainless-Timeout"); got != "600" {
+			t.Fatalf("X-Stainless-Timeout = %q, want 600", got)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"created": 1, "data": []any{}})
@@ -1672,6 +1740,25 @@ func TestImageGenerationUsesPerAttemptTimeoutAndActionableTimeoutError(t *testin
 	}
 	if got := imageGenerationFailure(context.DeadlineExceeded); got != "图像服务响应超时，请稍后重试" {
 		t.Fatalf("imageGenerationFailure() = %q", got)
+	}
+}
+
+func TestImageGenerationDoesNotRetryFailedRequest(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		http.Error(w, "provider unavailable", http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+
+	studio := &Studio{httpClient: server.Client()}
+	client := studio.imageOpenAIClient(huabotConfig{APIBase: server.URL + "/v1"}, "sk-test")
+	_, err := client.Images.Generate(context.Background(), openai.ImageGenerateParams{Model: "gpt-image-2", Prompt: "product image", N: openai.Int(1)})
+	if err == nil {
+		t.Fatal("expected provider error")
+	}
+	if requests != 1 {
+		t.Fatalf("requests = %d, want 1", requests)
 	}
 }
 
