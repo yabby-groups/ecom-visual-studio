@@ -13,6 +13,7 @@
     "noUnusedParameters": true,
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "resolveJsonModule": true,
     "allowImportingTsExtensions": false,
     "verbatimModuleSyntax": true,
     "noEmit": true,

@@ -2,6 +2,9 @@
   "$schema": "https://wails.io/schemas/config.v2.json",
   "name": "Ecom Visual Studio",
   "outputfilename": "EcomVisualStudio",
+  "info": {
+    "productVersion": "1.0.5"
+  },
   "frontend:dir": ".",
   "frontend:install": "npm install",
   "frontend:build": "npm run build:desktop",

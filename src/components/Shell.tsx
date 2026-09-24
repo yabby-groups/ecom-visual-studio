@@ -11,6 +11,7 @@ import {
 import { Link, useNavigate } from "react-router-dom";
 import { useAppStore } from "../store";
 import { useRequireAiAuth } from "../auth";
+import wailsConfig from "../../wails.json";
 import {
   getThemePreference,
   resolvedTheme,
@@ -53,7 +54,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         </nav>
         <div className="rail-bottom sidebar-bottom">
           <Nav to="/settings" icon={<Settings />} label="设置" />
-          <span className="app-version">v1.0.5</span>
+          <span className="app-version">v{wailsConfig.info.productVersion}</span>
         </div>
       </aside>
       <main className="app-main">

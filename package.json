@@ -10,7 +10,9 @@
     "desktop:dev": "wails dev",
     "desktop:build": "scripts/package-macos.sh",
     "desktop:build:macos": "scripts/package-macos.sh",
+    "desktop:build:macos:x86_64": "scripts/package-macos.sh x86_64",
     "desktop:build:windows": "scripts/package-windows.sh",
+    "desktop:build:all": "bash scripts/build_all.sh",
     "preview": "vite preview",
     "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,css,scss,md}\"",
     "test": "vitest run"

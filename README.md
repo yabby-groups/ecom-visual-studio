@@ -85,10 +85,14 @@ The Wails desktop runtime uses the React application at the repository root and 
 ```sh
 npm run desktop:dev
 npm run desktop:build
+npm run desktop:build:macos:x86_64
 npm run desktop:build:windows
+npm run desktop:build:all
 ```
 
-`desktop:build` creates the native build for the current platform. `desktop:build:windows` cross-builds a Windows x64 NSIS installer and needs the Wails Windows cross-compilation prerequisites (MinGW and NSIS) on the build host.
+`desktop:build` creates the macOS arm64 build. `desktop:build:macos:x86_64` creates an Intel Mac build on a macOS host. `desktop:build:windows` cross-builds a Windows x64 NSIS installer and needs the Wails Windows cross-compilation prerequisites (MinGW and NSIS) on the build host.
+
+`desktop:build:all` uses the host macOS toolchain for both Mac architectures, then runs the Windows builds inside the project devenv, which supplies Go, MinGW, and NSIS. It builds macOS arm64 and x86_64 applications, a Windows x64 application and installer, and a Windows x86 portable application. It archives each target in `bin-dist/` using `wails.json`'s `info.productVersion` for file names. Run it on macOS with Wails installed.
 
 The macOS package is ad-hoc signed with App Sandbox and outgoing-network entitlements. macOS notarization, Windows signing, automatic updates, and legacy data import are intentionally out of scope.
 

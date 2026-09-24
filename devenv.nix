@@ -1,7 +1,13 @@
 { pkgs, ... }:
 
 {
-  packages = [ pkgs.nodejs ];
+  packages = [
+    pkgs.nodejs
+    pkgs.go
+    pkgs.nsis
+    pkgs.pkgsCross.mingwW64.stdenv.cc
+    pkgs.pkgsCross.mingw32.stdenv.cc
+  ];
 
   languages.python = {
     enable = true;

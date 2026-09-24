@@ -9,6 +9,11 @@ command -v wails >/dev/null 2>&1 || {
   echo "Wails v2 is required on the build host." >&2
   exit 1
 }
+command -v x86_64-w64-mingw32-gcc >/dev/null 2>&1 || {
+  echo "The Windows x64 MinGW compiler is required on the build host." >&2
+  exit 1
+}
+export CC=x86_64-w64-mingw32-gcc
 
 npm run build:desktop
 test -f desktop_assets/index.html || {
@@ -18,9 +23,8 @@ test -f desktop_assets/index.html || {
 
 wails build -s -clean -m -nosyncgomod -skipembedcreate -trimpath -platform windows/amd64 -nsis -webview2 browser
 
-APP_COUNT=$(find "$ARTIFACT_DIR" -maxdepth 1 -type f -name 'EcomVisualStudio*.exe' ! -name '*installer*.exe' | wc -l | tr -d ' ')
-INSTALLER_COUNT=$(find "$ARTIFACT_DIR" -maxdepth 1 -type f -name 'EcomVisualStudio*installer*.exe' | wc -l | tr -d ' ')
-test "$APP_COUNT" -ge 1 && test "$INSTALLER_COUNT" -ge 1 || {
+test -f "$ARTIFACT_DIR/EcomVisualStudio.exe" &&
+  test -f "$ARTIFACT_DIR/Ecom Visual Studio-amd64-installer.exe" || {
   echo "Windows application EXE and NSIS installer were not both created in $ARTIFACT_DIR" >&2
   exit 1
 }
