@@ -35,6 +35,8 @@ type SettingsValues = {
 
 const EMPTY_SETTINGS: TokenSettings = {
   tokens: [],
+  token_balances: [],
+  subscription_daily_quotas: [],
   wallet_balance: "",
   total_consumed_cost: "",
   today_consumed_cost: "",
@@ -111,6 +113,26 @@ export function SettingsPage() {
   const responsesModels = models.filter((model) =>
     model.api_modes.includes("responses"),
   );
+  const balancesByAlias = new Map(
+    settings.token_balances.map((balance) => [balance.model_alias, balance]),
+  );
+  const quotasByModelID = new Map(
+    settings.subscription_daily_quotas.map((quota) => [quota.model_id, quota]),
+  );
+  const modelUsageLabel = (model: Model): string | undefined => {
+    const details: string[] = [];
+    const balance = balancesByAlias.get(model.id);
+    if (balance) {
+      const unit = balance.billing_mode === "per_call" ? "次" : "Token";
+      details.push(`剩余 ${formatTokenCost(balance.total_tokens)} ${unit}`);
+    }
+    const quota = quotasByModelID.get(model.provider_id);
+    if (quota) {
+      const unit = quota.billing_mode === "per_call" ? "次" : "Token";
+      details.push(`今日额度 ${formatTokenCost(quota.remaining_tokens)} / ${formatTokenCost(quota.daily_tokens)} ${unit}`);
+    }
+    return details.join(" · ") || undefined;
+  };
   const walletBalance = settings.wallet_balance
     ? formatTokenCost(settings.wallet_balance)
     : "--";
@@ -454,6 +476,7 @@ export function SettingsPage() {
                       ).map((model) => ({
                         value: model.id,
                         label: model.name,
+                        detail: modelUsageLabel(model),
                       }))}
                       disabled={
                         !modelsReady ||

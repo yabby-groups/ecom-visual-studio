@@ -151,7 +151,7 @@ func TestSettingsMigrationAddsUsageSummarySnapshot(t *testing.T) {
 	if err := rows.Err(); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"wallet_balance", "total_consumed_cost", "today_consumed_cost"} {
+	for _, name := range []string{"wallet_balance", "total_consumed_cost", "today_consumed_cost", "token_balances_json", "subscription_daily_quotas_json"} {
 		if !columns[name] {
 			t.Fatalf("missing settings column %q", name)
 		}
@@ -741,6 +741,15 @@ func TestHuabotLoginUsesWebBaseAndEncryptsToken(t *testing.T) {
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"wallet": map[string]any{"amount": "56.78"},
+				"token_balances": []map[string]any{
+					{"total_tokens": "57.0000000000000000", "model": map[string]any{"alias": "gpt-image-2", "billing_mode": "per_call"}},
+					{"total_tokens": "2500000.0000000000000000", "model": map[string]any{"alias": "gpt-image-2-slow", "billing_mode": "token"}},
+					{"total_tokens": "0.0000000000000000", "model": map[string]any{"alias": "unused-model", "billing_mode": "token"}},
+				},
+				"subscription_daily_quotas": []map[string]any{
+					{"model_id": 24, "billing_mode": "per_call", "daily_tokens": "100.0000000000000000", "consumed_tokens": "43.0000000000000000", "remaining_tokens": "57.0000000000000000"},
+					{"model_id": 13, "billing_mode": "token", "daily_tokens": "1000000.0000000000000000", "consumed_tokens": "1000000.0000000000000000", "remaining_tokens": "0"},
+				},
 				"overview": map[string]any{
 					"total_consumed_cost": "34.5",
 					"today_consumed_cost": "12.25",
@@ -748,7 +757,7 @@ func TestHuabotLoginUsesWebBaseAndEncryptsToken(t *testing.T) {
 			})
 		case "/api/token_base/model/list/":
 			modelRequests++
-			_ = json.NewEncoder(w).Encode(map[string]any{"models": []map[string]any{{"id": "image", "alias": "gpt-image-2", "title": "Image"}, {"id": "chat", "alias": "gpt-5.6-luna", "title": "Chat", "api_modes": []string{"chat_completions", "responses"}}}})
+			_ = json.NewEncoder(w).Encode(map[string]any{"models": []map[string]any{{"id": 24, "alias": "gpt-image-2", "title": "Image"}, {"id": 13, "alias": "gpt-5.6-luna", "title": "Chat", "api_modes": []string{"chat_completions", "responses"}}}})
 		case "/api/signout/":
 			signoutRequests++
 			if r.Method != http.MethodPost || r.Header.Get("Authorization") != "Bearer session" {
@@ -803,6 +812,9 @@ func TestHuabotLoginUsesWebBaseAndEncryptsToken(t *testing.T) {
 	if len(cachedModels) != 2 || !reflect.DeepEqual(cachedModels[0]["api_modes"], []string{"chat_completions", "responses"}) {
 		t.Fatalf("cached models = %#v", cachedModels)
 	}
+	if cachedModels[0]["provider_id"] != "13" || cachedModels[1]["provider_id"] != "24" {
+		t.Fatalf("provider model IDs = %#v", cachedModels)
+	}
 	if modelRequests != 1 {
 		t.Fatalf("model requests after cached read = %d, want 1", modelRequests)
 	}
@@ -823,12 +835,33 @@ func TestHuabotLoginUsesWebBaseAndEncryptsToken(t *testing.T) {
 	if settings["total_consumed_cost"] != "34.5" || settings["today_consumed_cost"] != "12.25" {
 		t.Fatalf("usage overview = %#v", settings)
 	}
+	wantBalances := []walletTokenBalance{
+		{ModelAlias: "gpt-image-2", BillingMode: "per_call", TotalTokens: "57.0000000000000000"},
+		{ModelAlias: "gpt-image-2-slow", BillingMode: "token", TotalTokens: "2500000.0000000000000000"},
+		{ModelAlias: "unused-model", BillingMode: "token", TotalTokens: "0.0000000000000000"},
+	}
+	if got := settings["token_balances"]; !reflect.DeepEqual(got, wantBalances) {
+		t.Fatalf("token balances = %#v", got)
+	}
+	wantQuotas := []subscriptionDailyQuota{
+		{ModelID: "24", BillingMode: "per_call", DailyTokens: "100.0000000000000000", ConsumedTokens: "43.0000000000000000", RemainingTokens: "57.0000000000000000"},
+		{ModelID: "13", BillingMode: "token", DailyTokens: "1000000.0000000000000000", ConsumedTokens: "1000000.0000000000000000", RemainingTokens: "0"},
+	}
+	if got := settings["subscription_daily_quotas"]; !reflect.DeepEqual(got, wantQuotas) {
+		t.Fatalf("daily quotas = %#v", got)
+	}
 	settings, err = studio.TokenSettings()
 	if err != nil {
 		t.Fatal(err)
 	}
 	if settings["wallet_balance"] != "56.78" || settings["total_consumed_cost"] != "34.5" || settings["today_consumed_cost"] != "12.25" {
 		t.Fatalf("cached usage overview = %#v", settings)
+	}
+	if got := settings["token_balances"]; !reflect.DeepEqual(got, wantBalances) {
+		t.Fatalf("cached token balances = %#v", got)
+	}
+	if got := settings["subscription_daily_quotas"]; !reflect.DeepEqual(got, wantQuotas) {
+		t.Fatalf("cached daily quotas = %#v", got)
 	}
 	if listRequests != 2 {
 		t.Fatalf("token requests after refresh = %d, want 2", listRequests)

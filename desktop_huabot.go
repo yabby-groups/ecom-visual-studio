@@ -30,6 +30,20 @@ type providerModel struct {
 }
 type walletSummary struct {
 	Balance, TotalConsumedCost, TodayConsumedCost string
+	TokenBalances                                 []walletTokenBalance
+	SubscriptionDailyQuotas                       []subscriptionDailyQuota
+}
+type walletTokenBalance struct {
+	ModelAlias  string `json:"model_alias"`
+	BillingMode string `json:"billing_mode"`
+	TotalTokens string `json:"total_tokens"`
+}
+type subscriptionDailyQuota struct {
+	ModelID         string `json:"model_id"`
+	BillingMode     string `json:"billing_mode"`
+	DailyTokens     string `json:"daily_tokens"`
+	ConsumedTokens  string `json:"consumed_tokens"`
+	RemainingTokens string `json:"remaining_tokens"`
 }
 
 const (
@@ -491,7 +505,7 @@ func (s *Studio) tokenSettings() (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	result := map[string]any{"tokens": []map[string]any{}, "active_token_id": "", "image_model": "", "text_model": "", "chat_model": ""}
+	result := map[string]any{"tokens": []map[string]any{}, "token_balances": []walletTokenBalance{}, "subscription_daily_quotas": []subscriptionDailyQuota{}, "active_token_id": "", "image_model": "", "text_model": "", "chat_model": ""}
 	rows, err := s.db.Query("select id,name,masked,status,today_cost,total_cost from tokens where user_id=? order by name", user.ID)
 	if err != nil {
 		return nil, err
@@ -507,10 +521,24 @@ func (s *Studio) tokenSettings() (map[string]any, error) {
 		tokens = append(tokens, map[string]any{"id": id, "name": name, "masked": masked, "status": status, "today_cost": today, "total_cost": total})
 	}
 	result["tokens"] = tokens
-	var token, image, text, chat, walletBalance, totalConsumedCost, todayConsumedCost string
-	if err := s.db.QueryRow("select token_id,image_model,text_model,chat_model,wallet_balance,total_consumed_cost,today_consumed_cost from settings where user_id=?", user.ID).Scan(&token, &image, &text, &chat, &walletBalance, &totalConsumedCost, &todayConsumedCost); err == nil {
+	var token, image, text, chat, walletBalance, totalConsumedCost, todayConsumedCost, tokenBalancesJSON, dailyQuotasJSON string
+	if err := s.db.QueryRow("select token_id,image_model,text_model,chat_model,wallet_balance,total_consumed_cost,today_consumed_cost,token_balances_json,subscription_daily_quotas_json from settings where user_id=?", user.ID).Scan(&token, &image, &text, &chat, &walletBalance, &totalConsumedCost, &todayConsumedCost, &tokenBalancesJSON, &dailyQuotasJSON); err == nil {
 		result["active_token_id"], result["image_model"], result["text_model"], result["chat_model"] = token, image, text, chat
 		result["wallet_balance"], result["total_consumed_cost"], result["today_consumed_cost"] = walletBalance, totalConsumedCost, todayConsumedCost
+		var balances []walletTokenBalance
+		if err := json.Unmarshal([]byte(tokenBalancesJSON), &balances); err != nil {
+			return nil, fmt.Errorf("读取已保存的模型余额失败: %w", err)
+		}
+		if balances != nil {
+			result["token_balances"] = balances
+		}
+		var quotas []subscriptionDailyQuota
+		if err := json.Unmarshal([]byte(dailyQuotasJSON), &quotas); err != nil {
+			return nil, fmt.Errorf("读取已保存的每日额度失败: %w", err)
+		}
+		if quotas != nil {
+			result["subscription_daily_quotas"] = quotas
+		}
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return nil, err
 	}
@@ -544,6 +572,8 @@ func (s *Studio) refreshTokenSettings() (map[string]any, error) {
 	settings["wallet_balance"] = summary.Balance
 	settings["total_consumed_cost"] = summary.TotalConsumedCost
 	settings["today_consumed_cost"] = summary.TodayConsumedCost
+	settings["token_balances"] = summary.TokenBalances
+	settings["subscription_daily_quotas"] = summary.SubscriptionDailyQuotas
 	return settings, nil
 }
 
@@ -705,7 +735,7 @@ func (s *Studio) refreshTokenUsage(userID, bearer string) (walletSummary, error)
 	if !ok {
 		return walletSummary{}, errors.New("huabot 未返回钱包信息")
 	}
-	summary := walletSummary{Balance: stringValue(wallet["amount"])}
+	summary := walletSummary{Balance: stringValue(wallet["amount"]), TokenBalances: []walletTokenBalance{}, SubscriptionDailyQuotas: []subscriptionDailyQuota{}}
 	if summary.Balance == "" {
 		return walletSummary{}, errors.New("huabot 未返回钱包余额")
 	}
@@ -718,8 +748,54 @@ func (s *Studio) refreshTokenUsage(userID, bearer string) (walletSummary, error)
 	if summary.TotalConsumedCost == "" || summary.TodayConsumedCost == "" {
 		return walletSummary{}, errors.New("huabot 未返回完整用量汇总")
 	}
+	if rawBalances, ok := walletResponse["token_balances"].([]any); ok {
+		for _, item := range rawBalances {
+			balance, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			model, ok := balance["model"].(map[string]any)
+			if !ok {
+				continue
+			}
+			alias := stringValue(model["alias"])
+			total := stringValue(balance["total_tokens"])
+			if alias == "" || total == "" {
+				continue
+			}
+			summary.TokenBalances = append(summary.TokenBalances, walletTokenBalance{
+				ModelAlias: alias, BillingMode: stringValue(model["billing_mode"]), TotalTokens: total,
+			})
+		}
+	}
+	if rawQuotas, ok := walletResponse["subscription_daily_quotas"].([]any); ok {
+		for _, item := range rawQuotas {
+			quota, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			modelID := stringValue(quota["model_id"])
+			daily := stringValue(quota["daily_tokens"])
+			remaining := stringValue(quota["remaining_tokens"])
+			if modelID == "" || daily == "" || remaining == "" {
+				continue
+			}
+			summary.SubscriptionDailyQuotas = append(summary.SubscriptionDailyQuotas, subscriptionDailyQuota{
+				ModelID: modelID, BillingMode: stringValue(quota["billing_mode"]),
+				DailyTokens: daily, ConsumedTokens: stringValue(quota["consumed_tokens"]), RemainingTokens: remaining,
+			})
+		}
+	}
+	balancesJSON, err := json.Marshal(summary.TokenBalances)
+	if err != nil {
+		return walletSummary{}, err
+	}
+	quotasJSON, err := json.Marshal(summary.SubscriptionDailyQuotas)
+	if err != nil {
+		return walletSummary{}, err
+	}
 	rawTokens, _ := listed["tokens"].([]any)
-	err := s.writeTransaction(func(tx *sql.Tx) error {
+	err = s.writeTransaction(func(tx *sql.Tx) error {
 		for _, item := range rawTokens {
 			value, ok := item.(map[string]any)
 			if !ok {
@@ -745,10 +821,12 @@ func (s *Studio) refreshTokenUsage(userID, bearer string) (walletSummary, error)
 			}
 		}
 		_, err := tx.Exec(
-			"update settings set wallet_balance=?,total_consumed_cost=?,today_consumed_cost=? where user_id=?",
+			"update settings set wallet_balance=?,total_consumed_cost=?,today_consumed_cost=?,token_balances_json=?,subscription_daily_quotas_json=? where user_id=?",
 			summary.Balance,
 			summary.TotalConsumedCost,
 			summary.TodayConsumedCost,
+			string(balancesJSON),
+			string(quotasJSON),
 			userID,
 		)
 		return err
@@ -761,22 +839,22 @@ func (s *Studio) models() (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.db.Query("select alias,name,api_modes from models where user_id=? order by name", user.ID)
+	rows, err := s.db.Query("select id,alias,name,api_modes from models where user_id=? order by name", user.ID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	result := []map[string]any{}
 	for rows.Next() {
-		var alias, name, rawModes string
-		if err := rows.Scan(&alias, &name, &rawModes); err != nil {
+		var providerID, alias, name, rawModes string
+		if err := rows.Scan(&providerID, &alias, &name, &rawModes); err != nil {
 			return nil, err
 		}
 		modes := []string{}
 		if err := json.Unmarshal([]byte(rawModes), &modes); err != nil {
 			return nil, fmt.Errorf("本地模型能力数据无效: %w", err)
 		}
-		result = append(result, map[string]any{"id": alias, "name": name, "api_modes": modes})
+		result = append(result, map[string]any{"id": alias, "provider_id": providerID, "name": name, "api_modes": modes})
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i]["name"].(string) < result[j]["name"].(string) })
 	return map[string]any{"models": result}, rows.Err()

@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState } from "react";
 type SettingsSelectOption = {
   value: string;
   label: string;
+  detail?: string;
   disabled?: boolean;
 };
 
@@ -62,7 +63,14 @@ export function SettingsSelect({
           }
         }}
       >
-        <span>{selected?.label || "暂无可用选项"}</span>
+        <span className="settings-select-content">
+          <span className="settings-select-label">
+            {selected?.label || "暂无可用选项"}
+          </span>
+          {selected?.detail && (
+            <span className="settings-select-detail">{selected.detail}</span>
+          )}
+        </span>
         <ChevronDown size={17} aria-hidden="true" />
       </button>
       {open && (
@@ -91,7 +99,12 @@ export function SettingsSelect({
                 onChange(option.value);
               }}
             >
-              {option.label}
+              <span className="settings-select-content">
+                <span className="settings-select-label">{option.label}</span>
+                {option.detail && (
+                  <span className="settings-select-detail">{option.detail}</span>
+                )}
+              </span>
             </button>
           ))}
         </div>

@@ -73,9 +73,23 @@ export type Token = {
   today_cost: string;
   total_cost: string;
 };
-export type Model = { id: string; name: string; api_modes: string[] };
+export type Model = { id: string; provider_id: string; name: string; api_modes: string[] };
+export type WalletTokenBalance = {
+  model_alias: string;
+  billing_mode: string;
+  total_tokens: string;
+};
+export type SubscriptionDailyQuota = {
+  model_id: string;
+  billing_mode: string;
+  daily_tokens: string;
+  consumed_tokens: string;
+  remaining_tokens: string;
+};
 export type TokenSettings = {
   tokens: Token[];
+  token_balances: WalletTokenBalance[];
+  subscription_daily_quotas: SubscriptionDailyQuota[];
   wallet_balance: string;
   total_consumed_cost: string;
   today_consumed_cost: string;
