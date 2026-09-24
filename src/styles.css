@@ -1437,6 +1437,14 @@ button:active {
   color: var(--ink);
 }
 
+:root[data-theme="light"] .try-on-controls textarea::placeholder {
+  color: var(--muted);
+}
+
+:root[data-theme="light"] .try-on-controls .try-on-consent {
+  color: var(--muted);
+}
+
 :root[data-theme="light"] :is(.artboard-empty, .try-on-controls .try-on-upload, .try-on-controls .try-on-url-import, .variant.empty) {
   border-color: #cfb991;
   background: var(--surface-muted);

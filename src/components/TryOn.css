@@ -210,10 +210,10 @@
   color: #fff;
   font-size: 11px;
 }
-.try-on-consent {
+.try-on-controls .try-on-consent {
   grid-template-columns: 16px 1fr;
   align-items: start;
-  color: #c6cfe2 !important;
+  color: #c6cfe2;
   font-size: 10px !important;
   font-weight: 400 !important;
   line-height: 1.45;
