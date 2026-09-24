@@ -1636,3 +1636,63 @@ button:active {
 :root[data-theme="light"] :is(.password-toggle, .auth-panel .text-button) {
   color: var(--accent-text);
 }
+
+/* Keep the creation flow on the same light surfaces as the rest of the studio. */
+:root[data-theme="light"] .create-page .create-intro h1 {
+  color: var(--ink);
+}
+
+:root[data-theme="light"] .create-page .create-intro > p,
+:root[data-theme="light"] .create-page .back-link {
+  color: var(--muted);
+}
+
+:root[data-theme="light"] .create-page .back-link:hover {
+  color: var(--accent-dark);
+}
+
+:root[data-theme="light"] .creation-form {
+  border-color: var(--line);
+  background: var(--surface-raised);
+  box-shadow: 0 12px 32px var(--shadow);
+}
+
+:root[data-theme="light"] .creation-form :is(input, textarea)::placeholder {
+  color: var(--muted);
+}
+
+:root[data-theme="light"] .creation-form .reference-picker,
+:root[data-theme="light"] .creation-form .reference-url-form > div {
+  border-color: var(--line);
+  background: var(--surface-muted);
+}
+
+:root[data-theme="light"] .creation-form .reference-url-form button {
+  border-color: var(--line);
+  background: var(--accent);
+  color: var(--surface-raised);
+}
+
+:root[data-theme="light"] .creation-form .goal:hover,
+:root[data-theme="light"] .creation-form .pack-scene-option:hover,
+:root[data-theme="light"] .creation-form .analysis-button:hover:not(:disabled) {
+  border-color: #c58a31;
+  background: var(--soft);
+}
+
+:root[data-theme="light"] .creation-form .goal.active {
+  border-color: var(--accent);
+  background: var(--soft);
+  box-shadow: 0 0 0 3px rgba(164, 100, 22, 0.1);
+}
+
+:root[data-theme="light"] .creation-form .analysis-row,
+:root[data-theme="light"] .creation-form .analysis-row .button {
+  border-color: #d6bb86;
+  background: var(--warning-soft);
+  color: var(--ink);
+}
+
+:root[data-theme="light"] .creation-form .analysis-row > span {
+  color: var(--muted);
+}
