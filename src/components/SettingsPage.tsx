@@ -124,14 +124,14 @@ export function SettingsPage() {
     const balance = balancesByAlias.get(model.id);
     if (balance) {
       const unit = balance.billing_mode === "per_call" ? "次" : "Token";
-      details.push(`剩余 ${formatTokenCost(balance.total_tokens)} ${unit}`);
+      details.push(`流量包剩余 ${formatTokenCost(balance.total_tokens)} ${unit}`);
     }
     const quota = quotasByModelID.get(model.provider_id);
     if (quota) {
       const unit = quota.billing_mode === "per_call" ? "次" : "Token";
-      details.push(`今日额度 ${formatTokenCost(quota.remaining_tokens)} / ${formatTokenCost(quota.daily_tokens)} ${unit}`);
+      details.push(`订阅今日剩余 ${formatTokenCost(quota.remaining_tokens)} / ${formatTokenCost(quota.daily_tokens)} ${unit}`);
     }
-    return details.join(" · ") || undefined;
+    return details.join("\n") || undefined;
   };
   const walletBalance = settings.wallet_balance
     ? formatTokenCost(settings.wallet_balance)
