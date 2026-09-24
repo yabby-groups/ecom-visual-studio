@@ -1178,14 +1178,13 @@ button:active {
   color: var(--accent) !important;
 }
 
-:root[data-theme="light"] :is(.template-tile, .template-tile > div) {
+:root[data-theme="light"] .template-tile-card {
   border-color: var(--line);
   background: var(--surface-raised);
-  color: var(--ink);
   box-shadow: 0 8px 20px rgba(55, 41, 25, 0.06);
 }
 
-:root[data-theme="light"] :is(.template-tile:hover, .template-tile:focus-visible) {
+:root[data-theme="light"] :is(.template-tile-card:hover, .template-tile-card:focus-within) {
   border-color: #c7a76d;
   background: #fff8eb;
 }

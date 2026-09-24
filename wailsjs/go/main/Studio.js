@@ -150,6 +150,10 @@ export function UpdateAsset(arg1, arg2) {
   return window['go']['main']['Studio']['UpdateAsset'](arg1, arg2);
 }
 
+export function UpdateTemplate(arg1, arg2) {
+  return window['go']['main']['Studio']['UpdateTemplate'](arg1, arg2);
+}
+
 export function Upload(arg1, arg2, arg3) {
   return window['go']['main']['Studio']['Upload'](arg1, arg2, arg3);
 }

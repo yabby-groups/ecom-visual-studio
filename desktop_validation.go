@@ -97,7 +97,31 @@ func validateTemplateInput(input TemplateInput) error {
 	if _, err := imageSize(input.Ratio); err != nil {
 		return err
 	}
-	return validateRequired(input.Direction, "模板说明", maxDirectionRunes)
+	if err := validateRequired(input.Direction, "模板说明", maxDirectionRunes); err != nil {
+		return err
+	}
+	if err := validateOptional(input.ImagePath, "模板图片路径", maxPathRunes); err != nil {
+		return err
+	}
+	if input.ImagePath == "" {
+		return nil
+	}
+	if !strings.HasPrefix(input.ImagePath, "uploads/") || strings.Contains(input.ImagePath, "\\") {
+		return errors.New("模板图片路径无效")
+	}
+	name := strings.TrimPrefix(input.ImagePath, "uploads/")
+	if name == "" || strings.Contains(name, "/") || strings.Contains(name, "..") {
+		return errors.New("模板图片路径无效")
+	}
+	dot := strings.LastIndex(name, ".")
+	if dot < 0 {
+		return errors.New("仅支持 JPG、PNG、WebP 模板图片")
+	}
+	ext := strings.ToLower(name[dot:])
+	if ext != ".jpg" && ext != ".jpeg" && ext != ".png" && ext != ".webp" {
+		return errors.New("仅支持 JPG、PNG、WebP 模板图片")
+	}
+	return nil
 }
 
 func validateTryOnInput(input TryOnInput) error {

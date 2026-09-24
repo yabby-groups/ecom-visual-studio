@@ -30,6 +30,7 @@ type TemplateInput struct {
 	Name      string `json:"name"`
 	Ratio     string `json:"ratio"`
 	Direction string `json:"direction"`
+	ImagePath string `json:"image_path"`
 }
 type PackInput struct {
 	Kind             string   `json:"kind"`
@@ -180,18 +181,18 @@ func (s *Studio) UpdateAsset(id string, patch AssetPatch) (map[string]bool, erro
 }
 
 func (s *Studio) Templates() ([]map[string]any, error) {
-	rows, err := s.db.Query("select id,name,ratio,direction from custom_templates order by created_at desc")
+	rows, err := s.db.Query("select id,name,ratio,direction,image_path from custom_templates where user_id=? order by created_at desc", localWorkspaceID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	result := append([]map[string]any{}, builtInTemplates...)
 	for rows.Next() {
-		var id, name, ratio, direction string
-		if err := rows.Scan(&id, &name, &ratio, &direction); err != nil {
+		var id, name, ratio, direction, imagePath string
+		if err := rows.Scan(&id, &name, &ratio, &direction, &imagePath); err != nil {
 			return nil, err
 		}
-		result = append(result, map[string]any{"id": id, "name": name, "group": "自定义", "ratio": ratio, "direction": direction, "custom": true})
+		result = append(result, map[string]any{"id": id, "name": name, "group": "自定义", "ratio": ratio, "direction": direction, "image_path": imagePath, "custom": true})
 	}
 	return result, rows.Err()
 }
@@ -199,21 +200,45 @@ func (s *Studio) AddTemplate(input TemplateInput) (map[string]string, error) {
 	if err := validateTemplateInput(input); err != nil {
 		return nil, err
 	}
+	if input.ImagePath != "" {
+		if _, err := s.uploadedImagePath(input.ImagePath); err != nil {
+			return nil, errors.New("模板图片文件无效")
+		}
+	}
 	id := newID("template")
-	_, err := s.execDataWrite("insert into custom_templates values(?,?,?,?,?,?)", id, localWorkspaceID, input.Name, input.Ratio, input.Direction, time.Now().Unix())
+	_, err := s.execDataWrite("insert into custom_templates(id,user_id,name,ratio,direction,created_at,image_path) values(?,?,?,?,?,?,?)", id, localWorkspaceID, input.Name, input.Ratio, input.Direction, time.Now().Unix(), input.ImagePath)
 	if err != nil {
 		return nil, err
 	}
 	return map[string]string{"id": id}, nil
 }
-func (s *Studio) DeleteTemplate(id string) (map[string]bool, error) {
-	result, err := s.execDataWrite("delete from custom_templates where id=?", id)
+func (s *Studio) UpdateTemplate(id string, input TemplateInput) (map[string]bool, error) {
+	if err := validateTemplateInput(input); err != nil {
+		return nil, err
+	}
+	if input.ImagePath != "" {
+		if _, err := s.uploadedImagePath(input.ImagePath); err != nil {
+			return nil, errors.New("模板图片文件无效")
+		}
+	}
+	result, err := s.execDataWrite("update custom_templates set name=?,ratio=?,direction=?,image_path=? where id=? and user_id=?", input.Name, input.Ratio, input.Direction, input.ImagePath, id, localWorkspaceID)
 	if err != nil {
 		return nil, err
 	}
 	n, _ := result.RowsAffected()
 	if n == 0 {
-		return nil, errors.New("模板不存在")
+		return nil, errors.New("自定义模板不存在")
+	}
+	return map[string]bool{"ok": true}, nil
+}
+func (s *Studio) DeleteTemplate(id string) (map[string]bool, error) {
+	result, err := s.execDataWrite("delete from custom_templates where id=? and user_id=?", id, localWorkspaceID)
+	if err != nil {
+		return nil, err
+	}
+	n, _ := result.RowsAffected()
+	if n == 0 {
+		return nil, errors.New("自定义模板不存在")
 	}
 	return map[string]bool{"ok": true}, nil
 }
@@ -346,7 +371,7 @@ func (s *Studio) ResetPrompt(id string) (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	direction := "Create a commercially useful composition."
+	direction := ""
 	templates, err := s.Templates()
 	if err != nil {
 		return nil, err
@@ -355,6 +380,9 @@ func (s *Studio) ResetPrompt(id string) (map[string]string, error) {
 		if item["id"] == template {
 			direction = item["direction"].(string)
 		}
+	}
+	if direction == "" {
+		return nil, errors.New("模板已删除，无法重置提示词")
 	}
 	prompt := makePrompt(project, title, direction)
 	_, err = s.execDataWrite("update assets set prompt=? where id=?", prompt, id)

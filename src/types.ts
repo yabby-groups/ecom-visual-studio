@@ -64,6 +64,7 @@ export type Template = {
   group: string;
   ratio: string;
   direction: string;
+  image_path?: string;
   custom: boolean;
 };
 export type Token = {

@@ -76,4 +76,6 @@ export function TryOnJobs(arg1:number,arg2:number):Promise<Record<string, any>>;
 
 export function UpdateAsset(arg1:string,arg2:main.AssetPatch):Promise<Record<string, boolean>>;
 
+export function UpdateTemplate(arg1:string,arg2:main.TemplateInput):Promise<Record<string, boolean>>;
+
 export function Upload(arg1:string,arg2:string,arg3:Array<number>):Promise<Record<string, string>>;

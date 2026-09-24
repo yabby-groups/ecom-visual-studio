@@ -134,6 +134,75 @@
   resize: vertical;
   line-height: 1.55;
 }
+.template-image-field {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 700;
+}
+.template-image-picker {
+  display: grid;
+  grid-template-columns: minmax(130px, 180px) minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #3f4b5d;
+  border-radius: 8px;
+  background: #252d39;
+}
+.template-image-picker > img,
+.template-image-empty {
+  width: 100%;
+  height: 132px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.06);
+}
+.template-image-picker > img {
+  display: block;
+  object-fit: contain;
+}
+.template-image-empty {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  color: #c4cde0;
+  font-size: 11px;
+  font-weight: 400;
+  text-align: center;
+}
+.template-image-picker-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.template-image-picker-actions small {
+  flex: 1 0 100%;
+  color: #bfc9d8;
+  font-size: 11px;
+  font-weight: 400;
+}
+.template-image-picker-actions .button {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+:root[data-theme="dark"] .template-image-picker-actions .button.secondary {
+  border-color: #526176;
+  background: #293240;
+  color: #edf2f7;
+}
+:root[data-theme="dark"] .template-image-picker-actions .button.secondary:hover:not(:disabled) {
+  border-color: #71839c;
+  background: #354153;
+}
 .template-ratio-select {
   position: relative;
   min-width: 0;
@@ -177,6 +246,17 @@
   border-color: #71839c;
   background: #354153;
 }
+.template-delete-dialog .template-create-actions {
+  margin-top: 22px;
+}
+:root[data-theme="dark"] .template-create-actions .template-delete-confirm,
+:root[data-theme="light"] .template-create-actions .template-delete-confirm,
+:root[data-theme="dark"] .template-create-actions .template-delete-confirm:hover:not(:disabled),
+:root[data-theme="light"] .template-create-actions .template-delete-confirm:hover:not(:disabled) {
+  border-color: #9b454b;
+  background: #a83e46;
+  color: #fff;
+}
 :root[data-theme="light"] .template-create-backdrop {
   background: var(--scrim);
 }
@@ -186,7 +266,7 @@
   color: var(--ink);
   box-shadow: 0 24px 64px rgba(42, 32, 23, 0.22);
 }
-:root[data-theme="light"] .template-create-head p {
+:root[data-theme="light"] main .template-create-head p {
   color: var(--muted);
 }
 :root[data-theme="light"] .template-create-head .icon-button,
@@ -194,6 +274,18 @@
   border-color: var(--line);
   background: var(--surface-muted);
   color: var(--ink);
+}
+:root[data-theme="light"] .template-image-picker {
+  border-color: var(--line);
+  background: var(--surface-muted);
+}
+:root[data-theme="light"] .template-image-picker > img,
+:root[data-theme="light"] .template-image-empty {
+  background: var(--surface-raised);
+}
+:root[data-theme="light"] .template-image-empty,
+:root[data-theme="light"] main .template-image-picker-actions small {
+  color: var(--muted);
 }
 :root[data-theme="light"] .template-ratio-select svg {
   color: var(--accent);
@@ -211,17 +303,13 @@
   position: relative;
   transition: height 160ms ease;
 }
-.template-tile {
+.template-tile-card {
   position: absolute;
   width: calc((100% - 32px) / 3);
-  margin: 0;
   overflow: hidden;
-  padding: 0;
   border: 1px solid var(--line);
   border-radius: 22px;
   background: rgba(255, 255, 255, 0.1);
-  color: #fff;
-  text-align: left;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15);
   backdrop-filter: blur(15px);
   transition:
@@ -230,9 +318,27 @@
     transform 160ms ease,
     border-color 160ms ease;
 }
-.template-tile:hover {
+.template-tile-card:hover,
+.template-tile-card:focus-within {
   border-color: rgba(255, 255, 255, 0.55);
   transform: translateY(-3px);
+}
+.template-tile {
+  width: 100%;
+  display: block;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #fff;
+  text-align: left;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+.template-tile:hover,
+.template-tile:focus-visible {
+  background: rgba(255, 255, 255, 0.04);
 }
 .template-photo {
   width: 100%;
@@ -252,7 +358,7 @@
 .template-tile > div {
   display: grid;
   gap: 7px;
-  padding: 15px;
+  padding: 15px 15px 10px;
 }
 .template-tile small,
 .template-tile span {
@@ -277,9 +383,66 @@
   font-style: normal;
   font-weight: 800;
 }
+.template-tile-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--line);
+}
+.template-tile-actions .button {
+  min-height: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 4px 9px;
+  font-size: 11px;
+}
+.template-tile-actions .template-delete-button {
+  color: #ffb7b7;
+}
+:root[data-theme="dark"] .template-tile-actions .button.secondary {
+  border-color: #566175;
+  background: #293240;
+  color: #edf2f7;
+}
+:root[data-theme="dark"] .template-tile-actions .button.secondary:hover:not(:disabled) {
+  border-color: #7a8aa2;
+  background: #354153;
+}
+:root[data-theme="dark"] .template-tile-actions .button.secondary.template-delete-button {
+  border-color: #8b515b;
+  background: #3c2933;
+  color: #ffd0d2;
+}
+:root[data-theme="dark"] .template-tile-actions .button.secondary.template-delete-button:hover:not(:disabled) {
+  border-color: #b46a74;
+  background: #50303b;
+}
+:root[data-theme="light"] .template-tile-card {
+  border-color: var(--line);
+  background: var(--surface-raised);
+  box-shadow: 0 8px 20px rgba(55, 41, 25, 0.06);
+}
+:root[data-theme="light"] .template-tile-card:hover,
+:root[data-theme="light"] .template-tile-card:focus-within {
+  border-color: #c7a76d;
+}
+:root[data-theme="light"] .template-tile {
+  color: var(--ink);
+}
+:root[data-theme="light"] .template-tile:hover,
+:root[data-theme="light"] .template-tile:focus-visible {
+  background: #fff8eb;
+}
+:root[data-theme="light"] .template-tile-actions .button.secondary.template-delete-button {
+  color: #a33c3c;
+}
 
 @media (max-width: 640px) {
-  .template-tile {
+  .template-tile-card {
     width: 100%;
   }
 }
@@ -302,13 +465,20 @@
   .template-create-dialog {
     padding: 20px;
   }
+  .template-image-picker {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .template-image-picker > img,
+  .template-image-empty {
+    height: 160px;
+  }
   .template-wall {
     display: grid;
     grid-template-columns: 1fr;
     gap: 12px;
     height: auto !important;
   }
-  .template-tile {
+  .template-tile-card {
     position: relative;
     top: auto !important;
     left: auto !important;

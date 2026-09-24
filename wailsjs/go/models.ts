@@ -78,6 +78,7 @@ export namespace main {
 	    name: string;
 	    ratio: string;
 	    direction: string;
+	    image_path: string;
 
 	    static createFrom(source: any = {}) {
 	        return new TemplateInput(source);
@@ -88,6 +89,7 @@ export namespace main {
 	        this.name = source["name"];
 	        this.ratio = source["ratio"];
 	        this.direction = source["direction"];
+	        this.image_path = source["image_path"];
 	    }
 	}
 	export class TryOnInput {

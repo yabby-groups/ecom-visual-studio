@@ -172,7 +172,7 @@ func (s *Studio) migrate() error {
 		"create table if not exists projects (id text primary key, user_id text not null, name text not null, product text not null, description text not null default '', benefits text not null default '', color text not null default '', reference text not null default '', created_at integer not null)",
 		"create table if not exists assets (id text primary key, project_id text not null, title text not null, template text not null, ratio text not null, prompt text not null default '', status text not null, file_path text, generation_started_at integer, created_at integer not null)",
 		"create table if not exists asset_versions (id text primary key, asset_id text not null, file_path text not null, generation_started_at integer, created_at integer not null)",
-		"create table if not exists custom_templates (id text primary key, user_id text not null, name text not null, ratio text not null, direction text not null, created_at integer not null)",
+		"create table if not exists custom_templates (id text primary key, user_id text not null, name text not null, ratio text not null, direction text not null, created_at integer not null, image_path text not null default '')",
 		"create table if not exists settings (user_id text primary key, token_id text not null default '', image_model text not null default '', text_model text not null default '', chat_model text not null default '', wallet_balance text not null default '', total_consumed_cost text not null default '', today_consumed_cost text not null default '', token_balances_json text not null default '[]', subscription_daily_quotas_json text not null default '[]')",
 		"create table if not exists tokens (id text primary key, user_id text not null, name text not null, secret text not null, masked text not null default '', status integer not null default 1, today_cost text not null default '0', total_cost text not null default '0')",
 		"create table if not exists models (id text primary key, user_id text not null, name text not null, alias text not null, api_modes text not null default '[]')",
@@ -224,6 +224,9 @@ func (s *Studio) migrate() error {
 		return err
 	}
 	if _, err := s.db.Exec("alter table models add column api_modes text not null default '[]'"); err != nil && !strings.Contains(err.Error(), "duplicate column") {
+		return err
+	}
+	if _, err := s.db.Exec("alter table custom_templates add column image_path text not null default ''"); err != nil && !strings.Contains(err.Error(), "duplicate column") {
 		return err
 	}
 	return nil
@@ -542,6 +545,23 @@ func (s *Studio) generatedAssetPath(path string) (string, error) {
 	generatedRoot := filepath.Join(s.dataDir, "storage", "generated")
 	file := filepath.Join(s.dataDir, "storage", rel)
 	if rel == "." || strings.HasPrefix(rel, "..") || !strings.HasPrefix(rel, "generated"+string(filepath.Separator)) || !isWithin(generatedRoot, file) {
+		return "", errors.New("图片文件无效")
+	}
+	info, err := os.Stat(file)
+	if err != nil {
+		return "", err
+	}
+	if !info.Mode().IsRegular() {
+		return "", errors.New("图片文件无效")
+	}
+	return file, nil
+}
+
+func (s *Studio) uploadedImagePath(path string) (string, error) {
+	rel := filepath.Clean(filepath.FromSlash(path))
+	uploadsRoot := filepath.Join(s.dataDir, "storage", "uploads")
+	file := filepath.Join(s.dataDir, "storage", rel)
+	if rel == "." || strings.HasPrefix(rel, "..") || !strings.HasPrefix(rel, "uploads"+string(filepath.Separator)) || !isWithin(uploadsRoot, file) {
 		return "", errors.New("图片文件无效")
 	}
 	info, err := os.Stat(file)

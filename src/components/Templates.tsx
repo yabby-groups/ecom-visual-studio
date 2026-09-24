@@ -5,13 +5,24 @@ import {
   useRef,
   useState,
 } from "react";
-import { ChevronDown, LoaderCircle, Plus, Sparkles, X } from "lucide-react";
+import {
+  ChevronDown,
+  ImagePlus,
+  LoaderCircle,
+  Pencil,
+  Plus,
+  Sparkles,
+  Trash2,
+  X,
+} from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { client } from "../api";
 import { nativeImageRatios } from "../constants/imageSizes";
 import { Shell } from "./Shell";
 import { useAppStore } from "../store";
 import { useAiInteraction } from "../aiInteraction";
+import type { Template } from "../types";
+import { fileUrl } from "../utils/assets";
 import "./Templates.css";
 
 export function Templates() {
@@ -21,13 +32,18 @@ export function Templates() {
   const { registerPage } = useAiInteraction();
   const [error, setError] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
+  const [editTemplate, setEditTemplate] = useState<Template | null>(null);
+  const [deleteTemplate, setDeleteTemplate] = useState<Template | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [imagePath, setImagePath] = useState("");
+  const [imageBusy, setImageBusy] = useState(false);
   const savingRef = useRef(false);
   const createButtonRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const wallRef = useRef<HTMLDivElement>(null);
-  const tileRefs = useRef(new Map<string, HTMLButtonElement>());
+  const tileRefs = useRef(new Map<string, HTMLElement>());
   const [masonry, setMasonry] = useState({
     height: 0,
     positions: {} as Record<string, { left: number; top: number }>,
@@ -118,18 +134,53 @@ export function Templates() {
     savingRef.current = true;
     setSaving(true);
     try {
-      await client.addTemplate({
+      const body = {
         name: String(form.get("name")),
         ratio: String(form.get("ratio")),
         direction: String(form.get("direction")),
-      });
+        image_path: imagePath,
+      };
+      if (editTemplate) {
+        await client.updateTemplate(editTemplate.id, body);
+      } else {
+        await client.addTemplate(body);
+      }
       await refresh();
       setCreateOpen(false);
+      setEditTemplate(null);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "保存失败");
     } finally {
       savingRef.current = false;
       setSaving(false);
+    }
+  }
+  async function confirmDelete() {
+    if (!deleteTemplate || deleting) return;
+    setError("");
+    setDeleting(true);
+    try {
+      await client.deleteTemplate(deleteTemplate.id);
+      await refresh();
+      setDeleteTemplate(null);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "删除失败");
+    } finally {
+      setDeleting(false);
+    }
+  }
+  async function chooseTemplateImage() {
+    setError("");
+    setImageBusy(true);
+    try {
+      const { path } = await client.pickImage();
+      setImagePath(path);
+    } catch (reason) {
+      if (!(reason instanceof Error && reason.message === "未选择图片")) {
+        setError(reason instanceof Error ? reason.message : "选择图片失败");
+      }
+    } finally {
+      setImageBusy(false);
     }
   }
   useEffect(() => {
@@ -142,7 +193,7 @@ export function Templates() {
       if (event.key !== "Tab" || !dialogRef.current) return;
       const focusable = Array.from(
         dialogRef.current.querySelectorAll<HTMLElement>(
-          'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled)',
+          "button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled)",
         ),
       );
       const first = focusable[0];
@@ -235,6 +286,8 @@ export function Templates() {
             ref={createButtonRef}
             onClick={() => {
               setError("");
+              setEditTemplate(null);
+              setImagePath("");
               setCreateOpen(true);
             }}
           >
@@ -249,13 +302,13 @@ export function Templates() {
         >
           {templates.map((item) => {
             const direction = guide[item.id];
+            const preview = item.custom
+              ? fileUrl(item.image_path)
+              : direction?.[0];
             const position = masonry.positions[item.id];
             return (
-              <button
-                className="template-tile"
-                onClick={() =>
-                  navigate(`/new?template=${encodeURIComponent(item.id)}`)
-                }
+              <article
+                className="template-tile-card"
                 key={item.id}
                 ref={(tile) => {
                   if (tile) tileRefs.current.set(item.id, tile);
@@ -267,28 +320,63 @@ export function Templates() {
                     : undefined
                 }
               >
-                {direction ? (
-                  <img
-                    className="template-photo"
-                    src={direction[0]}
-                    alt={`${item.name} 模板示例`}
-                    loading="lazy"
-                  />
-                ) : (
-                  <div className="template-custom-preview" aria-hidden="true">
-                    <Sparkles size={28} />
+                <button
+                  className="template-tile"
+                  onClick={() =>
+                    navigate(`/new?template=${encodeURIComponent(item.id)}`)
+                  }
+                >
+                  {preview ? (
+                    <img
+                      className="template-photo"
+                      src={preview}
+                      alt={`${item.name} 模板示例`}
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="template-custom-preview" aria-hidden="true">
+                      <Sparkles size={28} />
+                    </div>
+                  )}
+                  <div>
+                    <small>
+                      {item.group} · {item.ratio}
+                    </small>
+                    <b>{item.name}</b>
+                    <p>{direction?.[1] || item.direction}</p>
+                    {direction && <span>{direction[2]}</span>}
+                    <i>使用此模板</i>
+                  </div>
+                </button>
+                {item.custom && (
+                  <div className="template-tile-actions">
+                    <button
+                      className="button secondary"
+                      type="button"
+                      onClick={() => {
+                        setError("");
+                        setEditTemplate(item);
+                        setImagePath(item.image_path ?? "");
+                        setCreateOpen(true);
+                      }}
+                    >
+                      <Pencil size={14} aria-hidden="true" />
+                      编辑
+                    </button>
+                    <button
+                      className="button secondary template-delete-button"
+                      type="button"
+                      onClick={() => {
+                        setError("");
+                        setDeleteTemplate(item);
+                      }}
+                    >
+                      <Trash2 size={14} aria-hidden="true" />
+                      删除
+                    </button>
                   </div>
                 )}
-                <div>
-                  <small>
-                    {item.group} · {item.ratio}
-                  </small>
-                  <b>{item.name}</b>
-                  <p>{direction?.[1] || item.direction}</p>
-                  {direction && <span>{direction[2]}</span>}
-                  <i>使用此模板</i>
-                </div>
-              </button>
+              </article>
             );
           })}
         </div>
@@ -297,7 +385,7 @@ export function Templates() {
         <div
           className="template-create-backdrop"
           role="presentation"
-          onClick={() => !saving && setCreateOpen(false)}
+          onClick={() => !saving && !imageBusy && setCreateOpen(false)}
         >
           <section
             className="template-create-dialog"
@@ -310,8 +398,12 @@ export function Templates() {
           >
             <div className="template-create-head">
               <div>
-                <h2 id="template-create-title">新建场景模板</h2>
-                <p id="template-create-description">保存后可在新建项目或项目工作区中使用</p>
+                <h2 id="template-create-title">
+                  {editTemplate ? "编辑场景模板" : "新建场景模板"}
+                </h2>
+                <p id="template-create-description">
+                  保存后可在新建项目或项目工作区中使用
+                </p>
               </div>
               <button
                 className="icon-button"
@@ -319,7 +411,7 @@ export function Templates() {
                 aria-label="关闭"
                 title="关闭"
                 onClick={() => setCreateOpen(false)}
-                disabled={saving}
+                disabled={saving || imageBusy}
               >
                 <X size={18} />
               </button>
@@ -332,13 +424,17 @@ export function Templates() {
                   name="name"
                   maxLength={80}
                   placeholder="例如：户外跑步场景"
+                  defaultValue={editTemplate?.name ?? ""}
                   required
                 />
               </label>
               <label>
                 画面比例
                 <span className="template-ratio-select">
-                  <select name="ratio" defaultValue="1:1">
+                  <select
+                    name="ratio"
+                    defaultValue={editTemplate?.ratio ?? "1:1"}
+                  >
                     {nativeImageRatios.map(({ ratio, label, size }) => (
                       <option value={ratio} key={ratio}>
                         {ratio} {label} · {size}
@@ -348,12 +444,56 @@ export function Templates() {
                   <ChevronDown aria-hidden="true" size={18} strokeWidth={2.5} />
                 </span>
               </label>
+              <div className="template-image-field">
+                <span>模板图片</span>
+                <div className="template-image-picker">
+                  {imagePath ? (
+                    <img src={fileUrl(imagePath)} alt="模板图片预览" />
+                  ) : (
+                    <div className="template-image-empty">
+                      <ImagePlus size={24} aria-hidden="true" />
+                      <span>添加一张模板示例图片</span>
+                    </div>
+                  )}
+                  <div className="template-image-picker-actions">
+                    <small>JPG、PNG 或 WebP，最大 15MB</small>
+                    <button
+                      className="button secondary"
+                      type="button"
+                      onClick={() => void chooseTemplateImage()}
+                      disabled={imageBusy || saving}
+                    >
+                      {imageBusy ? (
+                        <LoaderCircle
+                          className="spin"
+                          size={15}
+                          aria-hidden="true"
+                        />
+                      ) : (
+                        <ImagePlus size={15} aria-hidden="true" />
+                      )}
+                      {imagePath ? "替换图片" : "选择图片"}
+                    </button>
+                    {imagePath && (
+                      <button
+                        className="button secondary"
+                        type="button"
+                        onClick={() => setImagePath("")}
+                        disabled={imageBusy || saving}
+                      >
+                        移除图片
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
               <label>
                 场景描述
                 <textarea
                   name="direction"
                   maxLength={1800}
                   placeholder="描述背景、光线、构图和商品如何出现"
+                  defaultValue={editTemplate?.direction ?? ""}
                   required
                 />
               </label>
@@ -367,18 +507,88 @@ export function Templates() {
                   className="button secondary"
                   type="button"
                   onClick={() => setCreateOpen(false)}
-                  disabled={saving}
+                  disabled={saving || imageBusy}
                 >
                   取消
                 </button>
-                <button className="create-button" type="submit" disabled={saving}>
+                <button
+                  className="create-button"
+                  type="submit"
+                  disabled={saving || imageBusy}
+                >
                   {saving && (
-                    <LoaderCircle className="spin" size={16} aria-hidden="true" />
+                    <LoaderCircle
+                      className="spin"
+                      size={16}
+                      aria-hidden="true"
+                    />
                   )}
-                  保存模板
+                  {editTemplate ? "保存修改" : "保存模板"}
                 </button>
               </div>
             </form>
+          </section>
+        </div>
+      )}
+      {deleteTemplate && (
+        <div
+          className="template-create-backdrop"
+          role="presentation"
+          onClick={() => !deleting && setDeleteTemplate(null)}
+        >
+          <section
+            className="template-create-dialog template-delete-dialog"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="template-delete-title"
+            aria-describedby="template-delete-description"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="template-create-head">
+              <div>
+                <h2 id="template-delete-title">删除自定义模板？</h2>
+                <p id="template-delete-description">
+                  “{deleteTemplate.name}
+                  ”将从模板列表中移除。已有画面和生成结果会保留。
+                </p>
+              </div>
+              <button
+                className="icon-button"
+                type="button"
+                aria-label="关闭"
+                title="关闭"
+                onClick={() => setDeleteTemplate(null)}
+                disabled={deleting}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            {error && (
+              <p className="form-error" role="alert">
+                {error}
+              </p>
+            )}
+            <div className="template-create-actions">
+              <button
+                className="button secondary"
+                type="button"
+                onClick={() => setDeleteTemplate(null)}
+                disabled={deleting}
+              >
+                取消
+              </button>
+              <button
+                className="create-button template-delete-confirm"
+                type="button"
+                onClick={() => void confirmDelete()}
+                disabled={deleting}
+              >
+                {deleting && (
+                  <LoaderCircle className="spin" size={16} aria-hidden="true" />
+                )}
+                确认删除
+              </button>
+            </div>
           </section>
         </div>
       )}

@@ -76,8 +76,21 @@ export const client = {
   generateAsset: (id: string) => call("GenerateAsset", id),
   generatePack: (id: string) => call("GeneratePack", id),
   templates: () => call<Template[]>("Templates"),
-  addTemplate: (body: { name: string; ratio: string; direction: string }) =>
-    call("AddTemplate", body),
+  addTemplate: (body: {
+    name: string;
+    ratio: string;
+    direction: string;
+    image_path?: string;
+  }) => call("AddTemplate", body),
+  updateTemplate: (
+    id: string,
+    body: {
+      name: string;
+      ratio: string;
+      direction: string;
+      image_path?: string;
+    },
+  ) => call("UpdateTemplate", id, body),
   deleteTemplate: (id: string) => call("DeleteTemplate", id),
   upload: uploadFile,
   pickImage: () => call<{ path: string }>("PickImage"),
@@ -111,7 +124,12 @@ export const client = {
       }
     });
     try {
-      const result = await call<AiChatResult>("Chat", requestID, messages, context);
+      const result = await call<AiChatResult>(
+        "Chat",
+        requestID,
+        messages,
+        context,
+      );
       if (!receivedDelta && result.text) onDelta(result.text);
       return result;
     } finally {
