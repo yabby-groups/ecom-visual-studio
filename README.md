@@ -1,6 +1,6 @@
 # Ecom Visual Studio
 
-Ecom Visual Studio is an authenticated workspace for creating e-commerce product visuals with huabot-compatible AI services. It combines a React studio with a FastAPI backend so teams can turn a product reference into individual images or reusable visual packs.
+Ecom Visual Studio is a Go/Wails desktop workspace for creating e-commerce product visuals with huabot-compatible AI services. It combines a React studio with a local Go service layer so teams can turn a product reference into individual images or reusable visual packs.
 
 ## What it does
 
@@ -14,16 +14,17 @@ Ecom Visual Studio is an authenticated workspace for creating e-commerce product
 ## Architecture
 
 - `src/` contains the React + TypeScript application built with Vite.
-- `backend/main.py` contains the FastAPI application, SQLite persistence, huabot integration, uploads, and background generation workflow.
-- `tests/test_api.py` covers API lifecycle, authorization, validation, and external-service boundaries.
-- `storage/` is created at runtime for the SQLite database, uploads, and generated files. It is intentionally ignored by Git.
+- `main.go`, `app.go`, `desktop_*.go`, and `studio_data.go` contain the Wails entrypoint, local persistence, Huabot integration, uploads, and generation workflow.
+- `*_test.go` covers lifecycle, authorization, validation, persistence, generation, and external-service boundaries. `src/**/*.test.ts` covers frontend behavior.
+- `storage/` and the desktop application data directory are runtime-only. They are intentionally ignored by Git.
 
-The browser uses relative `/api` and `/files` URLs. During development, Vite proxies both paths to the backend at `http://127.0.0.1:8000`; this keeps local and same-origin deployments aligned.
+The old `backend/` FastAPI implementation and its Python tests remain only as legacy reference material. They are not part of the supported desktop runtime, development server, or validation workflow.
 
 ## Prerequisites
 
 - Node.js and npm
-- Python 3 with a virtual environment
+- Go 1.25 or the version declared by `go.mod`
+- Wails v2 and the target platform build tools
 - A huabot-compatible account and endpoint for live login, model lookup, chat, analysis, and image generation
 
 ## Setup
@@ -32,14 +33,6 @@ Install frontend dependencies:
 
 ```sh
 npm install
-```
-
-Create and activate a Python virtual environment, then install backend dependencies:
-
-```sh
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
 ```
 
 Create a local `.env` file in the repository root. Do not commit it.
@@ -63,20 +56,13 @@ The application stores the selected account token encrypted on the server. Raw t
 
 ## Run locally
 
-Start the backend in one terminal:
+Start the supported Wails desktop application:
 
 ```sh
-source .venv/bin/activate
-uvicorn backend.main:app --reload
+npm run desktop:dev
 ```
 
-Start the frontend in another terminal:
-
-```sh
-npm run dev
-```
-
-Open the Vite URL shown in the terminal, normally `http://127.0.0.1:5173`. Sign in with a huabot account; an HTTP-only session cookie keeps the browser authenticated.
+The Wails runtime starts the React frontend and Go service layer together. Sign in with a Huabot account; credentials and local session data stay in the desktop application data directory.
 
 ## Desktop application
 
@@ -103,10 +89,11 @@ Video analysis needs FFmpeg and FFprobe. Packaging downloads target-specific sta
 ```sh
 npm test
 npm run build
-pytest
+go test ./...
+go vet ./...
 ```
 
-Use `npm test` for frontend tests, `npm run build` to type-check and produce the Vite build, and `pytest` for FastAPI/API-contract changes. Backend tests mock external calls and do not require live huabot credentials.
+Use `npm test` for frontend tests, `npm run build` to type-check and produce the frontend build, and `go test ./...` plus `go vet ./...` for Go/Wails and desktop API changes. Go tests mock external calls and do not require live Huabot credentials. Python commands are not supported validation steps.
 
 ## Runtime behavior and limits
 

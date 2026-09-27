@@ -9,13 +9,6 @@
     pkgs.pkgsCross.mingw32.stdenv.cc
   ];
 
-  languages.python = {
-    enable = true;
-    # version = "3.12";
-    venv.enable = true;
-    venv.requirements = ./requirements.txt;
-  };
-
   tasks = {
     "ecom:install-frontend" = {
       exec = "npm ci";
@@ -24,17 +17,18 @@
   };
 
   processes = {
-    backend.exec = "uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000";
     frontend.exec = "npm run dev -- --host 127.0.0.1";
   };
 
   scripts.test.exec = ''
-    pytest -q
+    go test ./...
+    go vet ./...
     npm test
   '';
 
   enterShell = ''
-    echo "Run 'devenv up' to start the API and web client."
+    echo "Run 'npm run desktop:dev' for the supported Go/Wails application."
+    echo "Run 'devenv up' for the frontend-only Vite process."
     echo "Run 'devenv shell test' to run the test suite."
   '';
 }
