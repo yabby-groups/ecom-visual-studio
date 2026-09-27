@@ -47,7 +47,7 @@ func (s *Studio) UploadVideoReplicaVideo(name, contentType string, data []byte) 
 	}
 	detected := strings.ToLower(strings.Split(http.DetectContentType(data), ";")[0])
 	if !strings.HasPrefix(detected, "video/") && !(ext == ".mp4" && detected == "application/octet-stream") {
-		return nil, errors.New("上传文件不是有效视频")
+		return nil, errors.New("所选文件不是有效视频")
 	}
 	path := filepath.Join(s.dataDir, "storage", "uploads", newID("video-upload")+ext)
 	if err := os.WriteFile(path, data, 0o600); err != nil {
@@ -300,7 +300,7 @@ func (s *Studio) pollVideoReplica(pollingURL, key, id string, started int64) err
 			}
 			defer response.Body.Close()
 			if response.StatusCode < 200 || response.StatusCode >= 300 {
-				return fmt.Errorf("下载视频失败：HTTP %d", response.StatusCode)
+				return fmt.Errorf("获取视频失败：HTTP %d", response.StatusCode)
 			}
 			path := filepath.Join(s.dataDir, "storage", "generated", "video-replica", id, fmt.Sprintf("%d.mp4", time.Now().UnixNano()))
 			if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {

@@ -401,7 +401,7 @@ func (s *Studio) storeUpload(name, contentType string, data []byte) (map[string]
 		return nil, errors.New("仅支持 JPG、PNG、WebP 图片")
 	}
 	if detected := http.DetectContentType(data); !strings.HasPrefix(detected, "image/") {
-		return nil, errors.New("上传文件不是有效图片")
+		return nil, errors.New("所选文件不是有效图片")
 	}
 	path := filepath.Join("uploads", stableID(fmt.Sprintf("%s-%d", name, time.Now().UnixNano()))+ext)
 	if err := os.WriteFile(filepath.Join(s.dataDir, "storage", path), data, 0o600); err != nil {
@@ -445,7 +445,7 @@ func (s *Studio) downloadPublicImage(rawURL string) ([]byte, string, error) {
 	for attempt := 0; attempt < imageImportMaxAttempts; attempt++ {
 		request, err := http.NewRequest(http.MethodGet, rawURL, nil)
 		if err != nil {
-			return nil, "", fmt.Errorf("下载图片失败: %w", err)
+			return nil, "", fmt.Errorf("获取图片失败: %w", err)
 		}
 		setBrowserImageHeaders(request)
 		response, err := client.Do(request)
@@ -458,7 +458,7 @@ func (s *Studio) downloadPublicImage(rawURL string) ([]byte, string, error) {
 			err = readErr
 		} else if err == nil {
 			response.Body.Close()
-			err = fmt.Errorf("下载图片失败: HTTP %d", response.StatusCode)
+			err = fmt.Errorf("获取图片失败: HTTP %d", response.StatusCode)
 		}
 
 		lastErr = err
@@ -468,7 +468,7 @@ func (s *Studio) downloadPublicImage(rawURL string) ([]byte, string, error) {
 		time.Sleep(time.Duration(attempt+1) * 250 * time.Millisecond)
 	}
 	if isImageImportTimeout(lastErr) {
-		return nil, "", errors.New("图片下载超时，请稍后重新导入")
+		return nil, "", errors.New("获取图片超时，请稍后重新导入")
 	}
 	return nil, "", lastErr
 }
@@ -552,14 +552,14 @@ func (s *Studio) generatedAssetPath(path string) (string, error) {
 	generatedRoot := filepath.Join(s.dataDir, "storage", "generated")
 	file := filepath.Join(s.dataDir, "storage", rel)
 	if rel == "." || strings.HasPrefix(rel, "..") || !strings.HasPrefix(rel, "generated"+string(filepath.Separator)) || !isWithin(generatedRoot, file) {
-		return "", errors.New("图片文件无效")
+		return "", errors.New("生成文件无效")
 	}
 	info, err := os.Stat(file)
 	if err != nil {
 		return "", err
 	}
 	if !info.Mode().IsRegular() {
-		return "", errors.New("图片文件无效")
+		return "", errors.New("生成文件无效")
 	}
 	return file, nil
 }
@@ -586,14 +586,17 @@ func (s *Studio) DownloadAsset(path string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	fileType := "图片"
+	filter := runtime.FileFilter{DisplayName: "图片文件", Pattern: "*.png;*.jpg;*.jpeg;*.webp"}
+	if strings.EqualFold(filepath.Ext(source), ".mp4") {
+		fileType = "视频"
+		filter = runtime.FileFilter{DisplayName: "视频文件", Pattern: "*.mp4"}
+	}
 	destination, err := runtime.SaveFileDialog(s.ctx, runtime.SaveDialogOptions{
-		Title:                "导出生成图片",
+		Title:                "导出生成" + fileType,
 		DefaultFilename:      filepath.Base(source),
 		CanCreateDirectories: true,
-		Filters: []runtime.FileFilter{{
-			DisplayName: "图片文件",
-			Pattern:     "*.png;*.jpg;*.jpeg;*.webp",
-		}},
+		Filters:              []runtime.FileFilter{filter},
 	})
 	if err != nil || destination == "" {
 		return false, err
@@ -609,7 +612,7 @@ func (s *Studio) DownloadAsset(path string) (bool, error) {
 		return false, err
 	}
 	if existing, statErr := os.Stat(destination); statErr == nil && os.SameFile(existing, sourceInfo) {
-		return false, errors.New("不能覆盖原始图片")
+		return false, errors.New("不能覆盖原始文件")
 	}
 	to, err := os.OpenFile(destination, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {

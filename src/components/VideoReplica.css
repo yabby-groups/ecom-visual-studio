@@ -25,6 +25,12 @@
 .video-upload-box video { width: 100%; max-height: 280px; object-fit: contain; border-radius: 6px; }
 .video-upload-box.has-video { min-height: 0; padding: 8px; }
 .video-upload-box input, .reference-add input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.video-upload-status { display: grid; justify-items: center; gap: 10px; width: min(280px, calc(100% - 32px)); }
+.video-upload-status svg { color: var(--accent); }
+.video-upload-status progress { width: 100%; height: 8px; appearance: none; border: 0; border-radius: 8px; overflow: hidden; background: var(--line); }
+.video-upload-status progress::-webkit-progress-bar { background: var(--line); }
+.video-upload-status progress::-webkit-progress-value { background: var(--accent); }
+.video-upload-status progress::-moz-progress-bar { background: var(--accent); }
 .reference-row { display: grid; gap: 9px; margin: 16px 0; color: var(--muted); font-size: 12px; }
 .reference-row > div:first-child { display: flex; align-items: baseline; gap: 8px; }
 .reference-row strong { color: var(--ink); font-size: 13px; }
@@ -43,7 +49,7 @@
 .video-controls { display: grid; grid-template-columns: repeat(5, 1fr); gap: 9px; margin-bottom: 14px; }
 .video-controls label { display: grid; align-content: start; gap: 6px; color: var(--muted); font-size: 11px; font-weight: 700; min-width: 0; }
 .video-controls .settings-select { min-width: 0; }
-.video-controls .settings-select-trigger { min-height: 42px; padding: 9px 10px; font-size: 12px; }
+.video-controls .settings-select-trigger { height: 48px; padding: 9px 10px; font-size: 12px; }
 .video-replica-panel-head { display: flex; align-items: end; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .video-stage { width: 100%; max-width: 100%; min-width: 0; aspect-ratio: 16 / 9; min-height: 250px; background: #191817; color: #bdb7ad; display: grid; place-items: center; align-content: center; gap: 8px; border-radius: 8px; overflow: hidden; text-align: center; }
 .video-stage video { width: 100%; height: 100%; object-fit: contain; }

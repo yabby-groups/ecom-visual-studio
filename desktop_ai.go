@@ -335,7 +335,7 @@ func (s *Studio) imageEdit(ctx context.Context, client openai.Client, model, pro
 func safeUpload(dataDir, path string) (*os.File, error) {
 	clean := filepath.Clean(path)
 	if !strings.HasPrefix(clean, "uploads"+string(filepath.Separator)) || strings.HasPrefix(clean, "..") {
-		return nil, errors.New("项目参考图必须先通过上传功能添加")
+		return nil, errors.New("请先添加项目参考图")
 	}
 	full := filepath.Join(dataDir, "storage", clean)
 	root := filepath.Join(dataDir, "storage", "uploads") + string(filepath.Separator)
@@ -405,11 +405,11 @@ func (s *Studio) imageBytes(result openai.Image) ([]byte, error) {
 	}
 	response, err := client.Get(result.URL)
 	if err != nil {
-		return nil, fmt.Errorf("下载图像服务返回的 URL 失败: %w", err)
+		return nil, fmt.Errorf("获取图像服务图片失败: %w", err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return nil, fmt.Errorf("下载图像服务返回的 URL 失败: HTTP %d", response.StatusCode)
+		return nil, fmt.Errorf("获取图像服务图片失败: HTTP %d", response.StatusCode)
 	}
 	image, err := io.ReadAll(io.LimitReader(response.Body, maxUploadBytes+1))
 	if err != nil {

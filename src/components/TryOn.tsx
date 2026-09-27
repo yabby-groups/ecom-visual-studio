@@ -145,7 +145,7 @@ function ReferenceSlot({
           </span>
           {loading && (
             <span className="try-on-upload-loading">
-              <LoaderCircle className="spin" size={22} /> 上传中
+              <LoaderCircle className="spin" size={22} /> 正在添加图片
             </span>
           )}
         </button>

@@ -159,7 +159,7 @@ export function NewProject() {
       setReference(result.path);
       setPreview(fileUrl(result.path));
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "上传失败");
+      setError(reason instanceof Error ? reason.message : "选择图片失败");
     } finally {
       setReferenceBusy(false);
     }
@@ -186,7 +186,7 @@ export function NewProject() {
       return;
     }
     if (mode === "image" && !reference) {
-      setError("请先上传或导入一张商品图片");
+      setError("请先选择或导入一张商品图片");
       return;
     }
     if (!requireAiAuth()) {

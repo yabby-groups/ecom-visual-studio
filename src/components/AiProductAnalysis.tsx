@@ -44,7 +44,7 @@ export function AiProductAnalysis({
           onClick={() => onAnalyze("image")}
         >
           <span aria-hidden="true">{mode === "image" ? "..." : "◎"}</span>
-          <b>{mode === "image" ? "正在分析" : "根据上传图片分析"}</b>
+          <b>{mode === "image" ? "正在分析" : "根据参考图分析"}</b>
           <small>
             {mode === "image"
               ? "请稍候，结果将自动填入"
