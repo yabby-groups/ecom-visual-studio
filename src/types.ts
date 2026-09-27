@@ -140,6 +140,45 @@ export type TryOnPage = {
   has_more: boolean;
 };
 
+export type VideoReplicaStoryboardItem = {
+  start: number;
+  end: number;
+  shot: string;
+  action: string;
+  dialogue: string;
+  continuity: string;
+};
+export type VideoReplicaVersion = {
+  id: string;
+  job_id: string;
+  source_version_id?: string;
+  file_path: string;
+  created_at: number;
+};
+export type VideoReplicaJob = {
+  id: string;
+  source_video_path: string;
+  reference_paths: string[];
+  task_type: "auto" | "reference" | "extend";
+  model: string;
+  prompt: string;
+  storyboard: VideoReplicaStoryboardItem[];
+  storyboard_confirmed: boolean;
+  duration: number;
+  resolution: string;
+  ratio: string;
+  status: AssetStatus;
+  file_path: string | null;
+  generation_started_at: number | null;
+  created_at: number;
+  versions: VideoReplicaVersion[];
+};
+export type VideoReplicaPage = {
+  items: VideoReplicaJob[];
+  total: number;
+  has_more: boolean;
+};
+
 export type AiAction = {
   type:
     | "navigate"

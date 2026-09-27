@@ -96,6 +96,8 @@ npm run desktop:build:all
 
 The macOS package is ad-hoc signed with App Sandbox and outgoing-network entitlements. macOS notarization, Windows signing, automatic updates, and legacy data import are intentionally out of scope.
 
+Video analysis needs FFmpeg and FFprobe. Packaging downloads target-specific standalone tools into `/tmp/ecom-visual-studio-media-tools` when they are not already cached. Apple Silicon uses static arm64 builds; Intel macOS uses the evermeet.cx builds. Set `FFMPEG_MACOS_ARM64_URL`, `FFMPEG_MACOS_X86_64_URL`, `FFMPEG_WINDOWS_AMD64_URL`, or `FFMPEG_WINDOWS_X86_URL` to override a download source, or set `FFPROBE_MACOS_ARM64_URL` or `FFPROBE_MACOS_X86_64_URL` to override the separate macOS FFprobe source. You can also set `FFMPEG_MACOS_ARM64_DIR`, `FFMPEG_MACOS_X86_64_DIR`, `FFMPEG_WINDOWS_AMD64_DIR`, and `FFMPEG_WINDOWS_X86_DIR` to use pre-downloaded directories. For an individual target, `FFMPEG_BIN_DIR` also works. The scripts verify the binary architecture, reject macOS builds with non-system dynamic library dependencies, and include the tools in the signed app, Windows installer, and portable Windows ZIPs. The Nix-profile FFmpeg build is dynamically linked to `/nix/store` and cannot be used as a redistributable macOS binary.
+
 ## Development checks
 
 ```sh

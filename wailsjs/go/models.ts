@@ -112,6 +112,34 @@ export namespace main {
 	        this.ratio = source["ratio"];
 	    }
 	}
+	export class VideoReplicaInput {
+	    source_video_path: string;
+	    reference_paths: string[];
+	    task_type: string;
+	    model: string;
+	    prompt: string;
+	    storyboard: any[];
+	    duration: number;
+	    resolution: string;
+	    ratio: string;
+
+	    static createFrom(source: any = {}) {
+	        return new VideoReplicaInput(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.source_video_path = source["source_video_path"];
+	        this.reference_paths = source["reference_paths"];
+	        this.task_type = source["task_type"];
+	        this.model = source["model"];
+	        this.prompt = source["prompt"];
+	        this.storyboard = source["storyboard"];
+	        this.duration = source["duration"];
+	        this.resolution = source["resolution"];
+	        this.ratio = source["ratio"];
+	    }
+	}
 	export class chatAction {
 	    type: string;
 	    summary: string;

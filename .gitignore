@@ -6,6 +6,7 @@ storage/
 desktop_assets/*
 !desktop_assets/.gitkeep
 build/bin/
+build/windows/installer/media-tools/
 __pycache__/
 .pytest_cache/
 .devenv/

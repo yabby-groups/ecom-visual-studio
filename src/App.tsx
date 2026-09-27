@@ -10,6 +10,7 @@ import { SettingsPage } from "./components/SettingsPage";
 import { Templates } from "./components/Templates";
 import { TryOn } from "./components/TryOn";
 import { Workspace } from "./components/Workspace";
+import { VideoReplica } from "./components/VideoReplica";
 import { useAppStore } from "./store";
 import { AiInteractionProvider } from "./aiInteraction";
 
@@ -32,6 +33,7 @@ export function App() {
         <Route path="/templates" element={<Templates />} />
         <Route path="/try-on" element={<TryOn />} />
         <Route path="/try-on/:id" element={<TryOn />} />
+        <Route path="/video-replica" element={<VideoReplica />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/login" element={<Login />} />
         <Route path="*" element={<Navigate to="/" replace />} />

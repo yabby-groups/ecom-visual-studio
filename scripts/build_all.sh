@@ -33,16 +33,18 @@ if [[ ${1:-} == --windows ]]; then
   fi
 
   "$ROOT/scripts/package-windows.sh"
-  WIN_X64="$DIST/EcomVisualStudio-windows-x64-v$VERSION.exe"
+  WIN_X64="$DIST/EcomVisualStudio-windows-x64-v$VERSION"
   WIN_X64_INSTALLER="$DIST/EcomVisualStudio-windows-x64-v$VERSION-installer.exe"
-  cp "$BIN/EcomVisualStudio.exe" "$WIN_X64"
+  mkdir -p "$WIN_X64"
+  cp "$BIN/EcomVisualStudio.exe" "$BIN/ffmpeg.exe" "$BIN/ffprobe.exe" "$WIN_X64/"
   cp "$BIN/Ecom Visual Studio-amd64-installer.exe" "$WIN_X64_INSTALLER"
   ditto -c -k --keepParent "$WIN_X64" "$WIN_X64.zip"
   echo "Packaged: $WIN_X64, $WIN_X64_INSTALLER, $WIN_X64.zip"
 
   "$ROOT/scripts/package-windows-x86.sh"
-  WIN_X86="$DIST/EcomVisualStudio-windows-x86-v$VERSION.exe"
-  cp "$BIN/EcomVisualStudio-x86.exe" "$WIN_X86"
+  WIN_X86="$DIST/EcomVisualStudio-windows-x86-v$VERSION"
+  mkdir -p "$WIN_X86"
+  cp "$BIN/windows-x86/EcomVisualStudio.exe" "$BIN/windows-x86/ffmpeg.exe" "$BIN/windows-x86/ffprobe.exe" "$WIN_X86/"
   ditto -c -k --keepParent "$WIN_X86" "$WIN_X86.zip"
   echo "Packaged: $WIN_X86, $WIN_X86.zip"
   exit 0

@@ -4,6 +4,7 @@ import {
   LayoutGrid,
   Moon,
   Shirt,
+  Video,
   Settings,
   Sparkles,
   Sun,
@@ -51,6 +52,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           <Nav to="/library" icon={<FolderOpen />} label="作品库" />
           <Nav to="/templates" icon={<Sparkles />} label="灵感模板" />
           <Nav to="/try-on" icon={<Shirt />} label="AI 换装" />
+          <Nav to="/video-replica" icon={<Video />} label="视频复刻" />
         </nav>
         <div className="rail-bottom sidebar-bottom">
           <Nav to="/settings" icon={<Settings />} label="设置" />
@@ -76,6 +78,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         <Nav to="/library" icon={<FolderOpen />} label="作品库" />
         <Nav to="/templates" icon={<Sparkles />} label="模板" />
         <Nav to="/try-on" icon={<Shirt />} label="换装" />
+        <Nav to="/video-replica" icon={<Video />} label="视频" />
         <Nav to="/settings" icon={<Settings />} label="设置" />
       </nav>
       <div className="shell-actions">

@@ -8,17 +8,23 @@ export function AddTemplate(arg1:main.TemplateInput):Promise<Record<string, stri
 
 export function Analyze(arg1:Record<string, string>):Promise<Record<string, any>>;
 
+export function AnalyzeVideoReplica(arg1:string):Promise<Record<string, any>>;
+
 export function ChangeAssetTemplate(arg1:string,arg2:string,arg3:boolean):Promise<Record<string, any>>;
 
 export function Chat(arg1:string,arg2:Array<Record<string, string>>,arg3:Record<string, any>):Promise<main.chatResult>;
 
 export function ChooseStorageDirectory():Promise<Record<string, any>>;
 
+export function ConfirmVideoReplicaStoryboard(arg1:string):Promise<Record<string, boolean>>;
+
 export function CreatePack(arg1:string,arg2:main.PackInput):Promise<Record<string, boolean>>;
 
 export function CreateProject(arg1:main.ProjectInput):Promise<Record<string, string>>;
 
 export function CreateTryOn(arg1:main.TryOnInput):Promise<Record<string, any>>;
+
+export function CreateVideoReplica(arg1:main.VideoReplicaInput):Promise<Record<string, string>>;
 
 export function DeleteProject(arg1:string):Promise<Record<string, boolean>>;
 
@@ -60,6 +66,8 @@ export function RefreshTokenSettings():Promise<Record<string, any>>;
 
 export function RegenerateTryOn(arg1:string):Promise<Record<string, boolean>>;
 
+export function RegenerateVideoReplica(arg1:string):Promise<Record<string, boolean>>;
+
 export function ResetPrompt(arg1:string):Promise<Record<string, string>>;
 
 export function SaveSettings(arg1:main.SettingsInput):Promise<Record<string, boolean>>;
@@ -80,4 +88,12 @@ export function UpdateAsset(arg1:string,arg2:main.AssetPatch):Promise<Record<str
 
 export function UpdateTemplate(arg1:string,arg2:main.TemplateInput):Promise<Record<string, boolean>>;
 
+export function UpdateVideoReplicaStoryboard(arg1:string,arg2:Array<Record<string, any>>):Promise<Record<string, boolean>>;
+
 export function Upload(arg1:string,arg2:string,arg3:Array<number>):Promise<Record<string, string>>;
+
+export function UploadVideoReplicaVideo(arg1:string,arg2:string,arg3:Array<number>):Promise<Record<string, string>>;
+
+export function VideoReplicaJob(arg1:string):Promise<Record<string, any>>;
+
+export function VideoReplicaJobs(arg1:number,arg2:number):Promise<Record<string, any>>;

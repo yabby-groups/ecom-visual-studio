@@ -87,6 +87,8 @@ Section
     SetOutPath $INSTDIR
 
     !insertmacro wails.files
+    File "/oname=ffmpeg.exe" "media-tools\ffmpeg.exe"
+    File "/oname=ffprobe.exe" "media-tools\ffprobe.exe"
 
     CreateShortcut "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
     CreateShortCut "$DESKTOP\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"

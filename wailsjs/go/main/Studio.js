@@ -14,6 +14,10 @@ export function Analyze(arg1) {
   return window['go']['main']['Studio']['Analyze'](arg1);
 }
 
+export function AnalyzeVideoReplica(arg1) {
+  return window['go']['main']['Studio']['AnalyzeVideoReplica'](arg1);
+}
+
 export function ChangeAssetTemplate(arg1, arg2, arg3) {
   return window['go']['main']['Studio']['ChangeAssetTemplate'](arg1, arg2, arg3);
 }
@@ -26,6 +30,10 @@ export function ChooseStorageDirectory() {
   return window['go']['main']['Studio']['ChooseStorageDirectory']();
 }
 
+export function ConfirmVideoReplicaStoryboard(arg1) {
+  return window['go']['main']['Studio']['ConfirmVideoReplicaStoryboard'](arg1);
+}
+
 export function CreatePack(arg1, arg2) {
   return window['go']['main']['Studio']['CreatePack'](arg1, arg2);
 }
@@ -36,6 +44,10 @@ export function CreateProject(arg1) {
 
 export function CreateTryOn(arg1) {
   return window['go']['main']['Studio']['CreateTryOn'](arg1);
+}
+
+export function CreateVideoReplica(arg1) {
+  return window['go']['main']['Studio']['CreateVideoReplica'](arg1);
 }
 
 export function DeleteProject(arg1) {
@@ -118,6 +130,10 @@ export function RegenerateTryOn(arg1) {
   return window['go']['main']['Studio']['RegenerateTryOn'](arg1);
 }
 
+export function RegenerateVideoReplica(arg1) {
+  return window['go']['main']['Studio']['RegenerateVideoReplica'](arg1);
+}
+
 export function ResetPrompt(arg1) {
   return window['go']['main']['Studio']['ResetPrompt'](arg1);
 }
@@ -158,6 +174,22 @@ export function UpdateTemplate(arg1, arg2) {
   return window['go']['main']['Studio']['UpdateTemplate'](arg1, arg2);
 }
 
+export function UpdateVideoReplicaStoryboard(arg1, arg2) {
+  return window['go']['main']['Studio']['UpdateVideoReplicaStoryboard'](arg1, arg2);
+}
+
 export function Upload(arg1, arg2, arg3) {
   return window['go']['main']['Studio']['Upload'](arg1, arg2, arg3);
+}
+
+export function UploadVideoReplicaVideo(arg1, arg2, arg3) {
+  return window['go']['main']['Studio']['UploadVideoReplicaVideo'](arg1, arg2, arg3);
+}
+
+export function VideoReplicaJob(arg1) {
+  return window['go']['main']['Studio']['VideoReplicaJob'](arg1);
+}
+
+export function VideoReplicaJobs(arg1, arg2) {
+  return window['go']['main']['Studio']['VideoReplicaJobs'](arg1, arg2);
 }

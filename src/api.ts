@@ -12,6 +12,8 @@ import type {
   TokenSettings,
   TryOnJob,
   TryOnPage,
+  VideoReplicaJob,
+  VideoReplicaPage,
   User,
 } from "./types";
 import { studio, uploadFile } from "./desktop";
@@ -114,6 +116,29 @@ export const client = {
   }) => call<{ id: string; ids: string[] }>("CreateTryOn", body),
   regenerateTryOn: (id: string) => call("RegenerateTryOn", id),
   deleteTryOn: (id: string) => call("DeleteTryOn", id),
+  uploadVideoReplicaVideo: (name: string, contentType: string, data: number[]) =>
+    call<{ path: string }>("UploadVideoReplicaVideo", name, contentType, data),
+  analyzeVideoReplica: (path: string) =>
+    call<{ storyboard: VideoReplicaJob["storyboard"] }>("AnalyzeVideoReplica", path),
+  updateVideoReplicaStoryboard: (id: string, storyboard: VideoReplicaJob["storyboard"]) =>
+    call("UpdateVideoReplicaStoryboard", id, storyboard),
+  confirmVideoReplicaStoryboard: (id: string) =>
+    call("ConfirmVideoReplicaStoryboard", id),
+  videoReplicaJobs: (limit = 12, offset = 0) =>
+    call<VideoReplicaPage>("VideoReplicaJobs", limit, offset),
+  videoReplicaJob: (id: string) => call<VideoReplicaJob>("VideoReplicaJob", id),
+  createVideoReplica: (body: {
+    source_video_path: string;
+    reference_paths: string[];
+    task_type: "auto" | "reference" | "extend";
+    model: string;
+    prompt: string;
+    storyboard: VideoReplicaJob["storyboard"];
+    duration: number;
+    resolution: string;
+    ratio: string;
+  }) => call<{ id: string }>("CreateVideoReplica", body),
+  regenerateVideoReplica: (id: string) => call("RegenerateVideoReplica", id),
   analyze: (body: { mode: string; product: string; reference: string }) =>
     call<{ description: string; benefits: string[] }>("Analyze", body),
   chat: async (
