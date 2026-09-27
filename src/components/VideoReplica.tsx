@@ -134,16 +134,15 @@ export function VideoReplica() {
       <section className="video-replica-editor">
         <div className={`video-replica-panel workflow-panel ${stepStatus(1)}`}>
           <div className="workflow-step-head"><div className="step-number">1</div><div><span className="step-kicker">素材</span><h2>选择原视频</h2><p>从本机选择一段要复刻的视频。</p></div><span className="step-state">{busy === "upload" ? "正在添加" : sourceReady ? "已添加" : "待选择"}</span></div>
-          <label className={`video-upload-box ${sourceReady && busy !== "upload" ? "has-video" : ""}`}>
+          <div className={`video-upload-box ${sourceReady && busy !== "upload" ? "has-video" : ""}`}>
             {busy === "upload" ? (
               <div className="video-upload-status" role="status" aria-live="polite">
                 <LoaderCircle className="spin" size={30} aria-hidden="true" />
                 <strong>{videoReadProgress === null ? "正在保存并校验视频…" : `正在读取视频 ${videoReadProgress}%`}</strong>
                 {videoReadProgress !== null && <progress value={videoReadProgress} max={100} aria-label="读取视频进度" />}
               </div>
-            ) : sourcePreview ? <video src={sourcePreview} controls /> : <><Film size={30} /><strong>点击选择本机视频</strong><span>MP4 / WebM / MOV · 最长 5 分钟</span></>}
-            <input type="file" accept="video/mp4,video/webm,video/quicktime" disabled={busy === "upload"} onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void uploadVideo(file); }} />
-          </label>
+            ) : sourcePreview ? <><video src={sourcePreview} controls /><label className="video-replace-action"><Upload size={15} />重新选择<input type="file" accept="video/mp4,video/webm,video/quicktime" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void uploadVideo(file); }} /></label></> : <label className="video-upload-prompt"><Film size={30} /><strong>点击选择本机视频</strong><span>MP4 / WebM / MOV · 最长 5 分钟</span><input type="file" accept="video/mp4,video/webm,video/quicktime" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void uploadVideo(file); }} /></label>}
+          </div>
           <div className="reference-row"><div><strong>参考素材</strong><span>可选，最多 4 张人物或商品图</span></div><div className="reference-thumbs">{referencePaths.map((path) => <button type="button" key={path} aria-label="移除参考图" onClick={() => setReferencePaths((items) => items.filter((item) => item !== path))}><img src={fileUrl(path)} alt="" /></button>)}<label className="reference-add"><Upload size={17} /><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadReference(file); }} />添加图片</label></div></div>
           <button className="button secondary workflow-action" type="button" disabled={!sourcePath || !!busy} onClick={() => void analyze()}>{busy === "analyze" ? <LoaderCircle className="spin" size={16} /> : <RefreshCw size={16} />}分析视频并生成分镜</button>
         </div>

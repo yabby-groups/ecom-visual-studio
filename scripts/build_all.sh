@@ -41,12 +41,6 @@ if [[ ${1:-} == --windows ]]; then
   ditto -c -k --keepParent "$WIN_X64" "$WIN_X64.zip"
   echo "Packaged: $WIN_X64, $WIN_X64_INSTALLER, $WIN_X64.zip"
 
-  "$ROOT/scripts/package-windows-x86.sh"
-  WIN_X86="$DIST/EcomVisualStudio-windows-x86-v$VERSION"
-  mkdir -p "$WIN_X86"
-  cp "$BIN/windows-x86/EcomVisualStudio.exe" "$BIN/windows-x86/ffmpeg.exe" "$BIN/windows-x86/ffprobe.exe" "$WIN_X86/"
-  ditto -c -k --keepParent "$WIN_X86" "$WIN_X86.zip"
-  echo "Packaged: $WIN_X86, $WIN_X86.zip"
   exit 0
 fi
 
