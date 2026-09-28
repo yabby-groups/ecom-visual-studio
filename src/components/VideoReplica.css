@@ -1,6 +1,6 @@
 .video-replica-header { grid-template-columns: minmax(0, 1fr) auto; padding: 28px 40px 24px; color: var(--ink); }
 .video-replica-header > div:first-child { grid-column: 1; }
-.video-replica-title h1 { margin: 0; font-size: 28px; line-height: 1.15; }
+.video-replica-title h1 { margin: 0; font-size: 30px; line-height: 1.15; }
 .video-replica-title p { max-width: 560px; margin: 8px 0 0; color: var(--muted); line-height: 1.55; }
 .video-replica-meta { grid-column: 2; display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12px; }
 .workflow-badge { padding: 6px 9px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--accent-dark); font-weight: 700; }
@@ -76,8 +76,23 @@
 .generation-segment.failed { border-color: var(--danger); color: var(--danger); }
 .video-result-actions { display: flex; gap: 8px; }
 .video-result-actions .button { flex: 1; }
+.preview-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 4px 2px 0; }
+.preview-meta span { display: grid; gap: 4px; }
+.preview-meta small { color: var(--muted); font-size: 11px; }
+.preview-meta b { color: var(--ink); font-size: 13px; }
+.privacy-note { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 0; color: var(--muted); font-size: 11px; }
+.privacy-note svg { color: var(--accent); }
+.video-template-section { grid-column: 1 / -1; padding-top: 20px; }
+.template-section-heading { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+.template-section-heading h2 { margin: 0; font-size: 21px; }
+.video-template-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.video-template-card { overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); text-align: left; }
+.video-template-card img { display: block; width: 100%; aspect-ratio: 16 / 8; object-fit: cover; }
+.video-template-card-copy { display: grid; gap: 5px; padding: 13px 14px 15px; }
+.video-template-card-copy strong { font-size: 14px; }
+.video-template-card-copy small { color: var(--muted); line-height: 1.45; }
 .video-history-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 0 12px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: inherit; }
 .video-history-select { display: grid; grid-template-columns: 90px minmax(0, 1fr) 100px 180px; align-items: center; text-align: left; gap: 12px; padding: 13px 0; border: 0; background: transparent; color: inherit; cursor: pointer; }
 .video-history-item.active { border-color: var(--accent); background: var(--surface); }
 .video-history-item small, .video-history-item time { color: var(--muted); }
-@media (max-width: 900px) { .video-replica-header { grid-template-columns: 1fr; padding: 22px 16px 18px; } .video-replica-header > div:first-child, .video-replica-meta { grid-column: 1; } .video-replica-meta { margin-top: 4px; } .video-replica { grid-template-columns: 1fr; padding: 0 14px 28px; } .video-replica-preview, .video-replica-history { grid-column: auto; grid-row: auto; } .video-replica-preview { position: static; order: -1; } .video-controls { grid-template-columns: repeat(2, 1fr); } .video-history-select { grid-template-columns: 1fr 1fr; } .video-history-select time { display: none; } .generation-phase-list { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 900px) { .video-replica-header { grid-template-columns: 1fr; padding: 22px 16px 18px; } .video-replica-header > div:first-child, .video-replica-meta { grid-column: 1; } .video-replica-meta { margin-top: 4px; } .video-replica { grid-template-columns: 1fr; padding: 0 14px 28px; } .video-replica-preview, .video-replica-history, .video-template-section { grid-column: auto; grid-row: auto; } .video-replica-preview { position: static; order: -1; } .video-controls { grid-template-columns: repeat(2, 1fr); } .video-history-select { grid-template-columns: 1fr 1fr; } .generation-phase-list { grid-template-columns: repeat(2, 1fr); } .video-template-grid { grid-template-columns: 1fr; } }
