@@ -1092,7 +1092,7 @@ func TestHuabotDeviceAuthorizationPollsAndSyncsAccount(t *testing.T) {
 			if err := r.ParseForm(); err != nil {
 				t.Fatal(err)
 			}
-			if r.Form.Get("client_id") != "desktop-client" || r.Form.Get("scope") != "profile:read token_base:read token_base:write wallet:read offline_access" {
+			if r.Form.Get("client_id") != "desktop-client" || r.Form.Get("scope") != "profile:read token_base:read token_base:write wallet:read files:upload offline_access" {
 				t.Fatalf("device form = %#v", r.Form)
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"device_code": "device-secret", "user_code": "ABCD-EFGH", "verification_uri": serverURL(r) + "/oauth/device", "verification_uri_complete": serverURL(r) + "/oauth/device?user_code=ABCD-EFGH", "expires_in": 600, "interval": 3})

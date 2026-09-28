@@ -409,12 +409,24 @@ func (s *Studio) generateVideoReplica(id, providerUserID string) {
 	}
 	err := s.runVideoSegments(id, runID, providerUserID, source, refsJSON, taskType, model, resolution, ratio, duration)
 	if err != nil {
+		err = normalizeVideoGenerationError(err)
 		log.Printf("video generation failed: job=%s error=%v", id, err)
 		_ = s.writeTransaction(func(tx *sql.Tx) error {
 			_, e := tx.Exec("update video_replica_jobs set status=? where id=?", "failed: "+truncate(err.Error()), id)
 			return e
 		})
 	}
+}
+
+func normalizeVideoGenerationError(err error) error {
+	if err == nil {
+		return nil
+	}
+	message := strings.ToLower(err.Error())
+	if strings.Contains(message, "unauthorized") || strings.Contains(message, "http 401") {
+		return errors.New(authorizationExpiredMessage)
+	}
+	return err
 }
 
 func (s *Studio) runVideoSegments(id, runID, providerUserID, source, refsJSON, taskType, model, resolution, ratio string, duration int) error {
@@ -567,6 +579,9 @@ func (s *Studio) uploadVideoReplicaSource(config huabotConfig, bearer, localPath
 	if _, err = part.Write(data); err != nil {
 		return "", err
 	}
+	if err = writer.WriteField("temporary", "true"); err != nil {
+		return "", err
+	}
 	if err = writer.Close(); err != nil {
 		return "", err
 	}
@@ -598,6 +613,7 @@ func (s *Studio) uploadVideoReplicaSource(config huabotConfig, bearer, localPath
 }
 
 func (s *Studio) failVideoSegment(id string, cause error) error {
+	cause = normalizeVideoGenerationError(cause)
 	_ = s.writeTransaction(func(tx *sql.Tx) error {
 		_, err := tx.Exec("update video_replica_segments set status=? where id=?", "failed: "+truncate(cause.Error()), id)
 		return err

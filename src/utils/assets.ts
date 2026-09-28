@@ -14,7 +14,14 @@ export const statusText = (status: string) =>
 export const isPending = (status: string) =>
   ["queued", "preparing", "prompting", "generating", "downloading", "merging"].includes(status);
 
-export const failureReason = (status: string) =>
-  status.replace(/^failed(?::\s*)?/, "").trim() || "请重试";
+export const userFacingError = (message: string, fallback = "请重试") => {
+  const reason = message.replace(/^failed(?::\s*)?/, "").trim();
+  if (/\bunauthorized\b|http\s*401/i.test(reason)) {
+    return "Huabot 授权已失效，请重新授权";
+  }
+  return reason || fallback;
+};
+
+export const failureReason = (status: string) => userFacingError(status);
 
 export const fileUrl = (path?: string | null) => (path ? `/files/${path}` : "");

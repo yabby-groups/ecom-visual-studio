@@ -9,7 +9,7 @@ import { useAppStore } from "../store";
 import { useAiInteraction } from "../aiInteraction";
 import { filterProjects, projectFilters } from "../utils/projectFilters";
 import type { VideoReplicaJob } from "../types";
-import { fileUrl } from "../utils/assets";
+import { fileUrl, userFacingError } from "../utils/assets";
 import "./Library.css";
 
 export function Library() {
@@ -27,7 +27,7 @@ export function Library() {
   const visibleProjects = filterProjects(projects, filter);
   useEffect(() => {
     void client.videoReplicaJobs(48, 0).then((result) => setVideoJobs(result.items)).catch((reason) => {
-      setVideoError(reason instanceof Error ? reason.message : "无法加载视频作品");
+      setVideoError(userFacingError(reason instanceof Error ? reason.message : "", "无法加载视频作品"));
     });
   }, []);
   useEffect(
@@ -87,7 +87,7 @@ export function Library() {
             <div><span className="eyebrow">视频作品</span><h2 id="video-works-heading">视频重制</h2></div>
             <button className="button secondary" type="button" onClick={() => navigate("/video-replica")}>新建视频</button>
           </div>
-          {videoError && <p className="notice error" role="alert">{videoError}</p>}
+          {videoError && <p className="notice notice-error" role="alert">{videoError}</p>}
           {videoJobs.length ? <div className="library-video-grid">{videoJobs.map((job) => <article className="library-video-item" key={job.id}>
             <button type="button" className="library-video-preview" onClick={() => navigate("/video-replica", { state: { jobId: job.id } })}>
               {job.file_path ? <video src={fileUrl(job.file_path)} preload="metadata" /> : <Film size={28} />}
