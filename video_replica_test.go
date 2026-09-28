@@ -97,6 +97,48 @@ func TestSegmentVideoIncludesStoryboardAudioDirection(t *testing.T) {
 	}
 }
 
+func TestNormalizeVideoReplicaStoryboardFillsMissingEndTimes(t *testing.T) {
+	storyboard, err := normalizeVideoReplicaStoryboard([]any{
+		map[string]any{"start": float64(8), "end": float64(12), "shot": "近景"},
+		map[string]any{"start": float64(12), "shot": "中景"},
+		map[string]any{"start": float64(16), "shot": "全景"},
+	}, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := storyboard[1]["end"]; got != float64(16) {
+		t.Fatalf("second shot end = %v, want 16", got)
+	}
+	if got := storyboard[2]["end"]; got != float64(20) {
+		t.Fatalf("last shot end = %v, want 20", got)
+	}
+}
+
+func TestNormalizeVideoReplicaStoryboardRejectsInvalidEndTime(t *testing.T) {
+	_, err := normalizeVideoReplicaStoryboard([]any{
+		map[string]any{"start": float64(8), "end": float64(8)},
+	}, 20)
+	if err == nil || !strings.Contains(err.Error(), "结束时间无效") {
+		t.Fatalf("error = %v, want invalid end time", err)
+	}
+}
+
+func TestParseVideoReplicaReview(t *testing.T) {
+	result, err := parseVideoReplicaReview("```json\n{\"score\":86,\"issues\":[\"缺少时长\",\"动作不够具体\"],\"optimized_prompt\":\"制作一条 15 秒产品短片，先展示整体，再用近景呈现材质细节，保持镜头连贯。\"}\n```")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result["score"] != 86 || len(result["issues"].([]string)) != 2 {
+		t.Fatalf("review = %#v", result)
+	}
+}
+
+func TestParseVideoReplicaReviewRejectsInvalidScore(t *testing.T) {
+	if _, err := parseVideoReplicaReview(`{"score":101,"issues":[],"optimized_prompt":"优化稿"}`); err == nil {
+		t.Fatal("expected invalid score error")
+	}
+}
+
 func TestVideoReplicaPayloadEnablesNativeAudio(t *testing.T) {
 	payload := videoReplicaPayload("doubao-seedance-2.5", "生成同步音效", 10, "480p", "16:9", "reference", 2, true)
 	if got, ok := payload["generate_audio"].(bool); !ok || !got {

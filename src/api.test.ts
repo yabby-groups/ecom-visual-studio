@@ -105,3 +105,20 @@ describe("client settings refresh", () => {
     expect(refreshModels).toHaveBeenCalledOnce();
   });
 });
+
+describe("client video prompt review", () => {
+  it("forwards the selected mode and current prompt to the Wails binding", async () => {
+    const review = vi.fn(async () => ({
+      score: 88,
+      issues: ["补充镜头动作"],
+      optimized_prompt: "展示产品细节并保持镜头运动。",
+    }));
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: { go: { main: { Studio: { ReviewVideoReplicaPrompt: review } } } },
+    });
+
+    await expect(client.reviewVideoReplicaPrompt("replica", "展示产品")).resolves.toMatchObject({ score: 88 });
+    expect(review).toHaveBeenCalledWith("replica", "展示产品");
+  });
+});

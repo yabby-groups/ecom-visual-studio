@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/responses"
@@ -64,6 +65,7 @@ var seedanceMaxDuration = map[string]int{
 }
 
 const videoDurationTolerance = 0.5
+const maxVideoReplicaReviewPromptRunes = 500
 
 func segmentVideo(duration, maxDuration int, storyboard []map[string]any, prompt string) ([]videoSegmentPlan, error) {
 	if duration < 4 || duration > 300 || maxDuration < 4 {
@@ -107,6 +109,48 @@ func storyboardSecond(value any) (float64, bool) {
 	}
 }
 
+func normalizeVideoReplicaStoryboard(raw []any, duration float64) ([]map[string]any, error) {
+	if len(raw) == 0 || duration <= 0 {
+		return nil, errors.New("视频分析结果缺少有效分镜")
+	}
+	storyboard := make([]map[string]any, len(raw))
+	starts := make([]float64, len(raw))
+	ends := make([]float64, len(raw))
+	hasEnd := make([]bool, len(raw))
+	for index, value := range raw {
+		item, ok := value.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("视频分析结果第 %d 个分镜格式无效", index+1)
+		}
+		start, ok := storyboardSecond(item["start"])
+		if !ok || start < 0 || start >= duration || (index > 0 && start < starts[index-1]) {
+			return nil, fmt.Errorf("视频分析结果第 %d 个分镜开始时间无效", index+1)
+		}
+		storyboard[index] = item
+		starts[index] = start
+		if end, ok := storyboardSecond(item["end"]); ok {
+			ends[index], hasEnd[index] = end, true
+		} else if itemDuration, ok := storyboardSecond(item["duration"]); ok {
+			ends[index], hasEnd[index] = start+itemDuration, true
+		}
+	}
+	for index := range storyboard {
+		if !hasEnd[index] {
+			if index+1 < len(storyboard) {
+				ends[index] = starts[index+1]
+			} else {
+				ends[index] = duration
+			}
+		}
+		if ends[index] <= starts[index] || ends[index] > duration+videoDurationTolerance {
+			return nil, fmt.Errorf("视频分析结果第 %d 个分镜结束时间无效", index+1)
+		}
+		storyboard[index]["start"] = starts[index]
+		storyboard[index]["end"] = ends[index]
+	}
+	return storyboard, nil
+}
+
 func (s *Studio) UploadVideoReplicaVideo(name, contentType string, data []byte) (map[string]string, error) {
 	if len(data) == 0 || len(data) > maxVideoUploadBytes {
 		return nil, errors.New("视频大小必须在 200MB 以内")
@@ -138,6 +182,10 @@ func (s *Studio) AnalyzeVideoReplica(path string, referencePaths []string, produ
 	file, err := s.replicaSourcePath(path)
 	if err != nil {
 		return nil, err
+	}
+	duration, err := videoDuration(file)
+	if err != nil {
+		return nil, errors.New("无法读取视频时长，请确认已安装 ffprobe")
 	}
 	frames, cleanup, err := extractVideoFrames(file)
 	if err != nil {
@@ -200,10 +248,75 @@ func (s *Studio) AnalyzeVideoReplica(path string, referencePaths []string, produ
 	if err := json.Unmarshal([]byte(clean), &result); err != nil {
 		return nil, errors.New("视频分析结果不是有效的分镜 JSON")
 	}
-	if _, ok := result["storyboard"].([]any); !ok {
+	rawStoryboard, ok := result["storyboard"].([]any)
+	if !ok {
 		return nil, errors.New("视频分析结果缺少分镜")
 	}
+	storyboard, err := normalizeVideoReplicaStoryboard(rawStoryboard, duration)
+	if err != nil {
+		return nil, err
+	}
+	result["storyboard"] = storyboard
 	return result, nil
+}
+
+func (s *Studio) ReviewVideoReplicaPrompt(mode, prompt string) (map[string]any, error) {
+	mode = strings.TrimSpace(mode)
+	prompt = strings.TrimSpace(prompt)
+	if mode != "replica" && mode != "replace" {
+		return nil, errors.New("视频审核模式无效")
+	}
+	if err := validateRequired(prompt, "复刻描述", maxVideoReplicaReviewPromptRunes); err != nil {
+		return nil, err
+	}
+	user, err := s.currentUser()
+	if err != nil {
+		return nil, err
+	}
+	config, key, _, textModel, _, err := s.activeProvider(user.ID)
+	if err != nil {
+		return nil, err
+	}
+	task := "视频复刻"
+	criteria := "检查主体、镜头结构、动作、时长、画面风格、声音和连续性是否清晰。"
+	if mode == "replace" {
+		task = "AI 视频替换"
+		criteria = "检查被替换对象、目标商品、保留的动作/镜头/光线和一致性约束是否清晰。"
+	}
+	instruction := fmt.Sprintf("你是电商视频创作审核员。请审核以下%s描述。%s 只返回 JSON，不要 Markdown：{\"score\":0,\"issues\":[\"问题1\"],\"optimized_prompt\":\"完整优化稿\"}。score 为 0 到 100 的整数；issues 返回最多 5 条具体、可执行的中文问题；optimized_prompt 必须是一段可直接用于生成视频的中文描述，保留用户真实意图，不得凭空添加商品规格、认证或功效；优化稿不超过 %d 个字符。\n用户描述：%s", task, criteria, maxVideoReplicaReviewPromptRunes, prompt)
+	client := s.openAIClient(config, key)
+	response, err := client.Responses.New(context.Background(), responses.ResponseNewParams{
+		Model: textModel,
+		Input: responses.ResponseNewParamsInputUnion{OfInputItemList: responses.ResponseInputParam{
+			responses.ResponseInputItemParamOfMessage(instruction, responses.EasyInputMessageRoleUser),
+		}},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("AI 审核请求失败：%w", err)
+	}
+	return parseVideoReplicaReview(response.OutputText())
+}
+
+func parseVideoReplicaReview(raw string) (map[string]any, error) {
+	clean := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(raw), "```json"), "```"))
+	var parsed struct {
+		Score           float64  `json:"score"`
+		Issues          []string `json:"issues"`
+		OptimizedPrompt string   `json:"optimized_prompt"`
+	}
+	if err := json.Unmarshal([]byte(clean), &parsed); err != nil {
+		return nil, errors.New("AI 审核结果不是有效的 JSON")
+	}
+	if parsed.Score < 0 || parsed.Score > 100 || parsed.Score != float64(int(parsed.Score)) {
+		return nil, errors.New("AI 审核评分无效")
+	}
+	if len(parsed.Issues) > 5 {
+		parsed.Issues = parsed.Issues[:5]
+	}
+	if strings.TrimSpace(parsed.OptimizedPrompt) == "" || utf8.RuneCountInString(parsed.OptimizedPrompt) > maxVideoReplicaReviewPromptRunes {
+		return nil, errors.New("AI 审核优化稿无效")
+	}
+	return map[string]any{"score": int(parsed.Score), "issues": parsed.Issues, "optimized_prompt": strings.TrimSpace(parsed.OptimizedPrompt)}, nil
 }
 
 func (s *Studio) CreateVideoReplica(input VideoReplicaInput) (map[string]string, error) {

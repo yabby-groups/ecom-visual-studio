@@ -18,6 +18,10 @@ export function AnalyzeVideoReplica(arg1, arg2, arg3) {
   return window['go']['main']['Studio']['AnalyzeVideoReplica'](arg1, arg2, arg3);
 }
 
+export function ReviewVideoReplicaPrompt(arg1, arg2) {
+  return window['go']['main']['Studio']['ReviewVideoReplicaPrompt'](arg1, arg2);
+}
+
 export function ChangeAssetTemplate(arg1, arg2, arg3) {
   return window['go']['main']['Studio']['ChangeAssetTemplate'](arg1, arg2, arg3);
 }

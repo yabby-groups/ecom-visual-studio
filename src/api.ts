@@ -120,6 +120,8 @@ export const client = {
     call<{ path: string }>("UploadVideoReplicaVideo", name, contentType, data),
   analyzeVideoReplica: (path: string, referencePaths: string[], productReferencePath: string) =>
     call<{ storyboard: VideoReplicaJob["storyboard"] }>("AnalyzeVideoReplica", path, referencePaths, productReferencePath),
+  reviewVideoReplicaPrompt: (mode: "replica" | "replace", prompt: string) =>
+    call<{ score: number; issues: string[]; optimized_prompt: string }>("ReviewVideoReplicaPrompt", mode, prompt),
   updateVideoReplicaStoryboard: (id: string, storyboard: VideoReplicaJob["storyboard"]) =>
     call("UpdateVideoReplicaStoryboard", id, storyboard),
   confirmVideoReplicaStoryboard: (id: string) =>
