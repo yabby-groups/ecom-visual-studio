@@ -26,7 +26,7 @@
 .video-upload-box:not(.has-video):hover { border-color: var(--accent); background: var(--soft); }
 .video-upload-box strong { color: var(--ink); font-size: 14px; }
 .video-upload-box span { font-size: 12px; }
-.video-upload-box video { width: 100%; max-height: 280px; object-fit: contain; border-radius: 6px; }
+.video-upload-box video { align-self: center; width: auto; height: auto; max-width: 100%; max-height: 280px; object-fit: contain; border-radius: 6px; }
 .video-upload-box.has-video { min-height: 0; padding: 8px; display: flex; flex-direction: column; align-items: stretch; }
 .video-upload-prompt { position: absolute; inset: 0; display: grid; place-items: center; align-content: center; gap: 8px; cursor: pointer; }
 .video-upload-prompt input, .video-replace-action input, .reference-add input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
@@ -42,9 +42,9 @@
 .reference-row > div:first-child { display: flex; align-items: baseline; gap: 8px; }
 .reference-row strong { color: var(--ink); font-size: 13px; }
 .reference-thumbs { display: flex; gap: 8px; flex-wrap: wrap; }
-.reference-thumbs button, .reference-add { width: 68px; height: 68px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); padding: 0; position: relative; display: grid; place-items: center; color: var(--muted); cursor: pointer; }
+.reference-thumbs button, .reference-add { flex: 0 0 68px; width: 68px; height: 68px; min-height: 0; box-sizing: border-box; overflow: hidden; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); padding: 0; position: relative; display: grid; place-items: center; color: var(--muted); cursor: pointer; }
 .reference-thumbs button:hover, .reference-add:hover { border-color: var(--accent); }
-.reference-thumbs img { width: 100%; height: 100%; border-radius: 6px; object-fit: cover; }
+.reference-thumbs img { display: block; width: 100%; height: 100%; min-height: 0; border-radius: 6px; object-fit: cover; }
 .reference-add { font-size: 11px; gap: 3px; }
 .workflow-action { width: 100%; }
 .video-script { min-height: 168px; width: 100%; resize: vertical; box-sizing: border-box; background: var(--surface); }

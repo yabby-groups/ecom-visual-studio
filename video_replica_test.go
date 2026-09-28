@@ -105,3 +105,21 @@ func TestUploadVideoReplicaSourceUsesTemporaryFileUpload(t *testing.T) {
 		t.Fatalf("upload URL = %q, want %q", got, want)
 	}
 }
+
+func TestAnalyzeVideoReplicaAcceptsGeneratedVideo(t *testing.T) {
+	dataDir := t.TempDir()
+	generatedDir := filepath.Join(dataDir, "storage", "generated", "video-replica")
+	if err := os.MkdirAll(generatedDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(generatedDir, "result.mp4")
+	if err := os.WriteFile(file, []byte("video"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	studio := &Studio{dataDir: dataDir}
+	_, err := studio.AnalyzeVideoReplica("generated/video-replica/result.mp4")
+	if err != nil && err.Error() == "视频文件路径无效" {
+		t.Fatalf("generated source rejected: %v", err)
+	}
+}

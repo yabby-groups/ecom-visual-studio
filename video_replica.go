@@ -134,7 +134,7 @@ func (s *Studio) UploadVideoReplicaVideo(name, contentType string, data []byte) 
 }
 
 func (s *Studio) AnalyzeVideoReplica(path string) (map[string]any, error) {
-	file, err := s.uploadedMediaPath(path)
+	file, err := s.replicaSourcePath(path)
 	if err != nil {
 		return nil, err
 	}
