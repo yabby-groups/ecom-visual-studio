@@ -180,7 +180,7 @@ func (s *Studio) migrate() error {
 		"create table if not exists auth_credentials (user_id text primary key references users(id) on delete cascade, kind text not null, secret text not null)",
 		"create table if not exists try_on_jobs (id text primary key, user_id text not null, person_paths text not null, garment_paths text not null, generation_mode text not null, instructions text not null default '', ratio text not null, status text not null, file_path text, generation_started_at integer, created_at integer not null)",
 		"create table if not exists try_on_versions (id text primary key, job_id text not null, file_path text not null, generation_started_at integer, created_at integer not null)",
-		"create table if not exists video_replica_jobs (id text primary key, user_id text not null, source_video_path text not null, reference_paths text not null default '[]', task_type text not null, model text not null, prompt text not null default '', storyboard text not null default '[]', storyboard_confirmed integer not null default 0, duration integer not null, resolution text not null, ratio text not null, remote_id text, polling_url text, status text not null, file_path text, generation_started_at integer, created_at integer not null)",
+		"create table if not exists video_replica_jobs (id text primary key, user_id text not null, source_video_path text not null, reference_paths text not null default '[]', product_reference_path text not null default '', task_type text not null, model text not null, prompt text not null default '', storyboard text not null default '[]', storyboard_confirmed integer not null default 0, duration integer not null, resolution text not null, ratio text not null, remote_id text, polling_url text, status text not null, file_path text, generation_started_at integer, created_at integer not null)",
 		"create table if not exists video_replica_versions (id text primary key, job_id text not null, source_version_id text, file_path text not null, created_at integer not null)",
 		"create table if not exists video_replica_segments (id text primary key, job_id text not null, run_id text not null, segment_index integer not null, start_second integer not null, duration integer not null, prompt text not null, status text not null, file_path text, remote_id text, polling_url text, created_at integer not null)",
 		"create index if not exists projects_user_created_idx on projects(user_id, created_at desc)",
@@ -239,6 +239,9 @@ func (s *Studio) migrate() error {
 		return err
 	}
 	if _, err := s.db.Exec("alter table video_replica_jobs add column current_run_id text not null default ''"); err != nil && !strings.Contains(err.Error(), "duplicate column") {
+		return err
+	}
+	if _, err := s.db.Exec("alter table video_replica_jobs add column product_reference_path text not null default ''"); err != nil && !strings.Contains(err.Error(), "duplicate column") {
 		return err
 	}
 	return nil

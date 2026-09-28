@@ -146,6 +146,7 @@ export type VideoReplicaStoryboardItem = {
   shot: string;
   action: string;
   dialogue: string;
+  audio: string;
   continuity: string;
 };
 export type VideoReplicaVersion = {
@@ -176,6 +177,7 @@ export type VideoReplicaJob = {
   id: string;
   source_video_path: string;
   reference_paths: string[];
+  product_reference_path: string;
   task_type: "auto" | "reference" | "extend" | "replace";
   model: string;
   prompt: string;

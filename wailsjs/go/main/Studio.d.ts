@@ -8,7 +8,7 @@ export function AddTemplate(arg1:main.TemplateInput):Promise<Record<string, stri
 
 export function Analyze(arg1:Record<string, string>):Promise<Record<string, any>>;
 
-export function AnalyzeVideoReplica(arg1:string):Promise<Record<string, any>>;
+export function AnalyzeVideoReplica(arg1:string,arg2:Array<string>,arg3:string):Promise<Record<string, any>>;
 
 export function ChangeAssetTemplate(arg1:string,arg2:string,arg3:boolean):Promise<Record<string, any>>;
 

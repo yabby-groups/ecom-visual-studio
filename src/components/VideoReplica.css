@@ -42,8 +42,13 @@
 .reference-row > div:first-child { display: flex; align-items: baseline; gap: 8px; }
 .reference-row strong { color: var(--ink); font-size: 13px; }
 .reference-thumbs { display: flex; gap: 8px; flex-wrap: wrap; }
-.reference-thumbs button, .reference-add { flex: 0 0 68px; width: 68px; height: 68px; min-height: 0; box-sizing: border-box; overflow: hidden; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); padding: 0; position: relative; display: grid; place-items: center; color: var(--muted); cursor: pointer; }
-.reference-thumbs button:hover, .reference-add:hover { border-color: var(--accent); }
+.reference-thumb { flex: 0 0 68px; width: 68px; height: 68px; position: relative; }
+.product-reference, .reference-add { width: 68px; height: 68px; min-height: 0; box-sizing: border-box; overflow: hidden; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); padding: 0; position: relative; display: grid; place-items: center; color: var(--muted); cursor: pointer; }
+.product-reference:hover, .product-reference:focus-visible, .reference-add:hover, .reference-add:focus-visible { border-color: var(--accent); }
+.product-reference.active { border: 2px solid var(--accent); }
+.product-reference span { position: absolute; inset: auto 0 0; padding: 3px 2px; background: color-mix(in srgb, var(--accent-dark) 84%, transparent); color: var(--accent-contrast, #fff); font-size: 10px; font-weight: 700; }
+.reference-remove { position: absolute; top: -5px; right: -5px; width: 22px; height: 22px; min-height: 22px; padding: 0; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 50%; background: var(--panel); color: var(--ink); cursor: pointer; }
+.reference-remove:hover, .reference-remove:focus-visible { border-color: var(--danger); color: var(--danger); }
 .reference-thumbs img { display: block; width: 100%; height: 100%; min-height: 0; border-radius: 6px; object-fit: cover; }
 .reference-add { font-size: 11px; gap: 3px; }
 .workflow-action { width: 100%; }
@@ -53,6 +58,9 @@
 .storyboard-item b { color: var(--accent-dark); font-size: 12px; }
 .storyboard-item span { font-size: 13px; font-weight: 700; }
 .storyboard-item small { grid-column: 2; color: var(--muted); line-height: 1.45; }
+.storyboard-item label { grid-column: 2; display: grid; gap: 4px; color: var(--muted); font-size: 11px; font-weight: 700; }
+.storyboard-item textarea { min-height: 56px; resize: vertical; }
+.video-audio-note { margin: 0 0 14px; color: var(--accent-dark); font-size: 12px; line-height: 1.45; }
 .video-controls { display: grid; grid-template-columns: repeat(5, 1fr); gap: 9px; margin-bottom: 14px; }
 .video-controls label { display: grid; align-content: start; gap: 6px; color: var(--muted); font-size: 11px; font-weight: 700; min-width: 0; }
 .video-controls .settings-select { min-width: 0; }

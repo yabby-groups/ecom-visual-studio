@@ -1,4 +1,4 @@
-import { Download, Film, LoaderCircle, Play, RefreshCw, ShieldCheck, Upload } from "lucide-react";
+import { Download, Film, LoaderCircle, Play, RefreshCw, ShieldCheck, Upload, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { client } from "../api";
@@ -17,6 +17,7 @@ export function VideoReplica() {
   const [sourcePath, setSourcePath] = useState("");
   const [sourcePreview, setSourcePreview] = useState("");
   const [referencePaths, setReferencePaths] = useState<string[]>([]);
+  const [productReferencePath, setProductReferencePath] = useState("");
   const [mode, setMode] = useState<"replica" | "replace">("replica");
   const [jobs, setJobs] = useState<VideoReplicaJob[]>([]);
   const [selected, setSelected] = useState<VideoReplicaJob | null>(null);
@@ -43,8 +44,9 @@ export function VideoReplica() {
   function selectJob(job: VideoReplicaJob) {
     setSelected(job);
     setSourcePath(job.source_video_path);
-    setSourcePreview(fileUrl(job.source_video_path));
-    setReferencePaths(job.reference_paths);
+	setSourcePreview(fileUrl(job.source_video_path));
+	setReferencePaths(job.reference_paths);
+	setProductReferencePath(job.product_reference_path);
     setStoryboard(job.storyboard);
     setPrompt(job.prompt);
     setModel(job.model === "doubao-seedance-2.0-mini" ? "seedance-2.0" : "seedance-2.5");
@@ -110,7 +112,8 @@ export function VideoReplica() {
     setBusy("reference"); setError("");
     try {
       const result = await client.upload(file);
-      setReferencePaths((paths) => [...paths, result.path]);
+		setReferencePaths((paths) => [...paths, result.path]);
+		setProductReferencePath((path) => mode === "replace" || !path ? result.path : path);
     } catch (reason) { setError(operationError(reason, "添加图片失败")); }
     finally { setBusy(""); }
   }
@@ -119,7 +122,7 @@ export function VideoReplica() {
     if (!sourcePath) { setError("请先选择原视频"); return; }
     setBusy("analyze"); setError("");
     try {
-      const result = await client.analyzeVideoReplica(sourcePath);
+		const result = await client.analyzeVideoReplica(sourcePath, referencePaths, productReferencePath);
       setStoryboard(result.storyboard || []);
       setPrompt(result.storyboard.map((item) => `${item.start}-${item.end}秒：${item.shot}。${item.action}${item.dialogue ? ` 对白：${item.dialogue}` : ""}`).join("\n"));
     } catch (reason) { setError(operationError(reason, "视频分析失败")); }
@@ -132,12 +135,24 @@ export function VideoReplica() {
     if (mode === "replace" && referencePaths.length !== 1) { setError("请添加一张商品图片"); return; }
     setBusy("create"); setError("");
     try {
-      const result = await client.createVideoReplica({ source_video_path: sourcePath, reference_paths: referencePaths, task_type: mode === "replace" ? "replace" : taskType, model, prompt, storyboard: mode === "replace" ? [] : storyboard, duration, resolution, ratio });
+		const result = await client.createVideoReplica({ source_video_path: sourcePath, reference_paths: referencePaths, product_reference_path: productReferencePath, task_type: mode === "replace" ? "replace" : taskType, model, prompt, storyboard: mode === "replace" ? [] : storyboard, duration, resolution, ratio });
       await load();
       const fresh = await client.videoReplicaJob(result.id);
       selectJob(fresh);
     } catch (reason) { setError(operationError(reason, "创建视频任务失败")); }
     finally { setBusy(""); }
+  }
+
+  function updateStoryboardItem(index: number, field: "audio", value: string) {
+    setStoryboard((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, [field]: value } : item));
+  }
+
+  function removeReference(path: string) {
+    setReferencePaths((items) => {
+      const next = items.filter((item) => item !== path);
+      setProductReferencePath((current) => current === path ? (next[0] || "") : current);
+      return next;
+    });
   }
 
   async function regenerate(id: string) {
@@ -192,11 +207,11 @@ export function VideoReplica() {
               </div>
             ) : sourcePreview ? <><video src={sourcePreview} controls onLoadedMetadata={(event) => { if (!Number.isFinite(event.currentTarget.duration)) return; const seconds = event.currentTarget.duration; setSourceDuration(seconds); if (mode === "replace") { setDuration(Math.min(maxSegmentDuration, Math.max(4, Math.ceil(seconds)))); setError(seconds > maxSegmentDuration + 0.5 ? `视频将自动截取前 ${maxSegmentDuration} 秒并压缩` : ""); } }} /><label className="video-replace-action"><Upload size={15} />重新选择<input type="file" accept="video/mp4,video/webm,video/quicktime" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void uploadVideo(file); }} /></label></> : <label className="video-upload-prompt"><Film size={30} /><strong>点击选择本机视频</strong><span>MP4 / WebM / MOV · {mode === "replace" ? `当前模型最长 ${maxSegmentDuration} 秒，超出会自动剪切压缩` : "最长 5 分钟"}</span><input type="file" accept="video/mp4,video/webm,video/quicktime" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void uploadVideo(file); }} /></label>}
           </div>
-          <div className="reference-row"><div><strong>{mode === "replace" ? "商品图片" : "参考素材"}</strong><span>{mode === "replace" ? "添加要替换进视频的商品图片" : "可选，最多 4 张人物或商品图"}</span></div><div className="reference-thumbs">{referencePaths.map((path) => <button type="button" key={path} aria-label="移除参考图" onClick={() => setReferencePaths((items) => items.filter((item) => item !== path))}><img src={fileUrl(path)} alt="" /></button>)}{(mode === "replace" ? referencePaths.length < 1 : referencePaths.length < 4) && <label className="reference-add"><Upload size={17} /><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadReference(file); }} />添加图片</label>}</div></div>
+		  <div className="reference-row"><div><strong>{mode === "replace" ? "商品图片" : "参考素材"}</strong><span>{mode === "replace" ? "添加要替换进视频的商品图片" : "选择主产品图；其余图片只补充人物、场景或风格"}</span></div><div className="reference-thumbs">{referencePaths.map((path) => { const isProductReference = productReferencePath === path; return <div className="reference-thumb" key={path}><button type="button" className={isProductReference ? "product-reference active" : "product-reference"} aria-pressed={isProductReference} aria-label={isProductReference ? "当前主产品参考图" : "设为主产品参考图"} onClick={() => setProductReferencePath(path)}><img src={fileUrl(path)} alt="" /><span>{isProductReference ? "主产品" : "设为主图"}</span></button><button type="button" className="reference-remove" aria-label="移除参考图" onClick={() => removeReference(path)}><X size={13} /></button></div>})}{(mode === "replace" ? referencePaths.length < 1 : referencePaths.length < 4) && <label className="reference-add"><Upload size={17} /><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadReference(file); }} />添加图片</label>}</div></div>
           {mode === "replica" && <button className="button secondary workflow-action" type="button" disabled={!sourcePath || !!busy} onClick={() => void analyze()}>{busy === "analyze" ? <LoaderCircle className="spin" /> : <RefreshCw size={16} />}AI 分析并生成分镜</button>}
         </div>
-        <div className={`video-replica-panel workflow-panel ${stepStatus(2)}`}><div className="workflow-step-head"><div className="step-number">2</div><div><span className="step-kicker">内容</span><h2>{mode === "replace" ? "描述替换内容" : "描述你要复刻的内容"}</h2><p>{mode === "replace" ? "例如：把视频中的苹果替换成香蕉，保持镜头运动和光线一致。" : "写下主题、产品或人物，AI 会匹配参考视频的结构。"}</p></div><span className="step-state">{prompt.length}/500</span></div><textarea className="video-script" value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder={mode === "replace" ? "例如：把视频中的苹果替换成香蕉，保持原视频的动作、光线和背景。" : "例如：为一款轻便的随行咖啡杯制作 15 秒种草短片，强调通勤、保温和极简设计。"} />{mode === "replica" && storyboard.length > 0 && <div className="storyboard-list">{storyboard.map((item, index) => <div className="storyboard-item" key={`${item.start}-${index}`}><b>{item.start}-{item.end}s</b><span>{item.shot}</span><small>{item.action}</small></div>)}</div>}</div>
-        <div className={`video-replica-panel workflow-panel ${stepStatus(3)}`}><div className="workflow-step-head"><div className="step-number">3</div><div><span className="step-kicker">设置</span><h2>{mode === "replace" ? "生成替换视频" : "选择视频参数"}</h2><p>{mode === "replace" ? "使用商品图片和提示词生成新视频。" : "选择画幅、时长、模型和清晰度。"}</p></div><span className="step-state">{mode === "replace" ? `${duration} 秒` : `单段上限 ${maxSegmentDuration} 秒`}</span></div><div className="video-controls"><label>模型<SettingsSelect name="video-model" value={model} options={[{ value: "seedance-2.5", label: "Seedance 2.5" }, { value: "seedance-2.0", label: "Seedance 2.0" }]} onChange={(value) => { setModel(value); if (mode === "replace" && sourceDuration !== null) { const nextMax = value === "seedance-2.0" ? 15 : 30; setDuration(Math.min(nextMax, Math.max(4, Math.ceil(sourceDuration)))); setError(sourceDuration > nextMax + 0.5 ? `视频将自动截取前 ${nextMax} 秒并压缩` : ""); } }} /></label>{mode === "replica" && <label>任务类型<SettingsSelect name="video-task-type" value={taskType} options={[{ value: "reference", label: "参考重制" }, { value: "extend", label: "延长上一段" }, { value: "auto", label: "自动判断" }]} onChange={(value) => setTaskType(value as typeof taskType)} /></label>}<label>画面比例<SettingsSelect name="video-ratio" value={ratio} options={["16:9", "9:16", "1:1", "adaptive"].map((value) => ({ value, label: value }))} onChange={setRatio} /></label>{mode === "replica" && <label>视频时长<SettingsSelect name="video-duration" value={String(duration)} options={durationOptions.map((value) => ({ value: String(value), label: `${value} 秒 · ${Math.ceil(value / maxSegmentDuration)} 段` }))} onChange={(value) => setDuration(Number(value))} /></label>}<label>清晰度<SettingsSelect name="video-resolution" value={resolution} options={["480p", "720p"].map((value) => ({ value, label: value }))} onChange={setResolution} /></label></div><button className="button primary workflow-action" type="button" disabled={!!busy || !sourcePath || !prompt.trim() || (mode === "replace" && !replaceReady)} onClick={() => void create()}>{busy === "create" ? <LoaderCircle className="spin" size={16} /> : <Play size={16} />}{mode === "replace" ? "生成替换视频" : "生成复刻视频"}</button></div>
+        <div className={`video-replica-panel workflow-panel ${stepStatus(2)}`}><div className="workflow-step-head"><div className="step-number">2</div><div><span className="step-kicker">内容</span><h2>{mode === "replace" ? "描述替换内容" : "描述你要复刻的内容"}</h2><p>{mode === "replace" ? "例如：把视频中的苹果替换成香蕉，保持镜头运动和光线一致。" : "写下主题、产品或人物，AI 会匹配参考视频的结构。"}</p></div><span className="step-state">{prompt.length}/500</span></div><textarea className="video-script" value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder={mode === "replace" ? "例如：把视频中的苹果替换成香蕉，保持原视频的动作、光线和背景。" : "例如：为一款轻便的随行咖啡杯制作 15 秒种草短片，强调通勤、保温和极简设计。"} />{mode === "replica" && storyboard.length > 0 && <div className="storyboard-list">{storyboard.map((item, index) => <div className="storyboard-item" key={`${item.start}-${index}`}><b>{item.start}-{item.end}s</b><span>{item.shot}</span><small>{item.action}</small><label>音频<textarea value={item.audio || ""} onChange={(event) => updateStoryboardItem(index, "audio", event.target.value)} placeholder="对白、环境声、音效或配乐意图" /></label></div>)}</div>}</div>
+        <div className={`video-replica-panel workflow-panel ${stepStatus(3)}`}><div className="workflow-step-head"><div className="step-number">3</div><div><span className="step-kicker">设置</span><h2>{mode === "replace" ? "生成替换视频" : "选择视频参数"}</h2><p>{mode === "replace" ? "使用商品图片和提示词生成新视频。" : "选择画幅、时长、模型和清晰度。"}</p></div><span className="step-state">{mode === "replace" ? `${duration} 秒` : `单段上限 ${maxSegmentDuration} 秒`}</span></div><div className="video-controls"><label>模型<SettingsSelect name="video-model" value={model} options={[{ value: "seedance-2.5", label: "Seedance 2.5" }, { value: "seedance-2.0", label: "Seedance 2.0" }]} onChange={(value) => { setModel(value); if (mode === "replace" && sourceDuration !== null) { const nextMax = value === "seedance-2.0" ? 15 : 30; setDuration(Math.min(nextMax, Math.max(4, Math.ceil(sourceDuration)))); setError(sourceDuration > nextMax + 0.5 ? `视频将自动截取前 ${nextMax} 秒并压缩` : ""); } }} /></label>{mode === "replica" && <label>任务类型<SettingsSelect name="video-task-type" value={taskType} options={[{ value: "reference", label: "参考重制" }, { value: "extend", label: "延长上一段" }, { value: "auto", label: "自动判断" }]} onChange={(value) => setTaskType(value as typeof taskType)} /></label>}<label>画面比例<SettingsSelect name="video-ratio" value={ratio} options={["16:9", "9:16", "1:1", "adaptive"].map((value) => ({ value, label: value }))} onChange={setRatio} /></label>{mode === "replica" && <label>视频时长<SettingsSelect name="video-duration" value={String(duration)} options={durationOptions.map((value) => ({ value: String(value), label: `${value} 秒 · ${Math.ceil(value / maxSegmentDuration)} 段` }))} onChange={(value) => setDuration(Number(value))} /></label>}<label>清晰度<SettingsSelect name="video-resolution" value={resolution} options={["480p", "720p"].map((value) => ({ value, label: value }))} onChange={setResolution} /></label></div><p className="video-audio-note">Seedance 原生音频已启用，将根据每段分镜生成同步对白、环境声、音效和配乐。</p><button className="button primary workflow-action" type="button" disabled={!!busy || !sourcePath || !prompt.trim() || (mode === "replace" && !replaceReady)} onClick={() => void create()}>{busy === "create" ? <LoaderCircle className="spin" size={16} /> : <Play size={16} />}{mode === "replace" ? "生成替换视频" : "生成复刻视频"}</button></div>
         </section>
         <section className="video-replica-preview">
         <div className="video-replica-panel-head"><div><span className="step-kicker">OUTPUT PREVIEW</span><h2>生成预览</h2></div><span className="preview-status">{selectedLabel}</span></div>

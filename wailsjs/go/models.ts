@@ -115,6 +115,7 @@ export namespace main {
 	export class VideoReplicaInput {
 	    source_video_path: string;
 	    reference_paths: string[];
+	    product_reference_path: string;
 	    task_type: string;
 	    model: string;
 	    prompt: string;
@@ -131,6 +132,7 @@ export namespace main {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.source_video_path = source["source_video_path"];
 	        this.reference_paths = source["reference_paths"];
+	        this.product_reference_path = source["product_reference_path"];
 	        this.task_type = source["task_type"];
 	        this.model = source["model"];
 	        this.prompt = source["prompt"];

@@ -118,8 +118,8 @@ export const client = {
   deleteTryOn: (id: string) => call("DeleteTryOn", id),
   uploadVideoReplicaVideo: (name: string, contentType: string, data: number[]) =>
     call<{ path: string }>("UploadVideoReplicaVideo", name, contentType, data),
-  analyzeVideoReplica: (path: string) =>
-    call<{ storyboard: VideoReplicaJob["storyboard"] }>("AnalyzeVideoReplica", path),
+  analyzeVideoReplica: (path: string, referencePaths: string[], productReferencePath: string) =>
+    call<{ storyboard: VideoReplicaJob["storyboard"] }>("AnalyzeVideoReplica", path, referencePaths, productReferencePath),
   updateVideoReplicaStoryboard: (id: string, storyboard: VideoReplicaJob["storyboard"]) =>
     call("UpdateVideoReplicaStoryboard", id, storyboard),
   confirmVideoReplicaStoryboard: (id: string) =>
@@ -130,6 +130,7 @@ export const client = {
   createVideoReplica: (body: {
     source_video_path: string;
     reference_paths: string[];
+    product_reference_path: string;
     task_type: "auto" | "reference" | "extend" | "replace";
     model: string;
     prompt: string;

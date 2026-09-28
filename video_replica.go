@@ -25,15 +25,16 @@ import (
 )
 
 type VideoReplicaInput struct {
-	SourceVideoPath string           `json:"source_video_path"`
-	ReferencePaths  []string         `json:"reference_paths"`
-	TaskType        string           `json:"task_type"`
-	Model           string           `json:"model"`
-	Prompt          string           `json:"prompt"`
-	Storyboard      []map[string]any `json:"storyboard"`
-	Duration        int              `json:"duration"`
-	Resolution      string           `json:"resolution"`
-	Ratio           string           `json:"ratio"`
+	SourceVideoPath      string           `json:"source_video_path"`
+	ReferencePaths       []string         `json:"reference_paths"`
+	ProductReferencePath string           `json:"product_reference_path"`
+	TaskType             string           `json:"task_type"`
+	Model                string           `json:"model"`
+	Prompt               string           `json:"prompt"`
+	Storyboard           []map[string]any `json:"storyboard"`
+	Duration             int              `json:"duration"`
+	Resolution           string           `json:"resolution"`
+	Ratio                string           `json:"ratio"`
 }
 
 type videoSegmentPlan struct {
@@ -87,7 +88,7 @@ func segmentVideo(duration, maxDuration int, storyboard []map[string]any, prompt
 			if !startOK || !endOK || shotEnd <= float64(start) || shotStart >= float64(end) {
 				continue
 			}
-			lines = append(lines, fmt.Sprintf("%v-%v 秒：镜头 %v；动作 %v；对白 %v；连续性 %v", shot["start"], shot["end"], shot["shot"], shot["action"], shot["dialogue"], shot["continuity"]))
+			lines = append(lines, fmt.Sprintf("%v-%v 秒：镜头 %v；动作 %v；对白 %v；音频 %v；连续性 %v", shot["start"], shot["end"], shot["shot"], shot["action"], shot["dialogue"], shot["audio"], shot["continuity"]))
 		}
 		plans = append(plans, videoSegmentPlan{Start: start, Duration: length, Prompt: strings.Join(lines, "\n")})
 		start = end
@@ -133,7 +134,7 @@ func (s *Studio) UploadVideoReplicaVideo(name, contentType string, data []byte) 
 	return map[string]string{"path": "uploads/" + filepath.Base(path)}, nil
 }
 
-func (s *Studio) AnalyzeVideoReplica(path string) (map[string]any, error) {
+func (s *Studio) AnalyzeVideoReplica(path string, referencePaths []string, productReferencePath string) (map[string]any, error) {
 	file, err := s.replicaSourcePath(path)
 	if err != nil {
 		return nil, err
@@ -151,8 +152,30 @@ func (s *Studio) AnalyzeVideoReplica(path string) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	if len(referencePaths) > 4 {
+		return nil, errors.New("参考图片最多 4 张")
+	}
+	if err := validateProductReference(referencePaths, productReferencePath); err != nil {
+		return nil, err
+	}
+	referencePaths = orderedVideoReferencePaths(referencePaths, productReferencePath)
 	content := responses.ResponseInputMessageContentListParam{
-		responses.ResponseInputContentParamOfInputText("分析这些视频关键帧，生成可编辑的视频复刻分镜。只返回 JSON：{\"storyboard\":[{\"start\":0,\"end\":5,\"shot\":\"镜头\",\"action\":\"动作\",\"dialogue\":\"对白\",\"continuity\":\"连续性约束\"}]}。按时间顺序覆盖完整视频，不能编造不存在的对白。"),
+		responses.ResponseInputContentParamOfInputText("分析后续的视频关键帧和参考图，生成可编辑的视频复刻分镜。第一张参考图是主产品参考图，后续生成必须以它的产品外观、材质、标识和颜色为准；其余参考图只补充人物、场景或风格。只返回 JSON：{\"storyboard\":[{\"start\":0,\"end\":5,\"shot\":\"镜头\",\"action\":\"动作\",\"dialogue\":\"对白\",\"audio\":\"同步声音设计\",\"continuity\":\"连续性约束\"}]}。按时间顺序覆盖完整视频；audio 为交给 Seedance 原生生成的对白、环境声、音效和配乐意图，不得声称恢复原视频音轨。"),
+	}
+	for index, referencePath := range referencePaths {
+		dataURL, dataErr := s.mediaDataURL(referencePath, false)
+		if dataErr != nil {
+			return nil, dataErr
+		}
+		role := "辅助参考图，只用于人物、场景或风格。"
+		if index == 0 && productReferencePath != "" {
+			role = "主产品参考图，视频中的目标产品必须以此图为唯一外观依据。"
+		}
+		content = append(content, responses.ResponseInputContentParamOfInputText(role))
+		content = append(content, responses.ResponseInputContentUnionParam{OfInputImage: &responses.ResponseInputImageParam{
+			Detail:   responses.ResponseInputImageDetailAuto,
+			ImageURL: openai.String(dataURL),
+		}})
 	}
 	for _, frame := range frames {
 		data, readErr := os.ReadFile(frame)
@@ -234,7 +257,7 @@ func (s *Studio) CreateVideoReplica(input VideoReplicaInput) (map[string]string,
 	}
 	refs, _ := json.Marshal(input.ReferencePaths)
 	if err := s.writeTransaction(func(tx *sql.Tx) error {
-		if _, err := tx.Exec("insert into video_replica_jobs(id,user_id,source_video_path,reference_paths,task_type,model,prompt,storyboard,storyboard_confirmed,duration,resolution,ratio,status,current_run_id,created_at) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", id, localWorkspaceID, persistedSourcePath, string(refs), input.TaskType, seedanceModels[input.Model], input.Prompt, string(storyboard), 1, effectiveDuration, input.Resolution, input.Ratio, "queued", runID, time.Now().Unix()); err != nil {
+		if _, err := tx.Exec("insert into video_replica_jobs(id,user_id,source_video_path,reference_paths,product_reference_path,task_type,model,prompt,storyboard,storyboard_confirmed,duration,resolution,ratio,status,current_run_id,created_at) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", id, localWorkspaceID, persistedSourcePath, string(refs), input.ProductReferencePath, input.TaskType, seedanceModels[input.Model], input.Prompt, string(storyboard), 1, effectiveDuration, input.Resolution, input.Ratio, "queued", runID, time.Now().Unix()); err != nil {
 			return err
 		}
 		return insertVideoSegments(tx, id, runID, plans)
@@ -297,7 +320,7 @@ func (s *Studio) VideoReplicaJobs(limit, offset int) (map[string]any, error) {
 	if err := s.db.QueryRow("select count(*) from video_replica_jobs").Scan(&total); err != nil {
 		return nil, err
 	}
-	rows, err := s.db.Query("select id,source_video_path,reference_paths,task_type,model,prompt,storyboard,storyboard_confirmed,duration,resolution,ratio,status,file_path,generation_started_at,created_at from video_replica_jobs order by created_at desc,id desc limit ? offset ?", limit, offset)
+	rows, err := s.db.Query("select id,source_video_path,reference_paths,product_reference_path,task_type,model,prompt,storyboard,storyboard_confirmed,duration,resolution,ratio,status,file_path,generation_started_at,created_at from video_replica_jobs order by created_at desc,id desc limit ? offset ?", limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -320,7 +343,7 @@ func (s *Studio) VideoReplicaJobs(limit, offset int) (map[string]any, error) {
 }
 
 func (s *Studio) VideoReplicaJob(id string) (map[string]any, error) {
-	row := s.db.QueryRow("select id,source_video_path,reference_paths,task_type,model,prompt,storyboard,storyboard_confirmed,duration,resolution,ratio,status,file_path,generation_started_at,created_at from video_replica_jobs where id=?", id)
+	row := s.db.QueryRow("select id,source_video_path,reference_paths,product_reference_path,task_type,model,prompt,storyboard,storyboard_confirmed,duration,resolution,ratio,status,file_path,generation_started_at,created_at from video_replica_jobs where id=?", id)
 	job, err := scanVideoReplicaRow(row)
 	if err != nil {
 		return nil, errors.New("视频任务不存在")
@@ -393,9 +416,9 @@ func insertVideoSegments(tx *sql.Tx, jobID, runID string, plans []videoSegmentPl
 
 func (s *Studio) generateVideoReplica(id, providerUserID string) {
 	log.Printf("video generation started: job=%s user=%s", id, providerUserID)
-	var source, refsJSON, taskType, model, ratio, resolution, runID string
+	var source, refsJSON, productReferencePath, taskType, model, ratio, resolution, runID string
 	var duration int
-	if err := s.db.QueryRow("select source_video_path,reference_paths,task_type,model,duration,resolution,ratio,current_run_id from video_replica_jobs where id=?", id).Scan(&source, &refsJSON, &taskType, &model, &duration, &resolution, &ratio, &runID); err != nil {
+	if err := s.db.QueryRow("select source_video_path,reference_paths,product_reference_path,task_type,model,duration,resolution,ratio,current_run_id from video_replica_jobs where id=?", id).Scan(&source, &refsJSON, &productReferencePath, &taskType, &model, &duration, &resolution, &ratio, &runID); err != nil {
 		log.Printf("video generation load failed: job=%s error=%v", id, err)
 		return
 	}
@@ -407,7 +430,7 @@ func (s *Studio) generateVideoReplica(id, providerUserID string) {
 		log.Printf("video generation state failed: job=%s error=%v", id, err)
 		return
 	}
-	err := s.runVideoSegments(id, runID, providerUserID, source, refsJSON, taskType, model, resolution, ratio, duration)
+	err := s.runVideoSegments(id, runID, providerUserID, source, refsJSON, productReferencePath, taskType, model, resolution, ratio, duration)
 	if err != nil {
 		err = normalizeVideoGenerationError(err)
 		log.Printf("video generation failed: job=%s error=%v", id, err)
@@ -429,7 +452,7 @@ func normalizeVideoGenerationError(err error) error {
 	return err
 }
 
-func (s *Studio) runVideoSegments(id, runID, providerUserID, source, refsJSON, taskType, model, resolution, ratio string, duration int) error {
+func (s *Studio) runVideoSegments(id, runID, providerUserID, source, refsJSON, productReferencePath, taskType, model, resolution, ratio string, duration int) error {
 	_, key, _, _, _, err := s.activeProvider(providerUserID)
 	if err != nil {
 		return err
@@ -444,6 +467,7 @@ func (s *Studio) runVideoSegments(id, runID, providerUserID, source, refsJSON, t
 	if err := json.Unmarshal([]byte(refsJSON), &refs); err != nil {
 		return err
 	}
+	refs = orderedVideoReferencePaths(refs, productReferencePath)
 	bearer, err := s.currentHuabotBearer(providerUserID)
 	if err != nil {
 		return err
@@ -498,7 +522,7 @@ func (s *Studio) runVideoSegments(id, runID, providerUserID, source, refsJSON, t
 		}); err != nil {
 			return err
 		}
-		payload := map[string]any{"model": model, "prompt": segment.Prompt, "duration": segment.Duration, "resolution": resolution, "ratio": ratio, "omni_reference_task_type": taskType}
+		payload := videoReplicaPayload(model, segment.Prompt, segment.Duration, resolution, ratio, taskType, len(refs), productReferencePath != "")
 		if len(inputRefs) > 0 {
 			payload["input_references"] = inputRefs
 		}
@@ -556,6 +580,25 @@ func (s *Studio) runVideoSegments(id, runID, providerUserID, source, refsJSON, t
 		_, err := tx.Exec("update video_replica_jobs set status='ready',file_path=? where id=?", path, id)
 		return err
 	})
+}
+
+func videoReplicaPayload(model, prompt string, duration int, resolution, ratio, taskType string, imageReferenceCount int, hasProductReference bool) map[string]any {
+	if hasProductReference {
+		anchors := []string{"@Image 1 是主产品参考图。必须保持其产品外观、材质、标识和颜色一致。"}
+		for index := 2; index <= imageReferenceCount; index++ {
+			anchors = append(anchors, fmt.Sprintf("@Image %d 是辅助参考图，只用于人物、场景或风格。", index))
+		}
+		prompt += "\n参考图绑定：" + strings.Join(anchors, " ")
+	}
+	return map[string]any{
+		"model":                    model,
+		"prompt":                   prompt,
+		"duration":                 duration,
+		"resolution":               resolution,
+		"ratio":                    ratio,
+		"omni_reference_task_type": taskType,
+		"generate_audio":           true,
+	}
 }
 
 func (s *Studio) uploadVideoReplicaSource(config huabotConfig, bearer, localPath string) (string, error) {
@@ -678,6 +721,10 @@ func (s *Studio) pollVideoReplica(pollingURL, key, jobID, segmentID string) (str
 			if closeErr != nil {
 				return "", closeErr
 			}
+			if err := videoHasAudio(path); err != nil {
+				_ = os.Remove(path)
+				return "", err
+			}
 			rel, _ := filepath.Rel(filepath.Join(s.dataDir, "storage"), path)
 			return filepath.ToSlash(rel), nil
 		case "failed":
@@ -718,7 +765,7 @@ func (s *Studio) mergeVideoSegments(jobID, runID, source string, segments []vide
 	if err := os.MkdirAll(filepath.Dir(output), 0o700); err != nil {
 		return "", err
 	}
-	command := exec.Command(mediaToolPath("ffmpeg"), "-y", "-f", "concat", "-safe", "0", "-i", listPath, "-c", "copy", output)
+	command := exec.Command(mediaToolPath("ffmpeg"), "-y", "-f", "concat", "-safe", "0", "-i", listPath, "-map", "0:v:0", "-map", "0:a:0", "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", output)
 	if outputLog, err := command.CombinedOutput(); err != nil {
 		return "", fmt.Errorf("合并视频片段失败：%s", strings.TrimSpace(string(outputLog)))
 	}
@@ -728,6 +775,9 @@ func (s *Studio) mergeVideoSegments(jobID, runID, source string, segments []vide
 	}
 	if actual < float64(expectedDuration)-1 || actual > float64(expectedDuration)+1 {
 		return "", fmt.Errorf("合并视频时长异常：实际 %.1f 秒，目标 %d 秒", actual, expectedDuration)
+	}
+	if err := videoHasAudio(output); err != nil {
+		return "", err
 	}
 	rel, err := filepath.Rel(filepath.Join(s.dataDir, "storage"), output)
 	if err != nil {
@@ -763,19 +813,19 @@ func (s *Studio) mediaDataURL(localPath string, video bool) (string, error) {
 }
 
 func scanVideoReplicaRow(row rowScanner) (map[string]any, error) {
-	var id, source, refsJSON, taskType, model, prompt, storyboardJSON, resolution, ratio, status string
+	var id, source, refsJSON, productReferencePath, taskType, model, prompt, storyboardJSON, resolution, ratio, status string
 	var confirmed, duration int
 	var path sql.NullString
 	var started sql.NullInt64
 	var created int64
-	if err := row.Scan(&id, &source, &refsJSON, &taskType, &model, &prompt, &storyboardJSON, &confirmed, &duration, &resolution, &ratio, &status, &path, &started, &created); err != nil {
+	if err := row.Scan(&id, &source, &refsJSON, &productReferencePath, &taskType, &model, &prompt, &storyboardJSON, &confirmed, &duration, &resolution, &ratio, &status, &path, &started, &created); err != nil {
 		return nil, err
 	}
 	var refs []string
 	var storyboard []map[string]any
 	_ = json.Unmarshal([]byte(refsJSON), &refs)
 	_ = json.Unmarshal([]byte(storyboardJSON), &storyboard)
-	return map[string]any{"id": id, "source_video_path": source, "reference_paths": refs, "task_type": taskType, "model": model, "prompt": prompt, "storyboard": storyboard, "storyboard_confirmed": confirmed == 1, "duration": duration, "resolution": resolution, "ratio": ratio, "status": status, "file_path": nullableString(path), "generation_started_at": nullableInt(started), "created_at": created, "versions": []map[string]any{}}, nil
+	return map[string]any{"id": id, "source_video_path": source, "reference_paths": refs, "product_reference_path": productReferencePath, "task_type": taskType, "model": model, "prompt": prompt, "storyboard": storyboard, "storyboard_confirmed": confirmed == 1, "duration": duration, "resolution": resolution, "ratio": ratio, "status": status, "file_path": nullableString(path), "generation_started_at": nullableInt(started), "created_at": created, "versions": []map[string]any{}}, nil
 }
 
 func (s *Studio) populateVideoReplicaVersions(job map[string]any) error {
@@ -867,7 +917,44 @@ func validateVideoReplicaInput(input VideoReplicaInput) error {
 	if len(input.ReferencePaths) > 4 {
 		return errors.New("参考图片最多 4 张")
 	}
-	return nil
+	return validateProductReference(input.ReferencePaths, input.ProductReferencePath)
+}
+
+func validateProductReference(referencePaths []string, productReferencePath string) error {
+	if len(referencePaths) == 0 {
+		if productReferencePath != "" {
+			return errors.New("主产品参考图必须在参考图片中")
+		}
+		return nil
+	}
+	if productReferencePath == "" {
+		return errors.New("请选择主产品参考图")
+	}
+	for _, path := range referencePaths {
+		if path == productReferencePath {
+			return nil
+		}
+	}
+	return errors.New("主产品参考图必须在参考图片中")
+}
+
+func orderedVideoReferencePaths(referencePaths []string, productReferencePath string) []string {
+	if productReferencePath == "" {
+		return referencePaths
+	}
+	ordered := make([]string, 0, len(referencePaths))
+	for _, path := range referencePaths {
+		if path == productReferencePath {
+			ordered = append(ordered, path)
+			break
+		}
+	}
+	for _, path := range referencePaths {
+		if path != productReferencePath {
+			ordered = append(ordered, path)
+		}
+	}
+	return ordered
 }
 
 func (s *Studio) uploadedMediaPath(path string) (string, error) {
@@ -908,6 +995,22 @@ func videoDuration(path string) (float64, error) {
 		return 0, err
 	}
 	return strconv.ParseFloat(strings.TrimSpace(string(output)), 64)
+}
+
+func videoHasAudio(path string) error {
+	command := exec.Command(mediaToolPath("ffprobe"), "-v", "error", "-select_streams", "a", "-show_entries", "stream=index", "-of", "csv=p=0", path)
+	output, err := command.Output()
+	if err != nil {
+		return fmt.Errorf("无法验证视频音轨：%w", err)
+	}
+	if !hasAudioStream(output) {
+		return errors.New("Seedance 返回的视频不含音轨")
+	}
+	return nil
+}
+
+func hasAudioStream(output []byte) bool {
+	return strings.TrimSpace(string(output)) != ""
 }
 
 func extractVideoFrames(path string) ([]string, func(), error) {

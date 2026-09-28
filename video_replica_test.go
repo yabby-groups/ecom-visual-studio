@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -22,15 +23,38 @@ func TestValidateVideoReplicaReplaceRequiresSingleProductImage(t *testing.T) {
 		t.Fatal("expected product image validation error")
 	}
 	input.ReferencePaths = []string{"uploads/product.png"}
+	input.ProductReferencePath = "uploads/product.png"
 	if err := validateVideoReplicaInput(input); err != nil {
 		t.Fatalf("valid replace input rejected: %v", err)
 	}
 }
 
 func TestValidateVideoReplicaReplaceAllowsPreprocessingLongerSource(t *testing.T) {
-	input := VideoReplicaInput{TaskType: "replace", Model: "seedance-2.0", Prompt: "把苹果替换成香蕉", Duration: 16, Resolution: "480p", Ratio: "16:9", ReferencePaths: []string{"uploads/product.png"}}
+	input := VideoReplicaInput{TaskType: "replace", Model: "seedance-2.0", Prompt: "把苹果替换成香蕉", Duration: 16, Resolution: "480p", Ratio: "16:9", ReferencePaths: []string{"uploads/product.png"}, ProductReferencePath: "uploads/product.png"}
 	if err := validateVideoReplicaInput(input); err != nil {
 		t.Fatalf("replace input should be accepted for preprocessing: %v", err)
+	}
+}
+
+func TestValidateVideoReplicaRequiresSelectedProductReference(t *testing.T) {
+	input := VideoReplicaInput{TaskType: "reference", Model: "seedance-2.5", Prompt: "复刻商品", Duration: 10, Resolution: "480p", Ratio: "16:9", ReferencePaths: []string{"uploads/product.png"}}
+	if err := validateVideoReplicaInput(input); err == nil {
+		t.Fatal("expected missing product reference error")
+	}
+	input.ProductReferencePath = "uploads/other.png"
+	if err := validateVideoReplicaInput(input); err == nil {
+		t.Fatal("expected unknown product reference error")
+	}
+	input.ProductReferencePath = "uploads/product.png"
+	if err := validateVideoReplicaInput(input); err != nil {
+		t.Fatalf("selected product reference rejected: %v", err)
+	}
+}
+
+func TestOrderedVideoReferencePathsPutsProductFirst(t *testing.T) {
+	ordered := orderedVideoReferencePaths([]string{"uploads/style.png", "uploads/product.png", "uploads/person.png"}, "uploads/product.png")
+	if got, want := strings.Join(ordered, ","), "uploads/product.png,uploads/style.png,uploads/person.png"; got != want {
+		t.Fatalf("ordered references = %q, want %q", got, want)
 	}
 }
 
@@ -60,6 +84,35 @@ func TestSegmentVideoSplitsThirtySecondModelIntoTwoParts(t *testing.T) {
 	}
 	if len(segments) != 2 || segments[0].Duration != 30 || segments[1].Start != 30 {
 		t.Fatalf("segments = %#v, want two 30-second parts", segments)
+	}
+}
+
+func TestSegmentVideoIncludesStoryboardAudioDirection(t *testing.T) {
+	segments, err := segmentVideo(10, 10, []map[string]any{{"start": 0, "end": 10, "shot": "近景", "action": "展示", "audio": "轻快配乐和开盖声"}}, "复刻咖啡杯")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := segments[0].Prompt; !strings.Contains(got, "音频 轻快配乐和开盖声") {
+		t.Fatalf("segment prompt = %q, want audio direction", got)
+	}
+}
+
+func TestVideoReplicaPayloadEnablesNativeAudio(t *testing.T) {
+	payload := videoReplicaPayload("doubao-seedance-2.5", "生成同步音效", 10, "480p", "16:9", "reference", 2, true)
+	if got, ok := payload["generate_audio"].(bool); !ok || !got {
+		t.Fatalf("generate_audio = %#v, want true", payload["generate_audio"])
+	}
+	if got := payload["prompt"].(string); !strings.Contains(got, "@Image 1") || !strings.Contains(got, "@Image 2") {
+		t.Fatalf("product reference prompt = %q, want image anchors", got)
+	}
+}
+
+func TestHasAudioStream(t *testing.T) {
+	if !hasAudioStream([]byte("1\n")) {
+		t.Fatal("audio stream output should be accepted")
+	}
+	if hasAudioStream([]byte(" \n")) {
+		t.Fatal("empty probe output should be rejected")
 	}
 }
 
@@ -118,7 +171,7 @@ func TestAnalyzeVideoReplicaAcceptsGeneratedVideo(t *testing.T) {
 	}
 
 	studio := &Studio{dataDir: dataDir}
-	_, err := studio.AnalyzeVideoReplica("generated/video-replica/result.mp4")
+	_, err := studio.AnalyzeVideoReplica("generated/video-replica/result.mp4", nil, "")
 	if err != nil && err.Error() == "视频文件路径无效" {
 		t.Fatalf("generated source rejected: %v", err)
 	}
