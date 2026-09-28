@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "build:desktop": "tsc -b && vite build --outDir desktop_assets",
-    "desktop:dev": "wails dev",
+    "desktop:dev": "wails dev -skipembedcreate",
     "desktop:build": "scripts/package-macos.sh",
     "desktop:build:macos": "scripts/package-macos.sh",
     "desktop:build:macos:x86_64": "scripts/package-macos.sh x86_64",

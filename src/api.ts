@@ -130,7 +130,7 @@ export const client = {
   createVideoReplica: (body: {
     source_video_path: string;
     reference_paths: string[];
-    task_type: "auto" | "reference" | "extend";
+    task_type: "auto" | "reference" | "extend" | "replace";
     model: string;
     prompt: string;
     storyboard: VideoReplicaJob["storyboard"];

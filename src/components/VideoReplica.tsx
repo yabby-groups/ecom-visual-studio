@@ -17,15 +17,17 @@ export function VideoReplica() {
   const [sourcePath, setSourcePath] = useState("");
   const [sourcePreview, setSourcePreview] = useState("");
   const [referencePaths, setReferencePaths] = useState<string[]>([]);
+  const [mode, setMode] = useState<"replica" | "replace">("replica");
   const [jobs, setJobs] = useState<VideoReplicaJob[]>([]);
   const [selected, setSelected] = useState<VideoReplicaJob | null>(null);
   const [storyboard, setStoryboard] = useState<VideoReplicaStoryboardItem[]>(defaultStoryboard);
   const [model, setModel] = useState("seedance-2.5");
-  const [taskType, setTaskType] = useState<"auto" | "reference" | "extend">("reference");
+  const [taskType, setTaskType] = useState<"auto" | "reference" | "extend" | "replace">("reference");
   const [prompt, setPrompt] = useState("");
   const [duration, setDuration] = useState(30);
   const [ratio, setRatio] = useState("16:9");
   const [resolution, setResolution] = useState("480p");
+  const [sourceDuration, setSourceDuration] = useState<number | null>(null);
   const [busy, setBusy] = useState("");
   const [videoReadProgress, setVideoReadProgress] = useState<number | null>(null);
   const [error, setError] = useState("");
@@ -44,6 +46,7 @@ export function VideoReplica() {
     setPrompt(job.prompt);
     setModel(job.model === "doubao-seedance-2.0-mini" ? "seedance-2.0" : "seedance-2.5");
     setTaskType(job.task_type);
+    setMode(job.task_type === "replace" ? "replace" : "replica");
     setDuration(job.duration);
     setRatio(job.ratio);
     setResolution(job.resolution);
@@ -77,7 +80,7 @@ export function VideoReplica() {
   }, [jobs.map((job) => `${job.id}:${job.status}`).join("|")]);
 
   async function uploadVideo(file: File) {
-    setBusy("upload"); setVideoReadProgress(0); setError("");
+    setBusy("upload"); setVideoReadProgress(0); setSourceDuration(null); setError("");
     try {
       const buffer = await new Promise<ArrayBuffer>((resolve, reject) => {
         const reader = new FileReader();
@@ -101,7 +104,8 @@ export function VideoReplica() {
   }
 
   async function uploadReference(file: File) {
-    if (referencePaths.length >= 4) return;
+    if (mode === "replace") setReferencePaths([]);
+    if (mode !== "replace" && referencePaths.length >= 4) return;
     setBusy("reference"); setError("");
     try {
       const result = await client.upload(file);
@@ -123,10 +127,11 @@ export function VideoReplica() {
 
   async function create() {
     if (!requireAiAuth()) return;
-    if (!sourcePath || !prompt.trim()) { setError("请先选择原视频并确认复刻脚本"); return; }
+    if (!sourcePath || !prompt.trim()) { setError(mode === "replace" ? "请先选择视频并填写替换提示词" : "请先选择原视频并确认复刻脚本"); return; }
+    if (mode === "replace" && referencePaths.length !== 1) { setError("请添加一张商品图片"); return; }
     setBusy("create"); setError("");
     try {
-      const result = await client.createVideoReplica({ source_video_path: sourcePath, reference_paths: referencePaths, task_type: taskType, model, prompt, storyboard, duration, resolution, ratio });
+      const result = await client.createVideoReplica({ source_video_path: sourcePath, reference_paths: referencePaths, task_type: mode === "replace" ? "replace" : taskType, model, prompt, storyboard: mode === "replace" ? [] : storyboard, duration, resolution, ratio });
       await load();
       const fresh = await client.videoReplicaJob(result.id);
       selectJob(fresh);
@@ -151,6 +156,7 @@ export function VideoReplica() {
   const selectedLabel = useMemo(() => selected ? `${selected.model} · ${statusText(selected.status)}` : "等待生成结果", [selected]);
   const sourceReady = Boolean(sourcePath);
   const scriptReady = Boolean(prompt.trim());
+  const replaceReady = mode === "replace" && referencePaths.length === 1;
   const maxSegmentDuration = model === "seedance-2.0" ? 15 : 30;
   const durationOptions = [5, 10, 15, 30, 60, 120, 180, 300];
   const stepStatus = (step: number) => step === 1 && sourceReady || step === 2 && scriptReady || step === 3 && Boolean(selected) ? "done" : "";
@@ -166,14 +172,15 @@ export function VideoReplica() {
 
   return <Shell>
     <header className="workspace-header video-replica-header">
-      <div className="video-replica-title"><span className="eyebrow">AI VIDEO STUDIO</span><h1>视频复刻</h1><p>选择一条本机视频，复刻它的节奏、镜头和动作，生成属于你的新版本。</p></div>
-      <div className="video-replica-meta"><span className="workflow-badge">{selected ? statusText(selected.status) : "未开始"}</span><span>最多 5 分钟 · 200MB</span></div>
+      <div className="video-replica-title"><span className="eyebrow">AI VIDEO STUDIO</span><h1>{mode === "replace" ? "AI 视频替换" : "视频复刻"}</h1><p>{mode === "replace" ? "选择视频和商品图片，用一句话替换视频中的商品。" : "选择一条本机视频，复刻它的节奏、镜头和动作，生成属于你的新版本。"}</p></div>
+      <div className="video-replica-meta"><span className="workflow-badge">{selected ? statusText(selected.status) : "未开始"}</span><span>{mode === "replace" ? `当前模型最长 ${maxSegmentDuration} 秒 · 200MB` : "最多 5 分钟 · 200MB"}</span></div>
     </header>
     <main className="video-replica">
       <div className="video-replica-workbench">
         <section className="video-replica-editor">
+        <div className="video-mode-switch" role="tablist" aria-label="视频工作模式"><button type="button" className={mode === "replica" ? "active" : ""} onClick={() => { setMode("replica"); setTaskType("reference"); }}>视频复刻</button><button type="button" className={mode === "replace" ? "active" : ""} onClick={() => { setMode("replace"); setTaskType("replace"); setStoryboard([]); }}>AI 替换</button></div>
         <div className={`video-replica-panel workflow-panel ${stepStatus(1)}`}>
-          <div className="workflow-step-head"><div className="step-number">1</div><div><span className="step-kicker">素材</span><h2>选择原视频</h2><p>从本机选择一段要复刻的视频。</p></div><span className="step-state">{busy === "upload" ? "正在添加" : sourceReady ? "已添加" : "待选择"}</span></div>
+          <div className="workflow-step-head"><div className="step-number">1</div><div><span className="step-kicker">素材</span><h2>选择{mode === "replace" ? "视频" : "原视频"}</h2><p>{mode === "replace" ? `选择一段不超过 ${maxSegmentDuration} 秒的视频。` : "从本机选择一段要复刻的视频。"}</p></div><span className="step-state">{busy === "upload" ? "正在添加" : sourceReady ? "已添加" : "待选择"}</span></div>
           <div className={`video-upload-box ${sourceReady && busy !== "upload" ? "has-video" : ""}`}>
             {busy === "upload" ? (
               <div className="video-upload-status" role="status" aria-live="polite">
@@ -181,13 +188,13 @@ export function VideoReplica() {
                 <strong>{videoReadProgress === null ? "正在保存并校验视频…" : `正在读取视频 ${videoReadProgress}%`}</strong>
                 {videoReadProgress !== null && <progress value={videoReadProgress} max={100} aria-label="读取视频进度" />}
               </div>
-            ) : sourcePreview ? <><video src={sourcePreview} controls /><label className="video-replace-action"><Upload size={15} />重新选择<input type="file" accept="video/mp4,video/webm,video/quicktime" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void uploadVideo(file); }} /></label></> : <label className="video-upload-prompt"><Film size={30} /><strong>点击选择本机视频</strong><span>MP4 / WebM / MOV · 最长 5 分钟</span><input type="file" accept="video/mp4,video/webm,video/quicktime" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void uploadVideo(file); }} /></label>}
+            ) : sourcePreview ? <><video src={sourcePreview} controls onLoadedMetadata={(event) => { if (!Number.isFinite(event.currentTarget.duration)) return; const seconds = event.currentTarget.duration; setSourceDuration(seconds); if (mode === "replace") { setDuration(Math.min(maxSegmentDuration, Math.max(4, Math.ceil(seconds)))); setError(seconds > maxSegmentDuration + 0.5 ? `视频将自动截取前 ${maxSegmentDuration} 秒并压缩` : ""); } }} /><label className="video-replace-action"><Upload size={15} />重新选择<input type="file" accept="video/mp4,video/webm,video/quicktime" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void uploadVideo(file); }} /></label></> : <label className="video-upload-prompt"><Film size={30} /><strong>点击选择本机视频</strong><span>MP4 / WebM / MOV · {mode === "replace" ? `当前模型最长 ${maxSegmentDuration} 秒，超出会自动剪切压缩` : "最长 5 分钟"}</span><input type="file" accept="video/mp4,video/webm,video/quicktime" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void uploadVideo(file); }} /></label>}
           </div>
-          <div className="reference-row"><div><strong>参考素材</strong><span>可选，最多 4 张人物或商品图</span></div><div className="reference-thumbs">{referencePaths.map((path) => <button type="button" key={path} aria-label="移除参考图" onClick={() => setReferencePaths((items) => items.filter((item) => item !== path))}><img src={fileUrl(path)} alt="" /></button>)}<label className="reference-add"><Upload size={17} /><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadReference(file); }} />添加图片</label></div></div>
-          <button className="button secondary workflow-action" type="button" disabled={!sourcePath || !!busy} onClick={() => void analyze()}>{busy === "analyze" ? <LoaderCircle className="spin" size={16} /> : <RefreshCw size={16} />}AI 分析并生成分镜</button>
+          <div className="reference-row"><div><strong>{mode === "replace" ? "商品图片" : "参考素材"}</strong><span>{mode === "replace" ? "添加要替换进视频的商品图片" : "可选，最多 4 张人物或商品图"}</span></div><div className="reference-thumbs">{referencePaths.map((path) => <button type="button" key={path} aria-label="移除参考图" onClick={() => setReferencePaths((items) => items.filter((item) => item !== path))}><img src={fileUrl(path)} alt="" /></button>)}{(mode === "replace" ? referencePaths.length < 1 : referencePaths.length < 4) && <label className="reference-add"><Upload size={17} /><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadReference(file); }} />添加图片</label>}</div></div>
+          {mode === "replica" && <button className="button secondary workflow-action" type="button" disabled={!sourcePath || !!busy} onClick={() => void analyze()}>{busy === "analyze" ? <LoaderCircle className="spin" /> : <RefreshCw size={16} />}AI 分析并生成分镜</button>}
         </div>
-        <div className={`video-replica-panel workflow-panel ${stepStatus(2)}`}><div className="workflow-step-head"><div className="step-number">2</div><div><span className="step-kicker">内容</span><h2>描述你要复刻的内容</h2><p>写下主题、产品或人物，AI 会匹配参考视频的结构。</p></div><span className="step-state">{prompt.length}/500</span></div><textarea className="video-script" value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="例如：为一款轻便的随行咖啡杯制作 15 秒种草短片，强调通勤、保温和极简设计。" />{storyboard.length > 0 && <div className="storyboard-list">{storyboard.map((item, index) => <div className="storyboard-item" key={`${item.start}-${index}`}><b>{item.start}-{item.end}s</b><span>{item.shot}</span><small>{item.action}</small></div>)}</div>}</div>
-        <div className={`video-replica-panel workflow-panel ${stepStatus(3)}`}><div className="workflow-step-head"><div className="step-number">3</div><div><span className="step-kicker">设置</span><h2>选择视频参数</h2><p>选择画幅、时长、模型和清晰度。</p></div><span className="step-state">单段上限 {maxSegmentDuration} 秒</span></div><div className="video-controls"><label>模型<SettingsSelect name="video-model" value={model} options={[{ value: "seedance-2.5", label: "Seedance 2.5" }, { value: "seedance-2.0", label: "Seedance 2.0" }]} onChange={setModel} /></label><label>任务类型<SettingsSelect name="video-task-type" value={taskType} options={[{ value: "reference", label: "参考重制" }, { value: "extend", label: "延长上一段" }, { value: "auto", label: "自动判断" }]} onChange={(value) => setTaskType(value as typeof taskType)} /></label><label>画面比例<SettingsSelect name="video-ratio" value={ratio} options={["16:9", "9:16", "1:1", "adaptive"].map((value) => ({ value, label: value }))} onChange={setRatio} /></label><label>视频时长<SettingsSelect name="video-duration" value={String(duration)} options={durationOptions.map((value) => ({ value: String(value), label: `${value} 秒 · ${Math.ceil(value / maxSegmentDuration)} 段` }))} onChange={(value) => setDuration(Number(value))} /></label><label>清晰度<SettingsSelect name="video-resolution" value={resolution} options={["480p", "720p"].map((value) => ({ value, label: value }))} onChange={setResolution} /></label></div><button className="button primary workflow-action" type="button" disabled={!!busy || !sourcePath || !prompt.trim()} onClick={() => void create()}>{busy === "create" ? <LoaderCircle className="spin" size={16} /> : <Play size={16} />}生成复刻视频</button></div>
+        <div className={`video-replica-panel workflow-panel ${stepStatus(2)}`}><div className="workflow-step-head"><div className="step-number">2</div><div><span className="step-kicker">内容</span><h2>{mode === "replace" ? "描述替换内容" : "描述你要复刻的内容"}</h2><p>{mode === "replace" ? "例如：把视频中的苹果替换成香蕉，保持镜头运动和光线一致。" : "写下主题、产品或人物，AI 会匹配参考视频的结构。"}</p></div><span className="step-state">{prompt.length}/500</span></div><textarea className="video-script" value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder={mode === "replace" ? "例如：把视频中的苹果替换成香蕉，保持原视频的动作、光线和背景。" : "例如：为一款轻便的随行咖啡杯制作 15 秒种草短片，强调通勤、保温和极简设计。"} />{mode === "replica" && storyboard.length > 0 && <div className="storyboard-list">{storyboard.map((item, index) => <div className="storyboard-item" key={`${item.start}-${index}`}><b>{item.start}-{item.end}s</b><span>{item.shot}</span><small>{item.action}</small></div>)}</div>}</div>
+        <div className={`video-replica-panel workflow-panel ${stepStatus(3)}`}><div className="workflow-step-head"><div className="step-number">3</div><div><span className="step-kicker">设置</span><h2>{mode === "replace" ? "生成替换视频" : "选择视频参数"}</h2><p>{mode === "replace" ? "使用商品图片和提示词生成新视频。" : "选择画幅、时长、模型和清晰度。"}</p></div><span className="step-state">{mode === "replace" ? `${duration} 秒` : `单段上限 ${maxSegmentDuration} 秒`}</span></div><div className="video-controls"><label>模型<SettingsSelect name="video-model" value={model} options={[{ value: "seedance-2.5", label: "Seedance 2.5" }, { value: "seedance-2.0", label: "Seedance 2.0" }]} onChange={(value) => { setModel(value); if (mode === "replace" && sourceDuration !== null) { const nextMax = value === "seedance-2.0" ? 15 : 30; setDuration(Math.min(nextMax, Math.max(4, Math.ceil(sourceDuration)))); setError(sourceDuration > nextMax + 0.5 ? `视频将自动截取前 ${nextMax} 秒并压缩` : ""); } }} /></label>{mode === "replica" && <label>任务类型<SettingsSelect name="video-task-type" value={taskType} options={[{ value: "reference", label: "参考重制" }, { value: "extend", label: "延长上一段" }, { value: "auto", label: "自动判断" }]} onChange={(value) => setTaskType(value as typeof taskType)} /></label>}<label>画面比例<SettingsSelect name="video-ratio" value={ratio} options={["16:9", "9:16", "1:1", "adaptive"].map((value) => ({ value, label: value }))} onChange={setRatio} /></label>{mode === "replica" && <label>视频时长<SettingsSelect name="video-duration" value={String(duration)} options={durationOptions.map((value) => ({ value: String(value), label: `${value} 秒 · ${Math.ceil(value / maxSegmentDuration)} 段` }))} onChange={(value) => setDuration(Number(value))} /></label>}<label>清晰度<SettingsSelect name="video-resolution" value={resolution} options={["480p", "720p"].map((value) => ({ value, label: value }))} onChange={setResolution} /></label></div><button className="button primary workflow-action" type="button" disabled={!!busy || !sourcePath || !prompt.trim() || (mode === "replace" && !replaceReady)} onClick={() => void create()}>{busy === "create" ? <LoaderCircle className="spin" size={16} /> : <Play size={16} />}{mode === "replace" ? "生成替换视频" : "生成复刻视频"}</button></div>
         </section>
         <section className="video-replica-preview">
         <div className="video-replica-panel-head"><div><span className="step-kicker">OUTPUT PREVIEW</span><h2>生成预览</h2></div><span className="preview-status">{selectedLabel}</span></div>
@@ -211,7 +218,7 @@ export function VideoReplica() {
         </section>
       </div>
       <section className="video-template-section"><div className="template-section-heading"><div><span className="eyebrow">START EASIER</span><h2>从精选模板开始</h2></div><a href="/templates" className="text-link">查看全部 <span aria-hidden="true">→</span></a></div><div className="video-template-grid">{templatePresentation.map(([id, name, image, description]) => <article className="video-template-card" key={id}><img src={image} alt="" /><span className="video-template-card-copy"><strong>{name}</strong><small>{description}</small></span></article>)}</div></section>
-      <section className="video-replica-history"><div className="video-replica-panel-head"><h2>历史任务</h2><span>{jobs.length} 条</span></div>{jobs.length ? jobs.map((job) => <div className={`video-history-item ${selected?.id === job.id ? "active" : ""}`} key={job.id}><button type="button" className="video-history-select" onClick={() => selectJob(job)}><span>{job.task_type === "extend" ? "延长" : "重制"}</span><strong>{job.model}</strong><small>{statusText(job.status)} · {job.progress?.completed_segments ?? 0}/{job.progress?.total_segments ?? 0} 段 · {job.versions.length} 个版本</small><time>{new Date(job.created_at * 1000).toLocaleString()}</time></button>{job.file_path && <button type="button" className="button secondary video-use-result" onClick={() => { setTaskType("extend"); setSourcePath(job.file_path!); setSourcePreview(fileUrl(job.file_path)); setSelected(job); setPrompt(job.prompt); }}>继续延长</button>}</div>) : <div className="video-history-empty">还没有视频作品，完成一次重制后会自动保存在这里。</div>}</section>
+      <section className="video-replica-history"><div className="video-replica-panel-head"><h2>历史任务</h2><span>{jobs.length} 条</span></div>{jobs.length ? jobs.map((job) => <div className={`video-history-item ${selected?.id === job.id ? "active" : ""}`} key={job.id}><button type="button" className="video-history-select" onClick={() => selectJob(job)}><span>{job.task_type === "extend" ? "延长" : job.task_type === "replace" ? "AI 替换" : "复刻"}</span><strong>{job.model}</strong><small>{statusText(job.status)} · {job.progress?.completed_segments ?? 0}/{job.progress?.total_segments ?? 0} 段 · {job.versions.length} 个版本</small><time>{new Date(job.created_at * 1000).toLocaleString()}</time></button>{job.file_path && <button type="button" className="button secondary video-use-result" onClick={() => { setMode("replica"); setTaskType("extend"); setSourcePath(job.file_path!); setSourcePreview(fileUrl(job.file_path)); setSelected(job); setPrompt(job.prompt); }}>继续延长</button>}</div>) : <div className="video-history-empty">还没有视频作品，完成一次生成后会自动保存在这里。</div>}</section>
       {error && <p className="notice error" role="alert">{error}</p>}
     </main>
   </Shell>;

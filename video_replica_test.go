@@ -2,6 +2,24 @@ package main
 
 import "testing"
 
+func TestValidateVideoReplicaReplaceRequiresSingleProductImage(t *testing.T) {
+	input := VideoReplicaInput{TaskType: "replace", Model: "seedance-2.5", Prompt: "把苹果替换成香蕉", Duration: 10, Resolution: "480p", Ratio: "16:9"}
+	if err := validateVideoReplicaInput(input); err == nil {
+		t.Fatal("expected product image validation error")
+	}
+	input.ReferencePaths = []string{"uploads/product.png"}
+	if err := validateVideoReplicaInput(input); err != nil {
+		t.Fatalf("valid replace input rejected: %v", err)
+	}
+}
+
+func TestValidateVideoReplicaReplaceAllowsPreprocessingLongerSource(t *testing.T) {
+	input := VideoReplicaInput{TaskType: "replace", Model: "seedance-2.0", Prompt: "把苹果替换成香蕉", Duration: 16, Resolution: "480p", Ratio: "16:9", ReferencePaths: []string{"uploads/product.png"}}
+	if err := validateVideoReplicaInput(input); err != nil {
+		t.Fatalf("replace input should be accepted for preprocessing: %v", err)
+	}
+}
+
 func TestSegmentVideoUsesModelLimit(t *testing.T) {
 	storyboard := []map[string]any{
 		{"start": 0, "end": 20, "shot": "开场", "action": "产品入镜"},

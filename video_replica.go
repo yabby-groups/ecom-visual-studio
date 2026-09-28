@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/base64"
@@ -10,6 +11,7 @@ import (
 	"io"
 	"log"
 	"mime"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"os/exec"
@@ -59,6 +61,8 @@ var seedanceMaxDuration = map[string]int{
 	"seedance-2.0": 15,
 	"seedance-2.5": 30,
 }
+
+const videoDurationTolerance = 0.5
 
 func segmentVideo(duration, maxDuration int, storyboard []map[string]any, prompt string) ([]videoSegmentPlan, error) {
 	if duration < 4 || duration > 300 || maxDuration < 4 {
@@ -190,8 +194,32 @@ func (s *Studio) CreateVideoReplica(input VideoReplicaInput) (map[string]string,
 	if _, _, _, _, _, err = s.activeProvider(user.ID); err != nil {
 		return nil, err
 	}
-	if _, err = s.replicaSourcePath(input.SourceVideoPath); err != nil {
+	sourcePath, err := s.replicaSourcePath(input.SourceVideoPath)
+	if err != nil {
 		return nil, err
+	}
+	id := newID("video-replica")
+	persistedSourcePath := input.SourceVideoPath
+	effectiveDuration := input.Duration
+	if input.TaskType == "replace" {
+		maxDuration := seedanceMaxDuration[input.Model]
+		seconds, durationErr := videoDuration(sourcePath)
+		if durationErr != nil {
+			return nil, errors.New("无法读取视频时长，请确认已安装 ffprobe")
+		}
+		if seconds > float64(maxDuration)+videoDurationTolerance {
+			persistedSourcePath, sourcePath, err = s.prepareVideoReplacementSource(sourcePath, id, maxDuration)
+			if err != nil {
+				return nil, err
+			}
+		}
+		effectiveDuration = int(seconds)
+		if seconds-float64(effectiveDuration) > 0 {
+			effectiveDuration++
+		}
+		if effectiveDuration > maxDuration {
+			effectiveDuration = maxDuration
+		}
 	}
 	for _, path := range input.ReferencePaths {
 		if _, err = s.uploadedImagePath(path); err != nil {
@@ -199,15 +227,14 @@ func (s *Studio) CreateVideoReplica(input VideoReplicaInput) (map[string]string,
 		}
 	}
 	storyboard, _ := json.Marshal(input.Storyboard)
-	id := newID("video-replica")
 	runID := newID("video-run")
-	plans, err := segmentVideo(input.Duration, seedanceMaxDuration[input.Model], input.Storyboard, input.Prompt)
+	plans, err := segmentVideo(effectiveDuration, seedanceMaxDuration[input.Model], input.Storyboard, input.Prompt)
 	if err != nil {
 		return nil, err
 	}
 	refs, _ := json.Marshal(input.ReferencePaths)
 	if err := s.writeTransaction(func(tx *sql.Tx) error {
-		if _, err := tx.Exec("insert into video_replica_jobs(id,user_id,source_video_path,reference_paths,task_type,model,prompt,storyboard,storyboard_confirmed,duration,resolution,ratio,status,current_run_id,created_at) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", id, localWorkspaceID, input.SourceVideoPath, string(refs), input.TaskType, seedanceModels[input.Model], input.Prompt, string(storyboard), 1, input.Duration, input.Resolution, input.Ratio, "queued", runID, time.Now().Unix()); err != nil {
+		if _, err := tx.Exec("insert into video_replica_jobs(id,user_id,source_video_path,reference_paths,task_type,model,prompt,storyboard,storyboard_confirmed,duration,resolution,ratio,status,current_run_id,created_at) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", id, localWorkspaceID, persistedSourcePath, string(refs), input.TaskType, seedanceModels[input.Model], input.Prompt, string(storyboard), 1, effectiveDuration, input.Resolution, input.Ratio, "queued", runID, time.Now().Unix()); err != nil {
 			return err
 		}
 		return insertVideoSegments(tx, id, runID, plans)
@@ -216,6 +243,19 @@ func (s *Studio) CreateVideoReplica(input VideoReplicaInput) (map[string]string,
 	}
 	go s.generateVideoReplica(id, user.ID)
 	return map[string]string{"id": id}, nil
+}
+
+func (s *Studio) prepareVideoReplacementSource(sourcePath, jobID string, maxDuration int) (string, string, error) {
+	relative := filepath.ToSlash(filepath.Join("generated", "video-replace", jobID+".mp4"))
+	output := filepath.Join(s.dataDir, "storage", filepath.FromSlash(relative))
+	if err := os.MkdirAll(filepath.Dir(output), 0o700); err != nil {
+		return "", "", err
+	}
+	command := exec.Command(mediaToolPath("ffmpeg"), "-y", "-i", sourcePath, "-t", strconv.Itoa(maxDuration), "-map", "0:v:0", "-map", "0:a?", "-c:v", "libx264", "-preset", "veryfast", "-crf", "28", "-c:a", "aac", "-b:a", "96k", "-movflags", "+faststart", output)
+	if outputBytes, err := command.CombinedOutput(); err != nil {
+		return "", "", fmt.Errorf("视频剪切压缩失败：%w (%s)", err, truncate(string(outputBytes)))
+	}
+	return relative, output, nil
 }
 
 func (s *Studio) UpdateVideoReplicaStoryboard(id string, storyboard []map[string]any) (map[string]bool, error) {
@@ -392,16 +432,21 @@ func (s *Studio) runVideoSegments(id, runID, providerUserID, source, refsJSON, t
 	if err := json.Unmarshal([]byte(refsJSON), &refs); err != nil {
 		return err
 	}
+	bearer, err := s.currentHuabotBearer(providerUserID)
+	if err != nil {
+		return err
+	}
+	config := s.huabotConfig()
 	inputRefs := make([]map[string]any, 0, len(refs)+1)
-	if taskType == "extend" {
-		videoURL, err := s.mediaDataURL(source, true)
+	if taskType == "extend" || taskType == "replace" {
+		videoURL, err := s.uploadVideoReplicaSource(config, bearer, source)
 		if err != nil {
 			return err
 		}
 		inputRefs = append(inputRefs, map[string]any{"type": "video_url", "video_url": map[string]string{"url": videoURL}})
 	}
 	for _, ref := range refs {
-		refURL, err := s.mediaDataURL(ref, false)
+		refURL, err := s.uploadVideoReplicaSource(config, bearer, ref)
 		if err != nil {
 			return err
 		}
@@ -428,7 +473,6 @@ func (s *Studio) runVideoSegments(id, runID, providerUserID, source, refsJSON, t
 	if len(segments) == 0 {
 		return errors.New("视频片段计划不存在")
 	}
-	config := s.huabotConfig()
 	for index := range segments {
 		segment := &segments[index]
 		if segment.Status == "ready" && segment.Path != "" {
@@ -500,6 +544,57 @@ func (s *Studio) runVideoSegments(id, runID, providerUserID, source, refsJSON, t
 		_, err := tx.Exec("update video_replica_jobs set status='ready',file_path=? where id=?", path, id)
 		return err
 	})
+}
+
+func (s *Studio) uploadVideoReplicaSource(config huabotConfig, bearer, localPath string) (string, error) {
+	path, err := s.replicaSourcePath(localPath)
+	if err != nil {
+		path, err = s.uploadedImagePath(localPath)
+	}
+	if err != nil {
+		return "", err
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	part, err := writer.CreateFormFile("file", filepath.Base(path))
+	if err != nil {
+		return "", err
+	}
+	if _, err = part.Write(data); err != nil {
+		return "", err
+	}
+	if err = writer.Close(); err != nil {
+		return "", err
+	}
+	req, err := http.NewRequest(http.MethodPost, config.WebBase+"/api/file/run/", &body)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+bearer)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	response, err := s.httpClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	var result struct {
+		File struct {
+			Key string `json:"file_key"`
+			Ext string `json:"file_ext"`
+		} `json:"file"`
+	}
+	if err = decodeResponse(response, &result); err != nil {
+		return "", err
+	}
+	key := strings.ReplaceAll(strings.TrimSpace(result.File.Key), "-", "")
+	ext := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(result.File.Ext)), ".")
+	if len(key) < 4 || ext == "" {
+		return "", errors.New("Huabot 未返回有效的上传文件地址")
+	}
+	return fmt.Sprintf("%s/upload/%s/%s/%s.%s", config.WebBase, key[:2], key[2:4], key, ext), nil
 }
 
 func (s *Studio) failVideoSegment(id string, cause error) error {
@@ -727,7 +822,7 @@ func (s *Studio) populateVideoReplicaSegments(job map[string]any) error {
 }
 
 func validateVideoReplicaInput(input VideoReplicaInput) error {
-	if input.TaskType != "auto" && input.TaskType != "reference" && input.TaskType != "extend" {
+	if input.TaskType != "auto" && input.TaskType != "reference" && input.TaskType != "extend" && input.TaskType != "replace" {
 		return errors.New("视频复刻模式无效")
 	}
 	if _, ok := seedanceModels[input.Model]; !ok {
@@ -741,6 +836,11 @@ func validateVideoReplicaInput(input VideoReplicaInput) error {
 	}
 	if input.Duration < 4 || input.Duration > 300 {
 		return errors.New("视频总时长须在 4 到 300 秒之间")
+	}
+	if input.TaskType == "replace" {
+		if len(input.ReferencePaths) != 1 {
+			return errors.New("AI 替换需要一张商品图片")
+		}
 	}
 	if input.Resolution != "480p" && input.Resolution != "720p" {
 		return errors.New("视频清晰度无效")
