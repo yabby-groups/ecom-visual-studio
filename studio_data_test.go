@@ -1690,6 +1690,19 @@ func TestImageGenerationRequestsPNGOutput(t *testing.T) {
 	}
 }
 
+func TestNormalizeHuabotTokenKey(t *testing.T) {
+	tests := map[string]string{
+		"raw-token":      "sk-raw-token",
+		" sk-raw-token ": "sk-raw-token",
+		"":               "",
+	}
+	for input, want := range tests {
+		if got := normalizeHuabotTokenKey(input); got != want {
+			t.Errorf("normalizeHuabotTokenKey(%q) = %q, want %q", input, got, want)
+		}
+	}
+}
+
 func TestImageEditRequestsCustomSize(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/images/edits" {

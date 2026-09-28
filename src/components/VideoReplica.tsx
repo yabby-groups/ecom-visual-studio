@@ -1,8 +1,9 @@
 import { Film, LoaderCircle, Play, RefreshCw, Upload, Download } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { client } from "../api";
 import { useRequireAiAuth } from "../auth";
-import type { VideoReplicaJob, VideoReplicaStoryboardItem } from "../types";
+import type { VideoReplicaJob, VideoReplicaStoryboardItem, VideoReplicaSegment } from "../types";
 import { fileUrl, isPending, statusText } from "../utils/assets";
 import { Shell } from "./Shell";
 import { SettingsSelect } from "./SettingsSelect";
@@ -11,6 +12,7 @@ import "./VideoReplica.css";
 const defaultStoryboard: VideoReplicaStoryboardItem[] = [];
 
 export function VideoReplica() {
+  const location = useLocation();
   const requireAiAuth = useRequireAiAuth();
   const [sourcePath, setSourcePath] = useState("");
   const [sourcePreview, setSourcePreview] = useState("");
@@ -28,13 +30,27 @@ export function VideoReplica() {
   const [videoReadProgress, setVideoReadProgress] = useState<number | null>(null);
   const [error, setError] = useState("");
 
+  function selectJob(job: VideoReplicaJob) {
+    setSelected(job);
+    setSourcePath(job.source_video_path);
+    setSourcePreview(fileUrl(job.source_video_path));
+    setReferencePaths(job.reference_paths);
+    setStoryboard(job.storyboard);
+    setPrompt(job.prompt);
+    setModel(job.model === "doubao-seedance-2.0-mini" ? "seedance-2.0" : "seedance-2.5");
+    setTaskType(job.task_type);
+    setDuration(job.duration);
+    setRatio(job.ratio);
+    setResolution(job.resolution);
+  }
+
   async function load() {
     try {
       const result = await client.videoReplicaJobs();
       setJobs(result.items);
       if (selected) {
         const fresh = result.items.find((item) => item.id === selected.id);
-        if (fresh) setSelected(fresh);
+        if (fresh) selectJob(fresh);
       }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "无法加载视频任务");
@@ -42,6 +58,13 @@ export function VideoReplica() {
   }
 
   useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    const jobID = (location.state as { jobId?: string } | null)?.jobId;
+    if (!jobID) return;
+    void client.videoReplicaJob(jobID).then((job) => {
+      selectJob(job);
+    }).catch((reason) => setError(reason instanceof Error ? reason.message : "无法打开视频作品"));
+  }, [location.state]);
   useEffect(() => {
     if (!jobs.some((job) => isPending(job.status))) return;
     const timer = window.setInterval(() => void load(), 5000);
@@ -101,7 +124,7 @@ export function VideoReplica() {
       const result = await client.createVideoReplica({ source_video_path: sourcePath, reference_paths: referencePaths, task_type: taskType, model, prompt, storyboard, duration, resolution, ratio });
       await load();
       const fresh = await client.videoReplicaJob(result.id);
-      setSelected(fresh);
+      selectJob(fresh);
     } catch (reason) { setError(reason instanceof Error ? reason.message : "创建视频任务失败"); }
     finally { setBusy(""); }
   }
@@ -123,7 +146,18 @@ export function VideoReplica() {
   const selectedLabel = useMemo(() => selected ? `${selected.model} · ${statusText(selected.status)}` : "等待生成结果", [selected]);
   const sourceReady = Boolean(sourcePath);
   const scriptReady = Boolean(prompt.trim());
+  const maxSegmentDuration = model === "seedance-2.0" ? 15 : 30;
+  const durationOptions = [5, 10, 15, 30, 60, 120, 180, 300];
   const stepStatus = (step: number) => step === 1 && sourceReady || step === 2 && scriptReady || step === 3 && Boolean(selected) ? "done" : "";
+  const progress = selected?.progress;
+  const segmentStatus = (segment: VideoReplicaSegment) => {
+    if (segment.status.startsWith("failed")) return "失败";
+    return ({ queued: "排队中", submitting: "提交中", generating: "生成中", downloading: "下载中", ready: "已完成" } as Record<string, string>)[segment.status] || segment.status;
+  };
+  const phaseSteps = [
+    ["preparing", "准备素材"], ["generating", "生成片段"], ["downloading", "下载片段"], ["merging", "合并视频"], ["ready", "完成"],
+  ] as const;
+  const phaseIndex = selected ? phaseSteps.findIndex(([phase]) => phase === selected.status) : -1;
 
   return <Shell>
     <header className="workspace-header video-replica-header">
@@ -147,10 +181,27 @@ export function VideoReplica() {
           <button className="button secondary workflow-action" type="button" disabled={!sourcePath || !!busy} onClick={() => void analyze()}>{busy === "analyze" ? <LoaderCircle className="spin" size={16} /> : <RefreshCw size={16} />}分析视频并生成分镜</button>
         </div>
         <div className={`video-replica-panel workflow-panel ${stepStatus(2)}`}><div className="workflow-step-head"><div className="step-number">2</div><div><span className="step-kicker">分镜</span><h2>编辑复刻脚本</h2><p>分析结果会自动填充，你也可以直接修改。</p></div><span className="step-state">{storyboard.length} 个镜头</span></div><textarea className="video-script" value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="先分析原视频，或直接输入你想生成的镜头脚本。" />{storyboard.length > 0 && <div className="storyboard-list">{storyboard.map((item, index) => <div className="storyboard-item" key={`${item.start}-${index}`}><b>{item.start}-{item.end}s</b><span>{item.shot}</span><small>{item.action}</small></div>)}</div>}</div>
-        <div className={`video-replica-panel workflow-panel ${stepStatus(3)}`}><div className="workflow-step-head"><div className="step-number">3</div><div><span className="step-kicker">输出</span><h2>设置生成参数</h2><p>选择模型和画幅，然后开始生成。</p></div><span className="step-state">Seedance</span></div><div className="video-controls"><label>模型<SettingsSelect name="video-model" value={model} options={[{ value: "seedance-2.5", label: "Seedance 2.5" }, { value: "seedance-2.0", label: "Seedance 2.0" }]} onChange={setModel} /></label><label>任务类型<SettingsSelect name="video-task-type" value={taskType} options={[{ value: "reference", label: "参考复刻" }, { value: "extend", label: "延长上一段" }, { value: "auto", label: "自动判断" }]} onChange={(value) => setTaskType(value as typeof taskType)} /></label><label>比例<SettingsSelect name="video-ratio" value={ratio} options={["16:9", "9:16", "1:1", "adaptive"].map((value) => ({ value, label: value }))} onChange={setRatio} /></label><label>时长<SettingsSelect name="video-duration" value={String(duration)} options={[5, 10, 30, 60].map((value) => ({ value: String(value), label: `${value} 秒` }))} onChange={(value) => setDuration(Number(value))} /></label><label>清晰度<SettingsSelect name="video-resolution" value={resolution} options={["480p", "720p"].map((value) => ({ value, label: value }))} onChange={setResolution} /></label></div><button className="button primary workflow-action" type="button" disabled={!!busy || !sourcePath || !prompt.trim()} onClick={() => void create()}>{busy === "create" ? <LoaderCircle className="spin" size={16} /> : <Play size={16} />}确认脚本并生成视频</button></div>
+        <div className={`video-replica-panel workflow-panel ${stepStatus(3)}`}><div className="workflow-step-head"><div className="step-number">3</div><div><span className="step-kicker">输出</span><h2>设置生成参数</h2><p>选择模型和画幅，然后开始生成。</p></div><span className="step-state">单段上限 {maxSegmentDuration} 秒</span></div><div className="video-controls"><label>模型<SettingsSelect name="video-model" value={model} options={[{ value: "seedance-2.5", label: "Seedance 2.5" }, { value: "seedance-2.0", label: "Seedance 2.0" }]} onChange={setModel} /></label><label>任务类型<SettingsSelect name="video-task-type" value={taskType} options={[{ value: "reference", label: "参考重制" }, { value: "extend", label: "延长上一段" }, { value: "auto", label: "自动判断" }]} onChange={(value) => setTaskType(value as typeof taskType)} /></label><label>比例<SettingsSelect name="video-ratio" value={ratio} options={["16:9", "9:16", "1:1", "adaptive"].map((value) => ({ value, label: value }))} onChange={setRatio} /></label><label>总时长<SettingsSelect name="video-duration" value={String(duration)} options={durationOptions.map((value) => ({ value: String(value), label: `${value} 秒 · ${Math.ceil(value / maxSegmentDuration)} 段` }))} onChange={(value) => setDuration(Number(value))} /></label><label>清晰度<SettingsSelect name="video-resolution" value={resolution} options={["480p", "720p"].map((value) => ({ value, label: value }))} onChange={setResolution} /></label></div><button className="button primary workflow-action" type="button" disabled={!!busy || !sourcePath || !prompt.trim()} onClick={() => void create()}>{busy === "create" ? <LoaderCircle className="spin" size={16} /> : <Play size={16} />}确认脚本并生成视频</button></div>
       </section>
-      <section className="video-replica-preview"><div className="video-replica-panel-head"><div><span className="step-kicker">OUTPUT PREVIEW</span><h2>生成预览</h2></div><span className="preview-status">{selectedLabel}</span></div><div className="video-stage">{displayed ? <video src={displayed} controls /> : <><Film size={38} /><strong>{selected?.status.startsWith("failed") ? "生成失败" : "等待生成结果"}</strong><p>{selected?.status.startsWith("failed") ? selected.status : "确认脚本后，视频会在这里出现"}</p></>}</div>{selected && <div className="video-result-actions"><button className="button secondary" type="button" onClick={() => void regenerate(selected.id)} disabled={!!busy || isPending(selected.status)}><RefreshCw size={16} />重新生成</button>{selected.file_path && <button className="button secondary" type="button" onClick={() => void exportVideo(selected.file_path!)}><Download size={16} />导出视频</button>}</div>}</section>
-      <section className="video-replica-history"><div className="video-replica-panel-head"><h2>历史任务</h2><span>{jobs.length} 条</span></div>{jobs.map((job) => <div className={`video-history-item ${selected?.id === job.id ? "active" : ""}`} key={job.id}><button type="button" className="video-history-select" onClick={() => { setSelected(job); setStoryboard(job.storyboard); setPrompt(job.prompt); setModel(job.model === "doubao-seedance-2.0-mini" ? "seedance-2.0" : "seedance-2.5"); }}><span>{job.task_type === "extend" ? "延长" : "复刻"}</span><strong>{job.model}</strong><small>{statusText(job.status)}</small><time>{new Date(job.created_at * 1000).toLocaleString()}</time></button>{job.file_path && <button type="button" className="button secondary video-use-result" onClick={() => { setTaskType("extend"); setSourcePath(job.file_path!); setSourcePreview(fileUrl(job.file_path)); setSelected(job); setPrompt(job.prompt); }}>继续延长</button>}</div>)}</section>
+      <section className="video-replica-preview">
+        <div className="video-replica-panel-head"><div><span className="step-kicker">OUTPUT PREVIEW</span><h2>生成预览</h2></div><span className="preview-status">{selectedLabel}</span></div>
+        {selected && <div className="video-generation-progress" aria-live="polite">
+          <div className="generation-progress-head"><strong>{statusText(selected.status)}</strong><span>{progress?.completed_segments ?? 0}/{progress?.total_segments ?? 0} 段完成</span></div>
+          <div className="generation-phase-list">{phaseSteps.map(([phase, label], index) => {
+            const activeIndex = selected.status === "queued" ? 0 : phaseIndex;
+            const done = selected.status === "ready" || (activeIndex >= 0 && index < activeIndex);
+            const active = selected.status === phase || (selected.status === "queued" && index === 0);
+            return <div className={`generation-phase ${done ? "done" : ""} ${active ? "active" : ""}`} key={phase}><span className="generation-phase-dot" /><span>{label}</span></div>;
+          })}</div>
+          {isPending(selected.status) && <div className="generation-indeterminate" role="progressbar" aria-label="视频生成进行中" />}
+          {progress?.current_segment !== undefined && progress.current_segment >= 0 && progress.total_segments > 0 && <p className="generation-progress-detail">当前第 {progress.current_segment + 1} / {progress.total_segments} 段 · {selected.segments[progress.current_segment] ? segmentStatus(selected.segments[progress.current_segment]) : "处理中"}</p>}
+          {selected.segments.length > 0 && <div className="generation-segments">{selected.segments.map((segment) => <div className={`generation-segment ${segment.status.startsWith("failed") ? "failed" : ""}`} key={segment.id}><span>第 {segment.index + 1} 段</span><small>{segmentStatus(segment)}</small></div>)}</div>}
+          {selected.status === "interrupted" && <p className="generation-progress-detail">应用曾在生成期间退出，已保留片段进度，可重新生成。</p>}
+        </div>}
+        <div className="video-stage">{displayed ? <video src={displayed} controls /> : <><Film size={38} /><strong>{selected?.status.startsWith("failed") ? "生成失败" : "等待生成结果"}</strong><p>{selected?.status.startsWith("failed") ? selected.status.replace(/^failed:?\s*/, "") : "确认脚本后，视频会在这里出现"}</p></>}</div>
+        {selected && <div className="video-result-actions"><button className="button secondary" type="button" onClick={() => void regenerate(selected.id)} disabled={!!busy || isPending(selected.status)}><RefreshCw size={16} />重新生成</button>{selected.file_path && <button className="button secondary" type="button" onClick={() => void exportVideo(selected.file_path!)}><Download size={16} />导出视频</button>}</div>}
+      </section>
+      <section className="video-replica-history"><div className="video-replica-panel-head"><h2>历史任务</h2><span>{jobs.length} 条</span></div>{jobs.length ? jobs.map((job) => <div className={`video-history-item ${selected?.id === job.id ? "active" : ""}`} key={job.id}><button type="button" className="video-history-select" onClick={() => selectJob(job)}><span>{job.task_type === "extend" ? "延长" : "重制"}</span><strong>{job.model}</strong><small>{statusText(job.status)} · {job.progress?.completed_segments ?? 0}/{job.progress?.total_segments ?? 0} 段 · {job.versions.length} 个版本</small><time>{new Date(job.created_at * 1000).toLocaleString()}</time></button>{job.file_path && <button type="button" className="button secondary video-use-result" onClick={() => { setTaskType("extend"); setSourcePath(job.file_path!); setSourcePreview(fileUrl(job.file_path)); setSelected(job); setPrompt(job.prompt); }}>继续延长</button>}</div>) : <div className="video-history-empty">还没有视频作品，完成一次重制后会自动保存在这里。</div>}</section>
       {error && <p className="notice error" role="alert">{error}</p>}
     </main>
   </Shell>;

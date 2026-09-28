@@ -126,6 +126,9 @@ func decodeResponse(response *http.Response, target any) error {
 				return errors.New(text)
 			}
 		}
+		if text := strings.TrimSpace(string(body)); text != "" {
+			return fmt.Errorf("Huabot 请求失败：HTTP %d：%s", response.StatusCode, truncate(text))
+		}
 		return fmt.Errorf("Huabot 请求失败：HTTP %d", response.StatusCode)
 	}
 	if err := json.Unmarshal(body, target); err != nil {
@@ -222,6 +225,14 @@ func stringValue(value any) string {
 	return fmt.Sprint(value)
 }
 
+func normalizeHuabotTokenKey(value string) string {
+	value = strings.TrimSpace(value)
+	if value != "" && !strings.HasPrefix(value, "sk-") {
+		return "sk-" + value
+	}
+	return value
+}
+
 func (s *Studio) fetchModels() ([]providerModel, error) {
 	config := s.huabotConfig()
 	var raw map[string]any
@@ -279,7 +290,7 @@ func (s *Studio) completeHuabotLogin(bearer string, login map[string]any, creden
 		if !ok {
 			continue
 		}
-		key := stringValue(first(value, "token_key", "token", "key", "api_key", "secret"))
+		key := normalizeHuabotTokenKey(stringValue(first(value, "token_key", "token", "key", "api_key", "secret")))
 		if key == "" {
 			continue
 		}
@@ -979,7 +990,7 @@ func (s *Studio) activeProvider(userID string) (huabotConfig, string, string, st
 	if err != nil {
 		return huabotConfig{}, "", "", "", "", err
 	}
-	return s.huabotConfig(), key, image, text, chat, nil
+	return s.huabotConfig(), normalizeHuabotTokenKey(key), image, text, chat, nil
 }
 
 func jsonRequest(client *http.Client, method, rawURL, key string, payload any, target any) error {

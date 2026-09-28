@@ -182,6 +182,7 @@ func (s *Studio) migrate() error {
 		"create table if not exists try_on_versions (id text primary key, job_id text not null, file_path text not null, generation_started_at integer, created_at integer not null)",
 		"create table if not exists video_replica_jobs (id text primary key, user_id text not null, source_video_path text not null, reference_paths text not null default '[]', task_type text not null, model text not null, prompt text not null default '', storyboard text not null default '[]', storyboard_confirmed integer not null default 0, duration integer not null, resolution text not null, ratio text not null, remote_id text, polling_url text, status text not null, file_path text, generation_started_at integer, created_at integer not null)",
 		"create table if not exists video_replica_versions (id text primary key, job_id text not null, source_version_id text, file_path text not null, created_at integer not null)",
+		"create table if not exists video_replica_segments (id text primary key, job_id text not null, run_id text not null, segment_index integer not null, start_second integer not null, duration integer not null, prompt text not null, status text not null, file_path text, remote_id text, polling_url text, created_at integer not null)",
 		"create index if not exists projects_user_created_idx on projects(user_id, created_at desc)",
 		"create index if not exists assets_project_idx on assets(project_id)",
 		"create index if not exists try_on_jobs_user_created_idx on try_on_jobs(user_id, created_at desc)",
@@ -189,6 +190,7 @@ func (s *Studio) migrate() error {
 		"create index if not exists try_on_versions_job_created_idx on try_on_versions(job_id, created_at desc)",
 		"create index if not exists video_replica_jobs_created_idx on video_replica_jobs(user_id, created_at desc)",
 		"create index if not exists video_replica_versions_job_created_idx on video_replica_versions(job_id, created_at desc)",
+		"create index if not exists video_replica_segments_run_idx on video_replica_segments(job_id, run_id, segment_index)",
 	}
 	for _, statement := range statements {
 		if _, err := s.db.Exec(statement); err != nil {
@@ -203,7 +205,7 @@ func (s *Studio) migrate() error {
 		"update custom_templates set user_id='" + localWorkspaceID + "' where user_id<>'" + localWorkspaceID + "'",
 		"update try_on_jobs set user_id='" + localWorkspaceID + "' where user_id<>'" + localWorkspaceID + "'",
 		"update video_replica_jobs set user_id='" + localWorkspaceID + "' where user_id<>'" + localWorkspaceID + "'",
-		"update video_replica_jobs set status='failed: 服务在生成期间重启，请重新发起任务' where status in ('queued','generating')",
+		"update video_replica_jobs set status='interrupted' where status in ('queued','preparing','generating','downloading','merging')",
 	} {
 		if _, err := s.db.Exec(statement); err != nil {
 			return err
@@ -234,6 +236,9 @@ func (s *Studio) migrate() error {
 		return err
 	}
 	if _, err := s.db.Exec("alter table custom_templates add column image_path text not null default ''"); err != nil && !strings.Contains(err.Error(), "duplicate column") {
+		return err
+	}
+	if _, err := s.db.Exec("alter table video_replica_jobs add column current_run_id text not null default ''"); err != nil && !strings.Contains(err.Error(), "duplicate column") {
 		return err
 	}
 	return nil

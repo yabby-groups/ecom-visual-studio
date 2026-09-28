@@ -151,9 +151,26 @@ export type VideoReplicaStoryboardItem = {
 export type VideoReplicaVersion = {
   id: string;
   job_id: string;
-  source_version_id?: string;
+  source_version_id?: string | null;
   file_path: string;
   created_at: number;
+};
+export type VideoReplicaSegment = {
+  id: string;
+  index: number;
+  start_second: number;
+  duration: number;
+  prompt: string;
+  status: string;
+  file_path: string | null;
+  remote_id: string | null;
+  polling_url: string | null;
+};
+export type VideoReplicaProgress = {
+  phase: string;
+  completed_segments: number;
+  total_segments: number;
+  current_segment: number;
 };
 export type VideoReplicaJob = {
   id: string;
@@ -172,6 +189,8 @@ export type VideoReplicaJob = {
   generation_started_at: number | null;
   created_at: number;
   versions: VideoReplicaVersion[];
+  segments: VideoReplicaSegment[];
+  progress: VideoReplicaProgress;
 };
 export type VideoReplicaPage = {
   items: VideoReplicaJob[];

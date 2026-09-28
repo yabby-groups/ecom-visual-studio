@@ -12,6 +12,15 @@
   --accent-dark: #0c654f;
   --soft: #e4f1ed;
   --canvas: #e9edeb;
+  --surface-raised: #ffffff;
+  --surface-muted: #edf2ef;
+  --surface-inset: #e6ece9;
+  --surface: #ffffff;
+  --panel: #ffffff;
+  --line-strong: #b8c7c2;
+  --video-stage: #e6ece9;
+  --video-stage-ink: #29241f;
+  --video-stage-muted: #6c6358;
 }
 
 * {
@@ -584,6 +593,15 @@ select:focus {
   --accent: #258f7b;
   --accent-dark: #1d7464;
   --soft: rgba(37, 143, 123, 0.18);
+  --surface-raised: #171c34;
+  --surface-muted: #202846;
+  --surface-inset: #11172c;
+  --surface: #171c34;
+  --panel: #171c34;
+  --line-strong: rgba(255, 255, 255, 0.34);
+  --video-stage: #0d1124;
+  --video-stage-ink: #f7f8ff;
+  --video-stage-muted: #bac3d8;
   color: var(--ink);
   background: var(--paper);
 }
@@ -603,6 +621,28 @@ select:focus {
     #182a42 36% 60%,
     #201937 60% 100%
   );
+}
+
+/* Dark mode needs an explicit surface for shared controls. The base button
+   styles use a white secondary surface, which would otherwise pair with the
+   dark theme's light text and make labels disappear. */
+:root[data-theme="dark"] :is(.button.secondary, .icon-button) {
+  border-color: var(--line);
+  background: var(--surface-raised);
+  color: var(--ink);
+}
+
+:root[data-theme="dark"] :is(.button.secondary, .icon-button):hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--surface-muted);
+  color: var(--ink);
+}
+
+:root[data-theme="dark"] :is(.button.secondary, .icon-button):disabled {
+  border-color: var(--line);
+  background: var(--surface-inset);
+  color: var(--muted);
+  opacity: 1;
 }
 button,
 input,
@@ -1057,6 +1097,12 @@ button:active {
   --surface-raised: #fffdf9;
   --surface-muted: #f5eee2;
   --surface-inset: #ebe2d5;
+  --surface: #fffdf9;
+  --panel: #fffdf9;
+  --line-strong: #c7b9a7;
+  --video-stage: #eee7dc;
+  --video-stage-ink: #29241f;
+  --video-stage-muted: #6c6358;
   --accent: #a46416;
   --accent-dark: #75420a;
   --soft: #f7e6c3;
