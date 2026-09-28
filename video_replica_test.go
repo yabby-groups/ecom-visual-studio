@@ -17,6 +17,13 @@ func TestNormalizeVideoGenerationErrorMapsUnauthorized(t *testing.T) {
 	}
 }
 
+func TestHuabotOmniReferenceTaskTypeMapsReplaceToReference(t *testing.T) {
+	payload := videoReplicaPayload("doubao-seedance-2.5", "替换商品", 30, "480p", "16:9", "replace", 1, true)
+	if got := payload["omni_reference_task_type"]; got != "reference" {
+		t.Fatalf("omni_reference_task_type = %v, want reference", got)
+	}
+}
+
 func TestValidateVideoReplicaReplaceRequiresSingleProductImage(t *testing.T) {
 	input := VideoReplicaInput{TaskType: "replace", Model: "seedance-2.5", Prompt: "把苹果替换成香蕉", Duration: 10, Resolution: "480p", Ratio: "16:9"}
 	if err := validateVideoReplicaInput(input); err == nil {
@@ -136,6 +143,17 @@ func TestParseVideoReplicaReview(t *testing.T) {
 func TestParseVideoReplicaReviewRejectsInvalidScore(t *testing.T) {
 	if _, err := parseVideoReplicaReview(`{"score":101,"issues":[],"optimized_prompt":"优化稿"}`); err == nil {
 		t.Fatal("expected invalid score error")
+	}
+}
+
+func TestParseVideoReplicaReviewAllowsTwoThousandCharacterOptimization(t *testing.T) {
+	optimized := strings.Repeat("描", 2000)
+	result, err := parseVideoReplicaReview(`{"score":90,"issues":[],"optimized_prompt":"` + optimized + `"}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result["optimized_prompt"].(string); len([]rune(got)) != 2000 {
+		t.Fatalf("optimized prompt length = %d, want 2000", len([]rune(got)))
 	}
 }
 

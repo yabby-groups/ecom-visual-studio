@@ -65,7 +65,7 @@ var seedanceMaxDuration = map[string]int{
 }
 
 const videoDurationTolerance = 0.5
-const maxVideoReplicaReviewPromptRunes = 500
+const maxVideoReplicaReviewPromptRunes = 2000
 
 func segmentVideo(duration, maxDuration int, storyboard []map[string]any, prompt string) ([]videoSegmentPlan, error) {
 	if duration < 4 || duration > 300 || maxDuration < 4 {
@@ -709,9 +709,19 @@ func videoReplicaPayload(model, prompt string, duration int, resolution, ratio, 
 		"duration":                 duration,
 		"resolution":               resolution,
 		"ratio":                    ratio,
-		"omni_reference_task_type": taskType,
+		"omni_reference_task_type": huabotOmniReferenceTaskType(taskType),
 		"generate_audio":           true,
 	}
+}
+
+// Huabot does not expose the UI's replace mode as an omni reference task type.
+// Replacement still uses the reference-image contract, with the source video
+// and product image supplied through input_references.
+func huabotOmniReferenceTaskType(taskType string) string {
+	if taskType == "replace" {
+		return "reference"
+	}
+	return taskType
 }
 
 func (s *Studio) uploadVideoReplicaSource(config huabotConfig, bearer, localPath string) (string, error) {
