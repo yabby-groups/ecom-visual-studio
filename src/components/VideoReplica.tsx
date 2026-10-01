@@ -109,7 +109,13 @@ export function VideoReplica() {
         ? "seedance-2.0"
         : "seedance-2.5",
     );
-    if (job.task_type !== "ai_replica") setTaskType(job.task_type);
+    if (job.task_type === "ai_replica") {
+      setPersonPrompt(job.ai_person_prompt ?? "");
+      setBudget(job.ai_budget ?? 2);
+      setAiModel(job.model);
+    } else {
+      setTaskType(job.task_type);
+    }
     setMode(job.task_type === "ai_replica" ? "ai_replica" : "replica");
     setDuration(job.duration);
     setSourceDuration(job.duration || null);
@@ -445,11 +451,11 @@ export function VideoReplica() {
           source_video_path: job.source_video_path,
           product_path: job.product_reference_path || job.reference_paths[0],
           prompt: job.prompt,
-          person_prompt: personPrompt,
+          person_prompt: job.ai_person_prompt ?? personPrompt,
           model: job.model,
           resolution: job.resolution,
           ratio: job.ratio,
-          budget,
+          budget: job.ai_budget ?? budget,
         });
         await load();
         const fresh = await client.videoReplicaJob(result.id);

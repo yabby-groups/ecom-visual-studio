@@ -42,6 +42,10 @@ func aiVideoReplicaPendingStatus(status string) bool {
 	}
 }
 
+func aiVideoReplicaTerminableStatus(status string) bool {
+	return aiVideoReplicaPendingStatus(status) || status == "waiting_for_input"
+}
+
 func aiVideoReplicaResumableStatus(status string) bool {
 	return status == "interrupted" || status == "terminated"
 }
@@ -232,29 +236,28 @@ func (s *Studio) runAIVideoReplica(id, userID string, input AIVideoReplicaInput)
 		if isTerminated() {
 			return
 		}
-		var status map[string]any
-		if err = jsonRequest(s.httpClient, http.MethodGet, config.WebBase+"/api/skill2api/status/?request_id="+url.QueryEscape(requestID), bearer, nil, &status); err != nil {
-			fail(err)
+		status, statusErr := s.skill2APIStatus(requestID, bearer)
+		if statusErr != nil {
+			if isSkill2APIStatusNotFound(statusErr) {
+				_, _ = s.reconcileAIVideoReplicaRemoteStatus(id, map[string]any{"status": "not_found", "error": statusErr.Error()})
+				return
+			}
+			fail(statusErr)
 			return
 		}
-		s.saveSkill2APIStatusSnapshot(id, status)
-		state := stringValue(status["status"])
+		state := normalizeAIVideoReplicaRemoteState(stringValue(status["status"]))
+		localState, reconcileErr := s.reconcileAIVideoReplicaRemoteStatus(id, status)
+		if reconcileErr != nil {
+			fail(reconcileErr)
+			return
+		}
 		switch state {
 		case "waiting_for_input":
-			setStatus("waiting_for_input")
 			return
-		case "failed", "terminated":
-			reason := stringValue(status["error"])
-			if reason == "" {
-				reason = stringValue(status["err"])
-			}
-			if reason == "" {
-				reason = "Skill2API 任务" + state
-			}
-			fail(errors.New(reason))
+		case "failed", "terminated", "not_found":
 			return
 		case "succeeded":
-			if isTerminated() {
+			if localState != "retrieving" {
 				return
 			}
 			files, _ := status["files"].([]any)
@@ -383,40 +386,87 @@ func (s *Studio) RefreshAIVideoReplica(id string) (map[string]any, error) {
 	}
 	status, err := s.skill2APIStatus(rid, bearer)
 	if err != nil {
+		if isSkill2APIStatusNotFound(err) {
+			status = map[string]any{"status": "not_found", "error": err.Error()}
+			localStatus, reconcileErr := s.reconcileAIVideoReplicaRemoteStatus(id, status)
+			if reconcileErr != nil {
+				return nil, reconcileErr
+			}
+			status["request_id"] = rid
+			status["remote_status"] = "not_found"
+			status["status"] = localStatus
+			mergeSkill2APIStatus(status, snapshot)
+			return status, nil
+		}
 		mergeSkill2APIStatus(result, snapshot)
 		result["remote_status"] = "unavailable"
 		result["remote_error"] = err.Error()
 		return result, nil
 	}
-	s.saveSkill2APIStatusSnapshot(id, status)
-	remoteState := stringValue(status["status"])
+	remoteState := normalizeAIVideoReplicaRemoteState(stringValue(status["status"]))
+	localStatus, err = s.reconcileAIVideoReplicaRemoteStatus(id, status)
+	if err != nil {
+		return nil, err
+	}
 	status["remote_status"] = remoteState
-	if remoteState == "waiting_for_input" && localStatus != "terminated" && localStatus != "ready" {
-		if localStatus != "waiting_for_input" {
-			if err = s.writeTransaction(func(tx *sql.Tx) error {
-				_, queryErr := tx.Exec("update video_replica_jobs set status='waiting_for_input' where id=? and task_type='ai_replica' and status <> 'terminated'", id)
-				return queryErr
-			}); err != nil {
-				return nil, err
-			}
-		}
-		status["status"] = "waiting_for_input"
-		return status, nil
-	}
 	status["status"] = localStatus
-	if remoteState == "succeeded" {
-		var localStatus, filePath string
-		if err := s.db.QueryRow("select status,coalesce(file_path,'') from video_replica_jobs where id=?", id).Scan(&localStatus, &filePath); err != nil {
-			log.Printf("video replica %s: no job row while loading local completion state: %v", id, err)
-			return nil, err
-		}
-		if filePath != "" || localStatus == "ready" {
-			status["status"] = "ready"
-		} else {
-			status["status"] = "retrieving"
+	return status, nil
+}
+
+func remoteStatusFailureReason(status map[string]any, fallback string) string {
+	for _, key := range []string{"error", "err"} {
+		if reason := strings.TrimSpace(stringValue(status[key])); reason != "" {
+			return reason
 		}
 	}
-	return status, nil
+	return fallback
+}
+
+func normalizeAIVideoReplicaRemoteState(state string) string {
+	switch strings.ToLower(strings.TrimSpace(state)) {
+	case "cancelled", "canceled", "stopped":
+		return "terminated"
+	case "completed", "complete":
+		return "succeeded"
+	case "error":
+		return "failed"
+	default:
+		return strings.ToLower(strings.TrimSpace(state))
+	}
+}
+
+// reconcileAIVideoReplicaRemoteStatus is the single local state authority for
+// a Skill2API status read. Explicit local termination and a completed local
+// file are protected from stale remote responses.
+func (s *Studio) reconcileAIVideoReplicaRemoteStatus(id string, remote map[string]any) (string, error) {
+	s.saveSkill2APIStatusSnapshot(id, remote)
+	remoteState := normalizeAIVideoReplicaRemoteState(stringValue(remote["status"]))
+	desired := ""
+	switch remoteState {
+	case "waiting_for_input":
+		desired = "waiting_for_input"
+	case "succeeded":
+		desired = "retrieving"
+	case "terminated":
+		desired = "terminated"
+	case "failed":
+		desired = "failed: " + truncate(remoteStatusFailureReason(remote, "Skill2API 任务失败"))
+	case "not_found":
+		desired = "not_found"
+	}
+	if desired != "" {
+		if err := s.writeTransaction(func(tx *sql.Tx) error {
+			_, err := tx.Exec("update video_replica_jobs set status=? where id=? and task_type='ai_replica' and status not in ('terminated','ready')", desired, id)
+			return err
+		}); err != nil {
+			return "", err
+		}
+	}
+	var localStatus string
+	if err := s.db.QueryRow("select status from video_replica_jobs where id=? and task_type='ai_replica'", id).Scan(&localStatus); err != nil {
+		return "", err
+	}
+	return localStatus, nil
 }
 
 func decodeSkill2APIStatusSnapshot(raw string) map[string]any {
@@ -470,13 +520,26 @@ func (s *Studio) skill2APIStatus(requestID, bearer string) (map[string]any, erro
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return nil, fmt.Errorf("Skill2API 状态查询失败：HTTP %d", resp.StatusCode)
+		return nil, skill2APIStatusError{statusCode: resp.StatusCode}
 	}
 	var status map[string]any
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 8<<20)).Decode(&status); err != nil {
 		return nil, fmt.Errorf("Skill2API 状态响应无效：%w", err)
 	}
 	return status, nil
+}
+
+type skill2APIStatusError struct {
+	statusCode int
+}
+
+func (e skill2APIStatusError) Error() string {
+	return fmt.Sprintf("Skill2API 状态查询失败：HTTP %d", e.statusCode)
+}
+
+func isSkill2APIStatusNotFound(err error) bool {
+	var statusErr skill2APIStatusError
+	return errors.As(err, &statusErr) && statusErr.statusCode == http.StatusNotFound
 }
 
 func (s *Studio) ResumeAIVideoReplica(id, answer, instruction string) (map[string]any, error) {
@@ -502,9 +565,31 @@ func (s *Studio) ResumeAIVideoReplica(id, answer, instruction string) (map[strin
 	}
 	remoteStatus, err := s.skill2APIStatus(rid, bearer)
 	if err != nil {
+		if isSkill2APIStatusNotFound(err) {
+			remoteStatus = map[string]any{"status": "not_found", "error": err.Error()}
+			reconciledStatus, reconcileErr := s.reconcileAIVideoReplicaRemoteStatus(id, remoteStatus)
+			if reconcileErr != nil {
+				return nil, reconcileErr
+			}
+			remoteStatus["status"] = reconciledStatus
+			remoteStatus["remote_status"] = "not_found"
+			remoteStatus["request_id"] = rid
+			return remoteStatus, nil
+		}
 		return nil, err
 	}
-	if stringValue(remoteStatus["status"]) == "running" {
+	remoteState := normalizeAIVideoReplicaRemoteState(stringValue(remoteStatus["status"]))
+	reconciledStatus, err := s.reconcileAIVideoReplicaRemoteStatus(id, remoteStatus)
+	if err != nil {
+		return nil, err
+	}
+	if remoteState == "terminated" || remoteState == "failed" || remoteState == "succeeded" || remoteState == "not_found" {
+		remoteStatus["status"] = reconciledStatus
+		remoteStatus["remote_status"] = remoteState
+		remoteStatus["request_id"] = rid
+		return remoteStatus, nil
+	}
+	if remoteState == "running" {
 		if err = s.writeTransaction(func(tx *sql.Tx) error {
 			updated, queryErr := tx.Exec("update video_replica_jobs set status='generating',generation_started_at=coalesce(generation_started_at,?) where id=? and task_type='ai_replica' and status=?", time.Now().Unix(), id, localStatus)
 			if queryErr != nil {
@@ -525,6 +610,9 @@ func (s *Studio) ResumeAIVideoReplica(id, answer, instruction string) (map[strin
 		remoteStatus["remote_status"] = "running"
 		remoteStatus["request_id"] = rid
 		return remoteStatus, nil
+	}
+	if remoteState != "waiting_for_input" && remoteState != "interrupted" {
+		return nil, errors.New("远端任务当前不能恢复")
 	}
 	if localStatus == "waiting_for_input" {
 		if answer == "" {
@@ -578,16 +666,43 @@ func (s *Studio) TerminateAIVideoReplica(id string) (map[string]any, error) {
 		return nil, err
 	}
 	var rid, localStatus string
-	if err = s.writeTransaction(func(tx *sql.Tx) error {
-		if queryErr := tx.QueryRow("select status,coalesce(skill2api_request_id,'') from video_replica_jobs where id=? and task_type='ai_replica'", id).Scan(&localStatus, &rid); queryErr != nil {
-			if queryErr == sql.ErrNoRows {
-				return errors.New("历史任务不存在")
+	if err = s.db.QueryRow("select status,coalesce(skill2api_request_id,'') from video_replica_jobs where id=? and task_type='ai_replica'", id).Scan(&localStatus, &rid); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, errors.New("历史任务不存在")
+		}
+		return nil, err
+	}
+	if localStatus == "terminated" {
+		return map[string]any{"request_id": rid, "status": "terminated"}, nil
+	}
+	if !aiVideoReplicaTerminableStatus(localStatus) {
+		if rid == "" || localStatus == "ready" {
+			return nil, errors.New("当前任务不能终止")
+		}
+		bearer, bearerErr := s.currentHuabotBearer(user.ID)
+		if bearerErr != nil {
+			return nil, bearerErr
+		}
+		remote, statusErr := s.skill2APIStatus(rid, bearer)
+		if isSkill2APIStatusNotFound(statusErr) {
+			reconciledStatus, reconcileErr := s.reconcileAIVideoReplicaRemoteStatus(id, map[string]any{"status": "not_found", "error": statusErr.Error()})
+			if reconcileErr != nil {
+				return nil, reconcileErr
 			}
-			return queryErr
+			return map[string]any{"request_id": rid, "status": reconciledStatus, "remote_status": "not_found"}, nil
 		}
-		if !aiVideoReplicaPendingStatus(localStatus) {
-			return errors.New("当前任务不能终止")
+		if statusErr == nil {
+			reconciledStatus, reconcileErr := s.reconcileAIVideoReplicaRemoteStatus(id, remote)
+			if reconcileErr != nil {
+				return nil, reconcileErr
+			}
+			if reconciledStatus == "terminated" {
+				return map[string]any{"request_id": rid, "status": "terminated", "remote_status": stringValue(remote["status"])}, nil
+			}
 		}
+		return nil, errors.New("当前任务不能终止")
+	}
+	if err = s.writeTransaction(func(tx *sql.Tx) error {
 		updated, queryErr := tx.Exec("update video_replica_jobs set status='terminated' where id=? and task_type='ai_replica' and status=?", id, localStatus)
 		if queryErr != nil {
 			return queryErr

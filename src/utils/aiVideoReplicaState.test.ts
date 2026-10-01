@@ -36,7 +36,7 @@ describe("aiVideoReplicaControls", () => {
       draftLocked: true,
       canAnswer: true,
       canResume: false,
-      canTerminate: false,
+      canTerminate: true,
       canRegenerate: false,
     });
   });

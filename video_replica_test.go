@@ -17,7 +17,7 @@ import (
 
 func newAIVideoReplicaTestStudio(t *testing.T) *Studio {
 	t.Helper()
-	db, err := sql.Open("sqlite", ":memory:")
+	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "studio.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,6 +36,37 @@ func insertAIVideoReplicaTestJob(t *testing.T, studio *Studio, id, status, reque
 		values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, id, localWorkspaceID, "uploads/source.mp4", "[]", "uploads/product.png", "ai_replica", "qwen3.8-flash", "replace", "[]", 1, 0, "480p", "9:16", status, time.Now().Unix(), requestID)
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestAIVideoReplicaJobReturnsSavedPersonSettings(t *testing.T) {
+	studio := newAIVideoReplicaTestStudio(t)
+	insertAIVideoReplicaTestJob(t, studio, "job-person-settings", "ready", "")
+	if _, err := studio.db.Exec("update video_replica_jobs set ai_person_prompt=?,ai_budget=? where id=?", "短发女性模特，微笑展示商品", 3.5, "job-person-settings"); err != nil {
+		t.Fatal(err)
+	}
+
+	job, err := studio.VideoReplicaJob("job-person-settings")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := job["ai_person_prompt"]; got != "短发女性模特，微笑展示商品" {
+		t.Fatalf("person prompt = %q", got)
+	}
+	if got := job["ai_budget"]; got != 3.5 {
+		t.Fatalf("budget = %v", got)
+	}
+
+	page, err := studio.VideoReplicaJobs(12, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	items := page["items"].([]map[string]any)
+	if got := items[0]["ai_person_prompt"]; got != "短发女性模特，微笑展示商品" {
+		t.Fatalf("list person prompt = %q", got)
+	}
+	if got := items[0]["ai_budget"]; got != 3.5 {
+		t.Fatalf("list budget = %v", got)
 	}
 }
 
@@ -159,8 +190,8 @@ func TestRefreshAIVideoReplicaFallsBackToLocalSnapshotWhenRemoteIsDeleted(t *tes
 	if got := result["stdout"]; got != "saved output" {
 		t.Fatalf("stdout = %v", got)
 	}
-	if got := result["remote_status"]; got != "unavailable" {
-		t.Fatalf("remote status = %v, want unavailable", got)
+	if got := result["remote_status"]; got != "not_found" {
+		t.Fatalf("remote status = %v, want not_found", got)
 	}
 }
 
@@ -194,6 +225,80 @@ func TestTerminateAIVideoReplicaKeepsLocalTerminationWhenRemoteFails(t *testing.
 	}
 	if status != "terminated" {
 		t.Fatalf("stored status = %q, want terminated", status)
+	}
+}
+
+func TestTerminateAIVideoReplicaReconcilesRemoteTermination(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/skill2api/status/" {
+			t.Fatalf("path = %q", r.URL.Path)
+		}
+		_, _ = w.Write([]byte(`{"status":"terminated","error":"already stopped"}`))
+	}))
+	defer server.Close()
+	t.Setenv("HUABOT_WEB_BASE_URL", server.URL)
+
+	studio := newAIVideoReplicaTestStudio(t)
+	studio.httpClient = server.Client()
+	studio.huabotBearer = "test-token"
+	studio.huabotBearerExpiry = time.Now().Add(time.Hour)
+	insertAIVideoReplicaTestJob(t, studio, "job-stale", "interrupted", "remote-request")
+
+	result, err := studio.TerminateAIVideoReplica("job-stale")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result["status"] != "terminated" {
+		t.Fatalf("result = %#v", result)
+	}
+	var status string
+	if err := studio.db.QueryRow("select status from video_replica_jobs where id=?", "job-stale").Scan(&status); err != nil {
+		t.Fatal(err)
+	}
+	if status != "terminated" {
+		t.Fatalf("stored status = %q", status)
+	}
+}
+
+func TestRefreshAIVideoReplicaPersistsRemoteFailureReason(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"status":"failed","error":"provider quota exceeded"}`))
+	}))
+	defer server.Close()
+	t.Setenv("HUABOT_WEB_BASE_URL", server.URL)
+
+	studio := newAIVideoReplicaTestStudio(t)
+	studio.httpClient = server.Client()
+	studio.huabotBearer = "test-token"
+	studio.huabotBearerExpiry = time.Now().Add(time.Hour)
+	insertAIVideoReplicaTestJob(t, studio, "job-failed-remote", "generating", "remote-request")
+
+	result, err := studio.RefreshAIVideoReplica("job-failed-remote")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result["status"] != "failed: provider quota exceeded" {
+		t.Fatalf("result = %#v", result)
+	}
+	var status string
+	if err := studio.db.QueryRow("select status from video_replica_jobs where id=?", "job-failed-remote").Scan(&status); err != nil {
+		t.Fatal(err)
+	}
+	if status != "failed: provider quota exceeded" {
+		t.Fatalf("stored status = %q", status)
+	}
+}
+
+func TestTerminateAIVideoReplicaIsIdempotent(t *testing.T) {
+	studio := newAIVideoReplicaTestStudio(t)
+	insertAIVideoReplicaTestJob(t, studio, "job-already-terminated", "terminated", "remote-request")
+
+	result, err := studio.TerminateAIVideoReplica("job-already-terminated")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result["status"] != "terminated" {
+		t.Fatalf("result = %#v", result)
 	}
 }
 
