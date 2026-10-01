@@ -124,14 +124,12 @@ export function AIVideoReplica(props: Props) {
     terminating: p.terminating,
   });
   const invalidBudget = !Number.isFinite(p.budget) || p.budget <= 0;
-  const sourceTooLong = p.sourceDuration !== null && p.sourceDuration > 30.5;
   const createDisabled =
     controls.draftLocked ||
     !p.sourceReady ||
     !p.replaceReady ||
     !p.scriptReady ||
-    invalidBudget ||
-    sourceTooLong;
+    invalidBudget;
   return (
     <Shell>
       <header className="workspace-header video-replica-header">
@@ -452,11 +450,6 @@ export function AIVideoReplica(props: Props) {
                 )}
                 开始 AI 复刻
               </button>
-              {sourceTooLong && (
-                <p className="notice notice-error" role="alert">
-                  AI 复刻仅支持 30 秒以内的源视频。
-                </p>
-              )}
               {invalidBudget && (
                 <p className="notice notice-error" role="alert">
                   预算必须大于 0。

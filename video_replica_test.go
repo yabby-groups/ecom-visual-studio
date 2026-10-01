@@ -634,6 +634,32 @@ func TestUploadVideoReplicaSourceUsesTemporaryFileUpload(t *testing.T) {
 	}
 }
 
+func TestUploadVideoReplicaVideoAllowsSourcesLongerThanFiveMinutes(t *testing.T) {
+	toolDir := t.TempDir()
+	ffprobe := filepath.Join(toolDir, "ffprobe")
+	if err := os.WriteFile(ffprobe, []byte("#!/bin/sh\nprintf '301\\n'\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	oldPath := os.Getenv("PATH")
+	if err := os.Setenv("PATH", toolDir+string(os.PathListSeparator)+oldPath); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Setenv("PATH", oldPath) })
+
+	dataDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dataDir, "storage", "uploads"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	studio := &Studio{dataDir: dataDir}
+	result, err := studio.UploadVideoReplicaVideo("long.mp4", "video/mp4", []byte{0, 0, 0, 0, 'f', 't', 'y', 'p'})
+	if err != nil {
+		t.Fatalf("long video upload rejected: %v", err)
+	}
+	if result["duration_seconds"] != "301" {
+		t.Fatalf("duration_seconds = %q, want 301", result["duration_seconds"])
+	}
+}
+
 func TestAnalyzeVideoReplicaAcceptsGeneratedVideo(t *testing.T) {
 	dataDir := t.TempDir()
 	generatedDir := filepath.Join(dataDir, "storage", "generated", "video-replica")

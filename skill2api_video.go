@@ -31,8 +31,6 @@ type AIVideoReplicaInput struct {
 	Budget          float64 `json:"budget"`
 }
 
-const aiVideoReplicaMaxDuration = 30.0
-
 func aiVideoReplicaPendingStatus(status string) bool {
 	switch status {
 	case "queued", "preparing", "submitting", "prompting", "generating", "running", "retrieving", "downloading", "merging":
@@ -77,9 +75,6 @@ func (s *Studio) CreateAIVideoReplica(input AIVideoReplicaInput) (map[string]str
 	seconds, err := videoDuration(sourcePath)
 	if err != nil {
 		return nil, errors.New("无法读取视频时长，请确认已安装 ffprobe")
-	}
-	if seconds > aiVideoReplicaMaxDuration+videoDurationTolerance {
-		return nil, errors.New("AI 复刻仅支持 30 秒以内的源视频")
 	}
 	if _, err = s.uploadedImagePath(input.ProductPath); err != nil {
 		return nil, err

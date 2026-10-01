@@ -168,12 +168,9 @@ func (s *Studio) UploadVideoReplicaVideo(name, contentType string, data []byte) 
 		return nil, err
 	}
 	seconds, err := videoDuration(path)
-	if err != nil || seconds > 300 {
+	if err != nil {
 		_ = os.Remove(path)
-		if err != nil {
-			return nil, errors.New("无法读取视频时长，请确认已安装 ffprobe")
-		}
-		return nil, errors.New("视频时长不能超过 5 分钟")
+		return nil, errors.New("无法读取视频时长，请确认已安装 ffprobe")
 	}
 	return map[string]string{
 		"path":             "uploads/" + filepath.Base(path),

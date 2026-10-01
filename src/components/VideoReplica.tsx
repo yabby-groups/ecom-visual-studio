@@ -378,10 +378,6 @@ export function VideoReplica() {
       setError("请添加一张商品图片");
       return;
     }
-    if (mode === "ai_replica" && sourceDuration !== null && sourceDuration > 30.5) {
-      setError("AI 复刻仅支持 30 秒以内的源视频");
-      return;
-    }
     if (mode === "ai_replica" && (!Number.isFinite(budget) || budget <= 0)) {
       setError("预算必须大于 0");
       return;
@@ -650,7 +646,7 @@ export function VideoReplica() {
           <span className="workflow-badge">
             {selected ? statusText(selected.status) : "未开始"}
           </span>
-          <span>最多 5 分钟 · 200MB</span>
+          <span>时长不限 · 200MB</span>
         </div>
       </header>
       <main className="video-replica">
@@ -777,7 +773,7 @@ export function VideoReplica() {
                       MP4 / WebM / MOV ·{" "}
                       {mode === "replace"
                         ? `当前模型最长 ${maxSegmentDuration} 秒，超出会自动剪切压缩`
-                        : "最长 5 分钟"}
+                        : "时长不限"}
                     </span>
                     <input
                       type="file"
