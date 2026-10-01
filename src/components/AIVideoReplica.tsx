@@ -65,6 +65,8 @@ type Props = {
   refreshTask: (id: string) => Promise<void>;
   resumeTask: (id: string, answer: string, instruction: string) => Promise<boolean>;
   terminateTask: (id: string) => Promise<void>;
+  pullResult: (id: string) => Promise<boolean>;
+  pullingResult: boolean;
   terminating: boolean;
   resuming: boolean;
 };
@@ -570,6 +572,21 @@ export function AIVideoReplica(props: Props) {
                       {p.terminating ? "正在终止" : "终止"}
                     </button>
                   )}
+                  {controls.canPullResult && (
+                    <button
+                      className="button primary"
+                      type="button"
+                      disabled={p.pullingResult}
+                      onClick={() => void p.pullResult(p.selected!.id)}
+                    >
+                      <Download size={16} />
+                      {p.pullingResult
+                        ? "正在重新拉取"
+                        : p.selected.file_path
+                          ? "重新拉取结果"
+                          : "手动拉取结果"}
+                    </button>
+                  )}
                 </div>
                 <button
                   className="button secondary"
@@ -675,12 +692,23 @@ export function AIVideoReplica(props: Props) {
             )}
             <div className="video-stage">
               {p.displayed ? (
-                <video src={p.displayed} controls />
+                <video key={p.displayed} src={p.displayed} controls />
               ) : (
                 <>
                   <Film size={38} />
-                  <strong>{failed ? "生成失败" : "等待生成结果"}</strong>
-                  <p>{failed || "提交任务后，生成视频会显示在这里"}</p>
+                  <strong>
+                    {failed
+                      ? "生成失败"
+                      : controls.canPullResult
+                        ? "远端结果尚未保存到本机"
+                        : "等待生成结果"}
+                  </strong>
+                  <p>
+                    {failed ||
+                      (controls.canPullResult
+                        ? "请手动拉取结果，保存完成后会显示在这里"
+                        : "提交任务后，生成视频会显示在这里")}
+                  </p>
                 </>
               )}
             </div>
@@ -722,6 +750,17 @@ export function AIVideoReplica(props: Props) {
                   >
                     <Download size={16} />
                     导出视频
+                  </button>
+                )}
+                {!p.selected.file_path && controls.canPullResult && (
+                  <button
+                    className="button primary"
+                    type="button"
+                    disabled={p.pullingResult}
+                    onClick={() => void p.pullResult(p.selected!.id)}
+                  >
+                    <Download size={16} />
+                    {p.pullingResult ? "正在拉取结果" : "手动拉取结果"}
                   </button>
                 )}
               </div>

@@ -195,6 +195,93 @@ func TestRefreshAIVideoReplicaFallsBackToLocalSnapshotWhenRemoteIsDeleted(t *tes
 	}
 }
 
+func TestPullAIVideoReplicaResultFallsBackToSynchronousFile(t *testing.T) {
+	var syncFallback bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/skill2api/status/":
+			_, _ = w.Write([]byte(`{"status":"succeeded","files":["deliverable/final.mp4"]}`))
+		case "/api/skill2api/file/":
+			if r.Method == http.MethodPost {
+				w.WriteHeader(http.StatusAccepted)
+				_, _ = w.Write([]byte(`{"delivery_id":"delivery-failed","status":"queued"}`))
+				return
+			}
+			syncFallback = true
+			_, _ = w.Write([]byte(`{"url":"/upload/aa/bb/final.mp4"}`))
+		case "/api/skill2api/file/delivery/":
+			_, _ = w.Write([]byte(`{"status":"failed","error":"temporary upload failed"}`))
+		case "/upload/aa/bb/final.mp4":
+			_, _ = w.Write([]byte("fake mp4 bytes"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	t.Setenv("HUABOT_WEB_BASE_URL", server.URL)
+
+	studio := newAIVideoReplicaTestStudio(t)
+	studio.httpClient = server.Client()
+	studio.huabotBearer = "test-token"
+	studio.huabotBearerExpiry = time.Now().Add(time.Hour)
+	insertAIVideoReplicaTestJob(t, studio, "job-manual-pull", "retrieving", "remote-request")
+
+	ok, err := studio.PullAIVideoReplicaResult("job-manual-pull")
+	if err != nil || !ok {
+		t.Fatalf("pull result = %v, %v", ok, err)
+	}
+	if !syncFallback {
+		t.Fatal("synchronous file fallback was not used")
+	}
+	var status, path string
+	if err := studio.db.QueryRow("select status,file_path from video_replica_jobs where id=?", "job-manual-pull").Scan(&status, &path); err != nil {
+		t.Fatal(err)
+	}
+	if status != "ready" || path != "generated/video-replica/job-manual-pull.mp4" {
+		t.Fatalf("stored result = %q, %q", status, path)
+	}
+	if _, err := os.Stat(filepath.Join(studio.dataDir, "storage", path)); err != nil {
+		t.Fatalf("saved file missing: %v", err)
+	}
+}
+
+func TestAIVideoReplicaMP4PathRejectsUnsafeFiles(t *testing.T) {
+	if _, err := aiVideoReplicaMP4Path(map[string]any{"files": []any{"../escape.mp4", "/absolute.mp4"}}); err == nil {
+		t.Fatal("unsafe MP4 path accepted")
+	}
+}
+
+func TestAIVideoReplicaMP4PathPrefersTerminalLogLink(t *testing.T) {
+	status := map[string]any{
+		"files":  []any{"segments/01.mp4", "deliverable/final.mp4"},
+		"stdout": "完成： [最终视频](deliverable/final.mp4)",
+	}
+	path, err := aiVideoReplicaMP4Path(status)
+	if err != nil || path != "deliverable/final.mp4" {
+		t.Fatalf("selected path = %q, err = %v", path, err)
+	}
+}
+
+func TestAIVideoReplicaMP4PathDoesNotInventFromStdout(t *testing.T) {
+	path, err := aiVideoReplicaMP4Path(map[string]any{
+		"files":  []any{},
+		"stdout": "Delivered productions/product-swap/out/final.mp4",
+	})
+	if err == nil || path != "" {
+		t.Fatalf("selected path = %q, err = %v", path, err)
+	}
+}
+
+func TestAIVideoReplicaMP4PathResolvesPartialStdoutNameToListedPath(t *testing.T) {
+	path, err := aiVideoReplicaMP4Path(map[string]any{
+		"files":  []any{"productions/product-swap/out/final.mp4"},
+		"stdout": "Delivered final.mp4",
+	})
+	if err != nil || path != "productions/product-swap/out/final.mp4" {
+		t.Fatalf("selected path = %q, err = %v", path, err)
+	}
+}
+
 func TestTerminateAIVideoReplicaKeepsLocalTerminationWhenRemoteFails(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/skill2api/terminate/" {

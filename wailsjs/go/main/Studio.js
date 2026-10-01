@@ -134,6 +134,10 @@ export function Projects() {
   return window['go']['main']['Studio']['Projects']();
 }
 
+export function PullAIVideoReplicaResult(arg1) {
+  return window['go']['main']['Studio']['PullAIVideoReplicaResult'](arg1);
+}
+
 export function RefreshAIVideoReplica(arg1) {
   return window['go']['main']['Studio']['RefreshAIVideoReplica'](arg1);
 }

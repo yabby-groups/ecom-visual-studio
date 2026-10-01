@@ -193,6 +193,8 @@ export const client = {
     call<Record<string, unknown>>("AIVideoReplicaDelivery", id, deliveryID),
   downloadAIVideoReplicaFile: (id: string, filePath: string) =>
     call<boolean>("DownloadAIVideoReplicaFile", id, filePath),
+  pullAIVideoReplicaResult: (id: string) =>
+    call<boolean>("PullAIVideoReplicaResult", id),
   regenerateVideoReplica: (id: string) => call("RegenerateVideoReplica", id),
   analyze: (body: { mode: string; product: string; reference: string }) =>
     call<{ description: string; benefits: string[] }>("Analyze", body),

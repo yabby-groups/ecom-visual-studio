@@ -570,17 +570,27 @@ func (s *Studio) serveFile(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Studio) generatedAssetPath(path string) (string, error) {
-	rel := filepath.Clean(filepath.FromSlash(path))
-	generatedRoot := filepath.Join(s.dataDir, "storage", "generated")
-	file := filepath.Join(s.dataDir, "storage", rel)
-	if rel == "." || strings.HasPrefix(rel, "..") || !strings.HasPrefix(rel, "generated"+string(filepath.Separator)) || !isWithin(generatedRoot, file) {
-		return "", errors.New("生成文件无效")
+	file, err := s.generatedAssetOutputPath(path)
+	if err != nil {
+		return "", err
 	}
 	info, err := os.Stat(file)
 	if err != nil {
 		return "", err
 	}
 	if !info.Mode().IsRegular() {
+		return "", errors.New("生成文件无效")
+	}
+	return file, nil
+}
+
+// generatedAssetOutputPath validates a generated path before it exists. Write
+// paths use this helper; generatedAssetPath additionally requires a regular file.
+func (s *Studio) generatedAssetOutputPath(path string) (string, error) {
+	rel := filepath.Clean(filepath.FromSlash(path))
+	generatedRoot := filepath.Join(s.dataDir, "storage", "generated")
+	file := filepath.Join(s.dataDir, "storage", rel)
+	if rel == "." || strings.HasPrefix(rel, "..") || !strings.HasPrefix(rel, "generated"+string(filepath.Separator)) || !isWithin(generatedRoot, file) {
 		return "", errors.New("生成文件无效")
 	}
 	return file, nil

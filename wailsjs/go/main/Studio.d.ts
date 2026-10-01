@@ -68,6 +68,8 @@ export function Project(arg1:string):Promise<Record<string, any>>;
 
 export function Projects():Promise<Array<Record<string, any>>>;
 
+export function PullAIVideoReplicaResult(arg1:string):Promise<boolean>;
+
 export function RefreshAIVideoReplica(arg1:string):Promise<Record<string, any>>;
 
 export function RefreshModels():Promise<Record<string, any>>;

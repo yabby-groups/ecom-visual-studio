@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -255,22 +256,9 @@ func (s *Studio) runAIVideoReplica(id, userID string, input AIVideoReplicaInput)
 			if localState != "retrieving" {
 				return
 			}
-			files, _ := status["files"].([]any)
-			var filePath string
-			for _, item := range files {
-				path := stringValue(item)
-				if strings.HasSuffix(strings.ToLower(path), ".mp4") {
-					filePath = path
-					break
-				}
-			}
-			if filePath == "" {
-				fail(errors.New("Skill2API 未返回 MP4"))
-				return
-			}
-			clean := filepath.Clean(filepath.FromSlash(filePath))
-			if clean != filepath.FromSlash(filePath) || filepath.IsAbs(clean) || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
-				fail(errors.New("Skill2API 文件路径无效"))
+			filePath, pathErr := aiVideoReplicaMP4Path(status)
+			if pathErr != nil {
+				fail(pathErr)
 				return
 			}
 			var delivery struct {
@@ -758,8 +746,24 @@ func (s *Studio) AIVideoReplicaDelivery(id, deliveryID string) (map[string]any, 
 	if err != nil {
 		return nil, err
 	}
+	req, err := http.NewRequest(http.MethodGet, s.huabotConfig().WebBase+"/api/skill2api/file/delivery/?request_id="+url.QueryEscape(rid)+"&delivery_id="+url.QueryEscape(deliveryID), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+bearer)
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return nil, fmt.Errorf("文件投递查询失败：HTTP %d", resp.StatusCode)
+	}
 	var result map[string]any
-	err = jsonRequest(s.httpClient, http.MethodGet, s.huabotConfig().WebBase+"/api/skill2api/file/delivery/?request_id="+url.QueryEscape(rid)+"&delivery_id="+url.QueryEscape(deliveryID), bearer, nil, &result)
+	err = json.NewDecoder(io.LimitReader(resp.Body, 8<<20)).Decode(&result)
+	if err != nil {
+		return nil, fmt.Errorf("文件投递响应无效：%w", err)
+	}
 	if err == nil && strings.HasPrefix(stringValue(result["url"]), "/") {
 		result["url"] = s.huabotConfig().WebBase + stringValue(result["url"])
 	}
@@ -818,6 +822,150 @@ func (s *Studio) DownloadAIVideoReplicaFile(id, filePath string) (bool, error) {
 	return err == nil, err
 }
 
+// PullAIVideoReplicaResult retries result retrieval for a completed remote task.
+// The asynchronous delivery endpoint is preferred for large media; the legacy
+// synchronous endpoint is a fallback when delivery upload failed.
+func (s *Studio) PullAIVideoReplicaResult(id string) (bool, error) {
+	user, err := s.currentUser()
+	if err != nil {
+		return false, err
+	}
+	rid, _, err := s.skill2APIRequest(id)
+	if err != nil {
+		return false, err
+	}
+	bearer, err := s.currentHuabotBearer(user.ID)
+	if err != nil {
+		return false, err
+	}
+	status, err := s.skill2APIStatus(rid, bearer)
+	if err != nil {
+		return false, err
+	}
+	filePath, err := aiVideoReplicaMP4Path(status)
+	if err != nil {
+		return false, err
+	}
+	if delivery, deliveryErr := s.DeliverAIVideoReplicaFile(id, filePath); deliveryErr == nil {
+		if deliveryID := stringValue(delivery["delivery_id"]); deliveryID != "" {
+			for i := 0; i < 180; i++ {
+				result, pollErr := s.AIVideoReplicaDelivery(id, deliveryID)
+				if pollErr == nil {
+					switch stringValue(result["status"]) {
+					case "succeeded":
+						if rawURL := stringValue(result["url"]); rawURL != "" {
+							if err = s.downloadAIVideo(id, rawURL, bearer); err == nil {
+								return true, nil
+							}
+						}
+					case "failed":
+						i = 180
+					}
+				}
+				if i < 179 {
+					time.Sleep(2 * time.Second)
+				}
+			}
+		}
+	}
+
+	// The synchronous endpoint can still retrieve a valid task-local file when
+	// the worker could not create an asynchronous temporary upload.
+	config := s.huabotConfig()
+	rawURL := config.WebBase + "/api/skill2api/file/?request_id=" + url.QueryEscape(rid) + "&file_path=" + url.QueryEscape(filePath)
+	req, err := http.NewRequest(http.MethodGet, rawURL, nil)
+	if err != nil {
+		return false, err
+	}
+	req.Header.Set("Authorization", "Bearer "+bearer)
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return false, err
+	}
+	var fileResult struct {
+		URL string `json:"url"`
+	}
+	if err = decodeResponse(resp, &fileResult); err != nil {
+		return false, err
+	}
+	if fileResult.URL == "" {
+		return false, errors.New("远程未返回结果文件地址")
+	}
+	if err = s.downloadAIVideo(id, fileResult.URL, bearer); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func aiVideoReplicaMP4Path(status map[string]any) (string, error) {
+	files, _ := status["files"].([]any)
+	available := map[string]bool{}
+	byBase := map[string][]string{}
+	for _, item := range files {
+		path := stringValue(item)
+		clean := filepath.Clean(filepath.FromSlash(path))
+		if path == "" || clean != filepath.FromSlash(path) || filepath.IsAbs(clean) || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+			continue
+		}
+		if strings.HasSuffix(strings.ToLower(path), ".mp4") {
+			available[path] = true
+			base := filepath.Base(filepath.FromSlash(path))
+			byBase[base] = append(byBase[base], path)
+		}
+	}
+	// The worker's terminal response can identify the final artifact in either
+	// stdout or stderr. Prefer that explicit link over intermediates in files.
+	linkPattern := regexp.MustCompile(`\]\(([^)]+\.mp4)(?:\?[^)]*)?\)`)
+	plainPathPattern := regexp.MustCompile(`(?:^|[\s(])((?:[A-Za-z0-9._-]+/)*[A-Za-z0-9._-]+\.mp4)(?:$|[\s)])`)
+	isSafeMP4 := func(candidate string) bool {
+		clean := filepath.Clean(filepath.FromSlash(candidate))
+		return candidate != "" && clean == filepath.FromSlash(candidate) && !filepath.IsAbs(clean) && !strings.HasPrefix(clean, ".."+string(filepath.Separator)) && strings.HasSuffix(strings.ToLower(candidate), ".mp4")
+	}
+	resolveListedPath := func(candidate string) string {
+		if available[candidate] {
+			return candidate
+		}
+		matches := byBase[filepath.Base(filepath.FromSlash(candidate))]
+		if len(matches) == 1 {
+			return matches[0]
+		}
+		return ""
+	}
+	for _, key := range []string{"stderr", "stdout"} {
+		stream := stringValue(status[key])
+		matches := linkPattern.FindAllStringSubmatch(stream, -1)
+		for i := len(matches) - 1; i >= 0; i-- {
+			candidate := strings.TrimSpace(matches[i][1])
+			parsed, parseErr := url.Parse(candidate)
+			if parseErr != nil || parsed.Host != "" || (parsed.IsAbs() && !strings.HasPrefix(parsed.Path, "/workspace/")) {
+				continue
+			}
+			candidate = filepath.ToSlash(filepath.Clean(filepath.FromSlash(strings.TrimPrefix(parsed.Path, "/workspace/"))))
+			if isSafeMP4(candidate) {
+				if listed := resolveListedPath(candidate); listed != "" {
+					return listed, nil
+				}
+			}
+		}
+		plainMatches := plainPathPattern.FindAllStringSubmatch(stream, -1)
+		for i := len(plainMatches) - 1; i >= 0; i-- {
+			candidate := filepath.ToSlash(filepath.Clean(filepath.FromSlash(plainMatches[i][1])))
+			if isSafeMP4(candidate) {
+				if listed := resolveListedPath(candidate); listed != "" {
+					return listed, nil
+				}
+			}
+		}
+	}
+	for i := len(files) - 1; i >= 0; i-- {
+		candidate := stringValue(files[i])
+		if available[candidate] {
+			return candidate, nil
+		}
+	}
+	return "", errors.New("远端没有可拉取的 MP4 结果")
+}
+
 func (s *Studio) uploadSkill2APIMedia(baseURL, bearer, localPath string) (string, error) {
 	path, err := s.replicaSourcePath(localPath)
 	if err != nil {
@@ -864,11 +1012,18 @@ func (s *Studio) uploadSkill2APIMedia(baseURL, bearer, localPath string) (string
 }
 
 func (s *Studio) downloadAIVideo(id, rawURL, bearer string) error {
-	if !strings.HasPrefix(rawURL, "/") {
-		return errors.New("Skill2API 下载地址无效")
-	}
 	config := s.huabotConfig()
-	req, err := http.NewRequest(http.MethodGet, config.WebBase+rawURL, nil)
+	downloadURL := rawURL
+	if strings.HasPrefix(rawURL, "/") {
+		downloadURL = config.WebBase + rawURL
+	} else {
+		parsed, parseErr := url.Parse(rawURL)
+		base, baseErr := url.Parse(config.WebBase)
+		if parseErr != nil || baseErr != nil || parsed.Scheme != base.Scheme || parsed.Host != base.Host {
+			return errors.New("Skill2API 下载地址无效")
+		}
+	}
+	req, err := http.NewRequest(http.MethodGet, downloadURL, nil)
 	if err != nil {
 		return err
 	}
@@ -882,7 +1037,7 @@ func (s *Studio) downloadAIVideo(id, rawURL, bearer string) error {
 		return fmt.Errorf("下载视频失败：HTTP %d", resp.StatusCode)
 	}
 	path := filepath.ToSlash(filepath.Join("generated", "video-replica", id+".mp4"))
-	full, err := s.generatedAssetPath(path)
+	full, err := s.generatedAssetOutputPath(path)
 	if err != nil {
 		return err
 	}

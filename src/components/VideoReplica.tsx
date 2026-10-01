@@ -65,6 +65,7 @@ export function VideoReplica() {
   const [error, setError] = useState("");
   const [terminatingID, setTerminatingID] = useState("");
   const [resumingID, setResumingID] = useState("");
+  const [mediaRefreshToken, setMediaRefreshToken] = useState(0);
   const [review, setReview] = useState<{
     score: number;
     issues: string[];
@@ -244,6 +245,25 @@ export function VideoReplica() {
       setError(operationError(reason, "无法终止任务"));
     } finally {
       setTerminatingID("");
+    }
+  }
+
+  const [pullingResultID, setPullingResultID] = useState("");
+  async function pullResult(id: string) {
+    setPullingResultID(id);
+    setError("");
+    try {
+      const ok = await client.pullAIVideoReplicaResult(id);
+      const fresh = await client.videoReplicaJob(id);
+      selectJob(fresh);
+      if (ok) setMediaRefreshToken((value) => value + 1);
+      await load();
+      return ok;
+    } catch (reason) {
+      setError(operationError(reason, "无法拉取远程结果"));
+      return false;
+    } finally {
+      setPullingResultID("");
     }
   }
 
@@ -480,7 +500,9 @@ export function VideoReplica() {
     }
   }
 
-  const displayed = selected?.file_path ? fileUrl(selected.file_path) : "";
+  const displayed = selected?.file_path
+    ? `${fileUrl(selected.file_path)}?refresh=${mediaRefreshToken}`
+    : "";
   const selectedLabel = useMemo(
     () =>
       selected
@@ -600,6 +622,8 @@ export function VideoReplica() {
         refreshTask={refreshTask}
         resumeTask={resumeTask}
         terminateTask={terminateTask}
+        pullResult={pullResult}
+        pullingResult={pullingResultID === selected?.id}
         terminating={terminatingID === selected?.id}
         resuming={resumingID === selected?.id}
       />

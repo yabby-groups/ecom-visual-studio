@@ -5,6 +5,7 @@ export type AIVideoReplicaControlState = {
   canAnswer: boolean;
   canResume: boolean;
   canTerminate: boolean;
+  canPullResult: boolean;
   canRegenerate: boolean;
   canOpenLogs: boolean;
 };
@@ -47,6 +48,13 @@ export function aiVideoReplicaControls({
   const hasRequest = !!requestID;
   const taskOperation = resuming || terminating;
   const draftLocked = busy || active || waitingForInput || taskOperation;
+  const canPullResult =
+    hasRequest &&
+    !taskOperation &&
+    (status === "retrieving" ||
+      status === "succeeded" ||
+      status === "ready" ||
+      !!status?.startsWith("failed:"));
 
   return {
     active,
@@ -57,7 +65,8 @@ export function aiVideoReplicaControls({
       (status === "interrupted" || status === "terminated") &&
       hasRequest &&
       !taskOperation,
-    canTerminate: (active || waitingForInput) && !taskOperation,
+    canTerminate: (active || waitingForInput) && status !== "retrieving" && !taskOperation,
+    canPullResult,
     canRegenerate: !!status && regenerableStatus(status) && !taskOperation && !busy,
     canOpenLogs: hasRequest && !taskOperation,
   };
