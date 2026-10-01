@@ -14,6 +14,7 @@ import type {
   TryOnPage,
   VideoReplicaJob,
   VideoReplicaPage,
+  Skill2APIStatus,
   User,
 } from "./types";
 import { studio, uploadFile } from "./desktop";
@@ -170,6 +171,23 @@ export const client = {
     ratio: string;
     budget: number;
   }) => call<{ id: string }>("CreateAIVideoReplica", body),
+  refreshAIVideoReplica: (id: string) =>
+    call<Skill2APIStatus>("RefreshAIVideoReplica", id),
+  resumeAIVideoReplica: (id: string, answer = "", instruction = "") =>
+    call<Record<string, unknown>>(
+      "ResumeAIVideoReplica",
+      id,
+      answer,
+      instruction,
+    ),
+  terminateAIVideoReplica: (id: string) =>
+    call<Record<string, unknown>>("TerminateAIVideoReplica", id),
+  deliverAIVideoReplicaFile: (id: string, filePath: string) =>
+    call<Record<string, unknown>>("DeliverAIVideoReplicaFile", id, filePath),
+  aIVideoReplicaDelivery: (id: string, deliveryID: string) =>
+    call<Record<string, unknown>>("AIVideoReplicaDelivery", id, deliveryID),
+  downloadAIVideoReplicaFile: (id: string, filePath: string) =>
+    call<boolean>("DownloadAIVideoReplicaFile", id, filePath),
   regenerateVideoReplica: (id: string) => call("RegenerateVideoReplica", id),
   analyze: (body: { mode: string; product: string; reference: string }) =>
     call<{ description: string; benefits: string[] }>("Analyze", body),

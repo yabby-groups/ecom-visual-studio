@@ -429,6 +429,10 @@ func (s *Studio) VideoReplicaJobs(limit, offset int) (map[string]any, error) {
 	if limit < 1 || limit > 48 || offset < 0 {
 		return nil, errors.New("分页参数无效")
 	}
+	_, err := s.currentUser()
+	if err != nil {
+		return nil, err
+	}
 	var total int
 	if err := s.db.QueryRow("select count(*) from video_replica_jobs").Scan(&total); err != nil {
 		return nil, err
@@ -450,15 +454,28 @@ func (s *Studio) VideoReplicaJobs(limit, offset int) (map[string]any, error) {
 		if err = s.populateVideoReplicaSegments(job); err != nil {
 			return nil, err
 		}
+		s.attachSkill2APIFields(job)
 		items = append(items, job)
 	}
 	return map[string]any{"items": items, "total": total, "has_more": offset+len(items) < total}, rows.Err()
 }
 
 func (s *Studio) VideoReplicaJob(id string) (map[string]any, error) {
-	row := s.db.QueryRow("select id,source_video_path,reference_paths,product_reference_path,task_type,model,prompt,storyboard,storyboard_confirmed,duration,resolution,ratio,status,file_path,generation_started_at,created_at from video_replica_jobs where id=?", id)
-	job, err := scanVideoReplicaRow(row)
+	_, err := s.currentUser()
 	if err != nil {
+		return nil, err
+	}
+	var job map[string]any
+	for attempt := 0; attempt < 5; attempt++ {
+		row := s.db.QueryRow("select id,source_video_path,reference_paths,product_reference_path,task_type,model,prompt,storyboard,storyboard_confirmed,duration,resolution,ratio,status,file_path,generation_started_at,created_at from video_replica_jobs where id=?", id)
+		job, err = scanVideoReplicaRow(row)
+		if err != sql.ErrNoRows {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if err != nil {
+		log.Printf("video replica %s: load job failed: %v", id, err)
 		return nil, errors.New("视频任务不存在")
 	}
 	if err = s.populateVideoReplicaVersions(job); err != nil {
@@ -467,7 +484,16 @@ func (s *Studio) VideoReplicaJob(id string) (map[string]any, error) {
 	if err = s.populateVideoReplicaSegments(job); err != nil {
 		return nil, err
 	}
+	s.attachSkill2APIFields(job)
 	return job, nil
+}
+
+func (s *Studio) attachSkill2APIFields(job map[string]any) {
+	var requestID, deliveryID string
+	if err := s.db.QueryRow("select skill2api_request_id,skill2api_delivery_id from video_replica_jobs where id=?", job["id"]).Scan(&requestID, &deliveryID); err == nil {
+		job["skill2api_request_id"] = requestID
+		job["skill2api_delivery_id"] = deliveryID
+	}
 }
 
 func (s *Studio) RegenerateVideoReplica(id string) (map[string]bool, error) {

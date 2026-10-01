@@ -8,12 +8,14 @@ import {
   ShieldCheck,
   Upload,
   X,
+  Terminal,
 } from "lucide-react";
-import type { Dispatch, SetStateAction } from "react";
+import { useState, type Dispatch, type SetStateAction } from "react";
 import type { VideoReplicaJob } from "../types";
 import { failureReason, fileUrl, isPending, statusText } from "../utils/assets";
 import { Shell } from "./Shell";
 import { SettingsSelect } from "./SettingsSelect";
+import { client } from "../api";
 
 type Review = {
   score: number;
@@ -58,10 +60,33 @@ type Props = {
   regenerate: (id: string) => void;
   exportVideo: (path: string) => void;
   selectJob: (job: VideoReplicaJob) => void;
+  refreshTask: (id: string) => void;
+  resumeTask: (id: string, answer: string, instruction: string) => void;
+  terminateTask: (id: string) => void;
 };
 
 export function AIVideoReplica(props: Props) {
   const p = props;
+  const [answer, setAnswer] = useState("");
+  const [instruction, setInstruction] = useState("");
+  const [logsOpen, setLogsOpen] = useState(false);
+  const [logTab, setLogTab] = useState<"stdout" | "stderr" | "files">("stdout");
+  const [fileBusy, setFileBusy] = useState("");
+  const [fileError, setFileError] = useState("");
+  async function downloadFile(path: string) {
+    if (!p.selected) return;
+    setFileBusy(path);
+    setFileError("");
+    try {
+      const id = p.selected.id;
+      if (!(await client.downloadAIVideoReplicaFile(id, path)))
+        throw new Error("文件未保存");
+    } catch (reason) {
+      setFileError(String(reason));
+    } finally {
+      setFileBusy("");
+    }
+  }
   const phases = [
     ["queued", "等待提交"],
     ["preparing", "准备素材"],
@@ -424,6 +449,164 @@ export function AIVideoReplica(props: Props) {
                     aria-label="AI 复刻生成进行中"
                   />
                 )}
+              </div>
+            )}
+            {p.selected?.task_type === "ai_replica" && (
+              <div
+                className="video-replica-panel skill2api-console"
+                aria-live="polite"
+              >
+                <strong>任务控制台</strong>
+                <div className="prompt-review-actions">
+                  {p.selected.status === "waiting_for_input" ? (
+                    <>
+                      <input
+                        value={answer}
+                        onChange={(e) => setAnswer(e.target.value)}
+                        placeholder={
+                          p.selected.skill2api?.question || "请输入回答"
+                        }
+                      />
+                      <button
+                        className="button primary"
+                        type="button"
+                        disabled={!answer.trim()}
+                        onClick={() => {
+                          p.resumeTask(p.selected!.id, answer, "");
+                          setAnswer("");
+                        }}
+                      >
+                        提交
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <input
+                        value={instruction}
+                        onChange={(e) => setInstruction(e.target.value)}
+                        placeholder="追加题词"
+                      />
+                      <button
+                        className="button secondary"
+                        type="button"
+                        disabled={p.selected.status === "running"}
+                        onClick={() => {
+                          p.resumeTask(p.selected!.id, "", instruction);
+                          setInstruction("");
+                        }}
+                      >
+                        恢复
+                      </button>
+                    </>
+                  )}
+                  {isPending(p.selected.status) && (
+                    <button
+                      className="button secondary"
+                      type="button"
+                      onClick={() => p.terminateTask(p.selected!.id)}
+                    >
+                      <X size={16} />
+                      终止
+                    </button>
+                  )}
+                </div>
+                <button
+                  className="button secondary"
+                  type="button"
+                  onClick={() => {
+                    p.refreshTask(p.selected!.id);
+                    setLogsOpen(true);
+                  }}
+                >
+                  <Terminal size={16} />
+                  查看运行日志
+                </button>
+                {!p.selected.skill2api_request_id && (
+                  <small>
+                    该历史任务尚未关联远程请求，请使用“再次生成”恢复。
+                  </small>
+                )}
+              </div>
+            )}
+            {logsOpen && p.selected?.task_type === "ai_replica" && (
+              <div
+                className="skill2api-log-backdrop"
+                role="presentation"
+                onClick={() => setLogsOpen(false)}
+              >
+                <section
+                  className="skill2api-log-dialog"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="skill2api-log-title"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="skill2api-log-header">
+                    <div>
+                      <span className="step-kicker">SKILL2API</span>
+                      <h2 id="skill2api-log-title">运行日志</h2>
+                    </div>
+                    <button
+                      className="icon-button"
+                      type="button"
+                      aria-label="关闭日志"
+                      onClick={() => setLogsOpen(false)}
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
+                  <div
+                    className="skill2api-log-tabs"
+                    role="tablist"
+                    aria-label="远程任务记录"
+                  >
+                    {(["stdout", "stderr", "files"] as const).map((tab) => (
+                      <button
+                        key={tab}
+                        className="button secondary"
+                        type="button"
+                        role="tab"
+                        aria-selected={logTab === tab}
+                        onClick={() => setLogTab(tab)}
+                      >
+                        {tab === "files" ? "文件" : tab}
+                      </button>
+                    ))}
+                  </div>
+                  {logTab === "files" && (
+                    <div className="skill2api-file-list">
+                      {p.selected.skill2api?.files?.map((path) => (
+                        <button
+                          className="button secondary"
+                          key={path}
+                          type="button"
+                          disabled={!!fileBusy}
+                          onClick={() => void downloadFile(path)}
+                        >
+                          <Download size={16} />
+                          <span>
+                            {fileBusy === path ? "正在获取：" : ""}
+                            {path}
+                          </span>
+                        </button>
+                      ))}
+                      {fileError && <p role="alert">{fileError}</p>}
+                    </div>
+                  )}
+                  <div className="skill2api-log-grid" role="tabpanel">
+                    <div>
+                      <pre className={logTab === "stderr" ? "error" : ""}>
+                        {logTab === "stdout"
+                          ? p.selected.skill2api?.stdout || "暂无标准输出"
+                          : logTab === "stderr"
+                            ? p.selected.skill2api?.stderr ||
+                              "远程错误输出不可用"
+                            : p.selected.skill2api?.files?.join("\n") ||
+                              "远程文件列表不可用"}
+                      </pre>
+                    </div>
+                  </div>
+                </section>
               </div>
             )}
             <div className="video-stage">

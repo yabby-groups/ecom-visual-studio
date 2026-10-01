@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"bytes"
 	"database/sql"
 	"encoding/json"
@@ -118,14 +119,15 @@ func decodeResponse(response *http.Response, target any) error {
 	if err != nil {
 		return err
 	}
-	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		var message map[string]any
-		_ = json.Unmarshal(body, &message)
+	var message map[string]any
+	if json.Unmarshal(body, &message) == nil {
 		for _, key := range []string{"err", "detail", "error", "message"} {
-			if text, ok := message[key].(string); ok && text != "" {
+			if text, ok := message[key].(string); ok && strings.TrimSpace(text) != "" {
 				return errors.New(text)
 			}
 		}
+	}
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		if text := strings.TrimSpace(string(body)); text != "" {
 			return fmt.Errorf("Huabot 请求失败：HTTP %d：%s", response.StatusCode, truncate(text))
 		}
@@ -601,8 +603,9 @@ func (s *Studio) currentHuabotBearer(userID string) (string, error) {
 
 	var credential authCredential
 	if err := s.db.QueryRow("select kind,secret from auth_credentials where user_id=?", userID).Scan(&credential.Kind, &credential.Secret); err != nil {
+		log.Printf("huabot bearer: load auth credential failed for user %s: %v", userID, err)
 		if errors.Is(err, sql.ErrNoRows) {
-			return "", errors.New("登录凭据已失效")
+			return "", fmt.Errorf("登录凭据已失效（user_id=%s）: %w", userID, err)
 		}
 		return "", err
 	}
@@ -984,6 +987,7 @@ func (s *Studio) activeProvider(userID string) (huabotConfig, string, string, st
 	var tokenID, image, text, chat, encrypted string
 	err := s.db.QueryRow("select s.token_id,s.image_model,s.text_model,s.chat_model,t.secret from settings s join tokens t on t.id=s.token_id and t.user_id=s.user_id where s.user_id=? and t.status=1", userID).Scan(&tokenID, &image, &text, &chat, &encrypted)
 	if err != nil {
+		log.Printf("active provider: load settings/token failed for user %s: %v", userID, err)
 		return huabotConfig{}, "", "", "", "", errors.New("请先在设置中选择 Huabot Token")
 	}
 	key, err := unseal(s.masterKey, encrypted)

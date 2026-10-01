@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 	"io"
+	"log"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -57,7 +59,7 @@ func (s *Studio) CreateAIVideoReplica(input AIVideoReplicaInput) (map[string]str
 	id := newID("video-ai-replica")
 	refs, _ := json.Marshal([]string{input.ProductPath})
 	if err = s.writeTransaction(func(tx *sql.Tx) error {
-		_, e := tx.Exec("insert into video_replica_jobs(id,user_id,source_video_path,reference_paths,product_reference_path,task_type,model,prompt,storyboard,storyboard_confirmed,duration,resolution,ratio,status,current_run_id,created_at,ai_person_prompt,ai_budget) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", id, user.ID, input.SourceVideoPath, string(refs), input.ProductPath, "ai_replica", input.Model, input.Prompt, "[]", 1, 0, input.Resolution, input.Ratio, "queued", "", time.Now().Unix(), input.PersonPrompt, input.Budget)
+		_, e := tx.Exec("insert into video_replica_jobs(id,user_id,source_video_path,reference_paths,product_reference_path,task_type,model,prompt,storyboard,storyboard_confirmed,duration,resolution,ratio,status,current_run_id,created_at,ai_person_prompt,ai_budget) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", id, localWorkspaceID, input.SourceVideoPath, string(refs), input.ProductPath, "ai_replica", input.Model, input.Prompt, "[]", 1, 0, input.Resolution, input.Ratio, "queued", "", time.Now().Unix(), input.PersonPrompt, input.Budget)
 		return e
 	}); err != nil {
 		return nil, err
@@ -66,81 +68,150 @@ func (s *Studio) CreateAIVideoReplica(input AIVideoReplicaInput) (map[string]str
 	return map[string]string{"id": id}, nil
 }
 
+// resumeAIVideoReplicaJobs reattaches in-process workers after a desktop restart.
+// The request id is durable, so an already submitted provider job is polled instead
+// of being submitted a second time.
+func (s *Studio) resumeAIVideoReplicaJobs() {
+	user, err := s.currentUser()
+	if err != nil {
+		return
+	}
+	rows, err := s.db.Query(`select id,source_video_path,product_reference_path,prompt,ai_person_prompt,model,resolution,ratio,ai_budget
+		from video_replica_jobs where user_id=? and task_type='ai_replica' and status in ('interrupted','queued','preparing','submitting','generating','retrieving')`, localWorkspaceID)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, source, product, prompt, person, model, resolution, ratio string
+		var budget float64
+		if err := rows.Scan(&id, &source, &product, &prompt, &person, &model, &resolution, &ratio, &budget); err != nil {
+			continue
+		}
+		go s.runAIVideoReplica(id, user.ID, AIVideoReplicaInput{SourceVideoPath: source, ProductPath: product, Prompt: prompt, PersonPrompt: person, Model: model, Resolution: resolution, Ratio: ratio, Budget: budget})
+	}
+}
+
 func (s *Studio) runAIVideoReplica(id, userID string, input AIVideoReplicaInput) {
+	isTerminated := func() bool {
+		var status string
+		return s.db.QueryRow("select status from video_replica_jobs where id=?", id).Scan(&status) == nil && status == "terminated"
+	}
 	fail := func(err error) {
-		_ = s.writeTransaction(func(tx *sql.Tx) error {
+		if isTerminated() {
+			return
+		}
+		if err == nil {
+			err = errors.New("未知错误")
+		}
+		if writeErr := s.writeTransaction(func(tx *sql.Tx) error {
 			_, e := tx.Exec("update video_replica_jobs set status=? where id=?", "failed: "+truncate(err.Error()), id)
 			return e
-		})
+		}); writeErr != nil {
+			// There is no caller to return this asynchronous error to; retain it in the process log.
+			fmt.Printf("video replica %s: failed to persist failure: %v (cause: %v)\n", id, writeErr, err)
+		}
 	}
 	setStatus := func(status string) {
-		_ = s.writeTransaction(func(tx *sql.Tx) error {
+		if isTerminated() {
+			return
+		}
+		if err := s.writeTransaction(func(tx *sql.Tx) error {
 			_, e := tx.Exec("update video_replica_jobs set status=?,generation_started_at=coalesce(generation_started_at,?) where id=?", status, time.Now().Unix(), id)
 			return e
-		})
+		}); err != nil {
+			fmt.Printf("video replica %s: failed to persist status %q: %v\n", id, status, err)
+		}
 	}
-	setStatus("preparing")
 	bearer, err := s.currentHuabotBearer(userID)
 	if err != nil {
 		fail(err)
 		return
 	}
 	config := s.huabotConfig()
-	videoURL, err := s.uploadSkill2APIMedia(config.WebBase, bearer, input.SourceVideoPath)
-	if err != nil {
-		fail(err)
-		return
-	}
-	imageURL, err := s.uploadSkill2APIMedia(config.WebBase, bearer, input.ProductPath)
-	if err != nil {
-		fail(err)
-		return
-	}
-	setStatus("submitting")
-	prompt := fmt.Sprintf("克隆参考视频的镜头节奏、动作和构图，将目标商品替换为参考商品。参考视频：%s；商品参考图：%s。", videoURL, imageURL)
-	if strings.TrimSpace(input.PersonPrompt) != "" {
-		prompt += " 替换人物为 " + strings.TrimSpace(input.PersonPrompt)
-	}
-	prompt += fmt.Sprintf("\n%s\n尺寸 %s %s\n预算 %s 美元", input.Prompt, input.Resolution, input.Ratio, strconv.FormatFloat(input.Budget, 'f', -1, 64))
-	var submitted struct {
-		RequestID string `json:"request_id"`
-	}
-	err = jsonRequest(s.httpClient, http.MethodPost, config.WebBase+"/api/skill2api/generate/", bearer, map[string]any{"prompt": prompt, "skill_name": "hypit", "model": input.Model}, &submitted)
-	if err != nil || submitted.RequestID == "" {
-		if err == nil {
-			err = errors.New("Skill2API 未返回 request_id")
+	var requestID string
+	for attempt := 0; attempt < 5; attempt++ {
+		err = s.db.QueryRow("select coalesce(skill2api_request_id,'') from video_replica_jobs where id=?", id).Scan(&requestID)
+		if err != sql.ErrNoRows {
+			break
 		}
-		fail(err)
+		time.Sleep(100 * time.Millisecond)
+	}
+	if err != nil {
+		log.Printf("video replica %s: load skill2api request id failed: %v", id, err)
+		fail(fmt.Errorf("读取 AI 复刻任务失败（任务 %s）：%w", id, err))
 		return
 	}
-	_ = s.writeTransaction(func(tx *sql.Tx) error {
-		_, e := tx.Exec("update video_replica_jobs set skill2api_request_id=?,status=? where id=?", submitted.RequestID, "generating", id)
-		return e
-	})
+	if requestID == "" {
+		setStatus("preparing")
+		videoURL, uploadErr := s.uploadSkill2APIMedia(config.WebBase, bearer, input.SourceVideoPath)
+		if uploadErr != nil {
+			fail(uploadErr)
+			return
+		}
+		imageURL, uploadErr := s.uploadSkill2APIMedia(config.WebBase, bearer, input.ProductPath)
+		if uploadErr != nil {
+			fail(uploadErr)
+			return
+		}
+		setStatus("submitting")
+		prompt := fmt.Sprintf("克隆参考视频的镜头节奏、动作和构图，将目标商品替换为参考商品。参考视频：%s；商品参考图：%s。", videoURL, imageURL)
+		if strings.TrimSpace(input.PersonPrompt) != "" {
+			prompt += " 替换人物为 " + strings.TrimSpace(input.PersonPrompt)
+		}
+		prompt += fmt.Sprintf("\n%s\n尺寸 %s %s\n预算 %s 美元", input.Prompt, input.Resolution, input.Ratio, strconv.FormatFloat(input.Budget, 'f', -1, 64))
+		var submitted struct {
+			RequestID string `json:"request_id"`
+		}
+		if err = jsonRequest(s.httpClient, http.MethodPost, config.WebBase+"/api/skill2api/generate/", bearer, map[string]any{"prompt": prompt, "skill_name": "hypit", "model": input.Model}, &submitted); err != nil {
+			fail(err)
+			return
+		}
+		requestID = submitted.RequestID
+		if requestID == "" {
+			fail(errors.New("Skill2API 未返回 request_id"))
+			return
+		}
+		if err = s.writeTransaction(func(tx *sql.Tx) error {
+			_, e := tx.Exec("update video_replica_jobs set skill2api_request_id=?,status=? where id=? and status <> 'terminated'", requestID, "generating", id)
+			return e
+		}); err != nil {
+			fail(err)
+			return
+		}
+	}
 	deadline := time.Now().Add(45 * time.Minute)
 	for time.Now().Before(deadline) {
+		if isTerminated() {
+			return
+		}
 		var status map[string]any
-		err = jsonRequest(s.httpClient, http.MethodGet, config.WebBase+"/api/skill2api/status/?request_id="+url.QueryEscape(submitted.RequestID), bearer, nil, &status)
-		if err != nil {
+		if err = jsonRequest(s.httpClient, http.MethodGet, config.WebBase+"/api/skill2api/status/?request_id="+url.QueryEscape(requestID), bearer, nil, &status); err != nil {
 			fail(err)
 			return
 		}
 		state := stringValue(status["status"])
-		if state == "waiting_for_input" {
-			fail(errors.New("Skill2API 需要补充输入，请重新提交"))
+		switch state {
+		case "waiting_for_input":
+			fail(errors.New("Skill2API 需要补充输入，请在任务控制台继续"))
 			return
-		}
-		if state == "failed" || state == "terminated" {
-			fail(errors.New(stringValue(status["error"])))
+		case "failed", "terminated":
+			reason := stringValue(status["error"])
+			if reason == "" {
+				reason = stringValue(status["err"])
+			}
+			if reason == "" {
+				reason = "Skill2API 任务" + state
+			}
+			fail(errors.New(reason))
 			return
-		}
-		if state == "succeeded" {
+		case "succeeded":
 			files, _ := status["files"].([]any)
 			var filePath string
 			for _, item := range files {
-				p := stringValue(item)
-				if strings.HasSuffix(strings.ToLower(p), ".mp4") {
-					filePath = p
+				path := stringValue(item)
+				if strings.HasSuffix(strings.ToLower(path), ".mp4") {
+					filePath = path
 					break
 				}
 			}
@@ -148,49 +219,49 @@ func (s *Studio) runAIVideoReplica(id, userID string, input AIVideoReplicaInput)
 				fail(errors.New("Skill2API 未返回 MP4"))
 				return
 			}
-			cleanFile := filepath.Clean(filepath.FromSlash(filePath))
-			if cleanFile != filepath.FromSlash(filePath) || strings.HasPrefix(cleanFile, ".."+string(filepath.Separator)) || filepath.IsAbs(cleanFile) {
+			clean := filepath.Clean(filepath.FromSlash(filePath))
+			if clean != filepath.FromSlash(filePath) || filepath.IsAbs(clean) || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
 				fail(errors.New("Skill2API 文件路径无效"))
 				return
 			}
 			var delivery struct {
 				DeliveryID string `json:"delivery_id"`
 			}
-			err = jsonRequest(s.httpClient, http.MethodPost, config.WebBase+"/api/skill2api/file/", bearer, map[string]string{"request_id": submitted.RequestID, "file_path": filePath}, &delivery)
-			if err != nil {
+			if err = jsonRequest(s.httpClient, http.MethodPost, config.WebBase+"/api/skill2api/file/", bearer, map[string]string{"request_id": requestID, "file_path": filePath}, &delivery); err != nil {
 				fail(err)
 				return
 			}
-			_ = s.writeTransaction(func(tx *sql.Tx) error {
-				_, e := tx.Exec("update video_replica_jobs set skill2api_delivery_id=? where id=?", delivery.DeliveryID, id)
+			if delivery.DeliveryID == "" {
+				fail(errors.New("Skill2API 未返回 delivery_id"))
+				return
+			}
+			if err = s.writeTransaction(func(tx *sql.Tx) error {
+				_, e := tx.Exec("update video_replica_jobs set skill2api_delivery_id=?,status='retrieving' where id=? and status <> 'terminated'", delivery.DeliveryID, id)
 				return e
-			})
+			}); err != nil {
+				fail(err)
+				return
+			}
 			for i := 0; i < 180; i++ {
 				time.Sleep(2 * time.Second)
 				var result map[string]any
-				err = jsonRequest(s.httpClient, http.MethodGet, config.WebBase+"/api/skill2api/file/delivery/?request_id="+url.QueryEscape(submitted.RequestID)+"&delivery_id="+url.QueryEscape(delivery.DeliveryID), bearer, nil, &result)
-				if err != nil {
+				if err = jsonRequest(s.httpClient, http.MethodGet, config.WebBase+"/api/skill2api/file/delivery/?request_id="+url.QueryEscape(requestID)+"&delivery_id="+url.QueryEscape(delivery.DeliveryID), bearer, nil, &result); err != nil {
 					fail(err)
 					return
 				}
-				ds := stringValue(result["status"])
-				if ds == "failed" {
+				deliveryState := stringValue(result["status"])
+				if deliveryState == "failed" {
 					fail(errors.New(stringValue(result["error"])))
 					return
 				}
-				if ds == "succeeded" {
+				if deliveryState == "succeeded" {
 					rawURL := stringValue(result["url"])
 					if rawURL == "" {
 						fail(errors.New("Skill2API 文件 URL 为空"))
 						return
 					}
-					_ = s.writeTransaction(func(tx *sql.Tx) error {
-						_, e := tx.Exec("update video_replica_jobs set status='retrieving' where id=?", id)
-						return e
-					})
 					if err = s.downloadAIVideo(id, rawURL, bearer); err != nil {
 						fail(err)
-						return
 					}
 					return
 				}
@@ -201,6 +272,193 @@ func (s *Studio) runAIVideoReplica(id, userID string, input AIVideoReplicaInput)
 		time.Sleep(5 * time.Second)
 	}
 	fail(errors.New("Skill2API 生成超时"))
+}
+
+func (s *Studio) skill2APIRequest(id string) (string, User, error) {
+	user, err := s.currentUser()
+	if err != nil {
+		return "", User{}, err
+	}
+	var requestID string
+	err = s.db.QueryRow("select skill2api_request_id from video_replica_jobs where id=?", id).Scan(&requestID)
+	if err == sql.ErrNoRows {
+		var count int
+		_ = s.db.QueryRow("select count(*) from video_replica_jobs").Scan(&count)
+		log.Printf("video replica %s: no job row while loading skill2api request id; total jobs=%d", id, count)
+		return "", User{}, fmt.Errorf("历史任务不存在（id=%s）", id)
+	}
+	if err != nil {
+		return "", User{}, err
+	}
+	if requestID == "" {
+		return "", User{}, errors.New("任务尚未提交")
+	}
+	return requestID, user, nil
+}
+
+func (s *Studio) RefreshAIVideoReplica(id string) (map[string]any, error) {
+	rid, user, err := s.skill2APIRequest(id)
+	if err != nil {
+		return nil, err
+	}
+	bearer, err := s.currentHuabotBearer(user.ID)
+	if err != nil {
+		return nil, err
+	}
+	var status map[string]any
+	err = jsonRequest(s.httpClient, http.MethodGet, s.huabotConfig().WebBase+"/api/skill2api/status/?request_id="+url.QueryEscape(rid), bearer, nil, &status)
+	if err != nil {
+		return nil, err
+	}
+	state := stringValue(status["status"])
+	status["status"] = state
+	if state == "succeeded" {
+		var localStatus, filePath string
+		if err := s.db.QueryRow("select status,coalesce(file_path,'') from video_replica_jobs where id=?", id).Scan(&localStatus, &filePath); err != nil {
+			log.Printf("video replica %s: no job row while loading local completion state: %v", id, err)
+			return nil, err
+		}
+		if filePath != "" || localStatus == "ready" {
+			state = "ready"
+		} else {
+			state = "retrieving"
+		}
+	} else if err := s.writeTransaction(func(tx *sql.Tx) error {
+		_, e := tx.Exec("update video_replica_jobs set status=? where id=?", state, id)
+		return e
+	}); err != nil {
+		return nil, err
+	}
+	return status, nil
+}
+
+func (s *Studio) ResumeAIVideoReplica(id, answer, instruction string) (map[string]any, error) {
+	if strings.TrimSpace(answer) != "" && strings.TrimSpace(instruction) != "" {
+		return nil, errors.New("answer 和 instruction 只能填写一个")
+	}
+	rid, user, err := s.skill2APIRequest(id)
+	if err != nil {
+		return nil, err
+	}
+	bearer, err := s.currentHuabotBearer(user.ID)
+	if err != nil {
+		return nil, err
+	}
+	payload := map[string]string{"request_id": rid}
+	if strings.TrimSpace(answer) != "" {
+		payload["answer"] = answer
+	} else {
+		payload["instruction"] = instruction
+	}
+	var result map[string]any
+	err = jsonRequest(s.httpClient, http.MethodPost, s.huabotConfig().WebBase+"/api/skill2api/resume/", bearer, payload, &result)
+	return result, err
+}
+
+func (s *Studio) TerminateAIVideoReplica(id string) (map[string]any, error) {
+	rid, user, err := s.skill2APIRequest(id)
+	if err != nil {
+		return nil, err
+	}
+	bearer, err := s.currentHuabotBearer(user.ID)
+	if err != nil {
+		return nil, err
+	}
+	var result map[string]any
+	err = jsonRequest(s.httpClient, http.MethodPost, s.huabotConfig().WebBase+"/api/skill2api/terminate/", bearer, map[string]string{"request_id": rid}, &result)
+	if err == nil {
+		if _, err = s.db.Exec("update video_replica_jobs set status='terminated' where id=?", id); err != nil {
+			return nil, err
+		}
+	}
+	return result, err
+}
+
+func (s *Studio) DeliverAIVideoReplicaFile(id, filePath string) (map[string]any, error) {
+	clean := filepath.Clean(filepath.FromSlash(filePath))
+	if filepath.IsAbs(filePath) || clean != filepath.FromSlash(filePath) || strings.HasPrefix(filePath, "../") {
+		return nil, errors.New("文件路径无效")
+	}
+	rid, user, err := s.skill2APIRequest(id)
+	if err != nil {
+		return nil, err
+	}
+	bearer, err := s.currentHuabotBearer(user.ID)
+	if err != nil {
+		return nil, err
+	}
+	var result map[string]any
+	err = jsonRequest(s.httpClient, http.MethodPost, s.huabotConfig().WebBase+"/api/skill2api/file/", bearer, map[string]string{"request_id": rid, "file_path": filePath}, &result)
+	return result, err
+}
+
+func (s *Studio) AIVideoReplicaDelivery(id, deliveryID string) (map[string]any, error) {
+	rid, user, err := s.skill2APIRequest(id)
+	if err != nil {
+		return nil, err
+	}
+	bearer, err := s.currentHuabotBearer(user.ID)
+	if err != nil {
+		return nil, err
+	}
+	var result map[string]any
+	err = jsonRequest(s.httpClient, http.MethodGet, s.huabotConfig().WebBase+"/api/skill2api/file/delivery/?request_id="+url.QueryEscape(rid)+"&delivery_id="+url.QueryEscape(deliveryID), bearer, nil, &result)
+	if err == nil && strings.HasPrefix(stringValue(result["url"]), "/") {
+		result["url"] = s.huabotConfig().WebBase + stringValue(result["url"])
+	}
+	return result, err
+}
+
+func (s *Studio) DownloadAIVideoReplicaFile(id, filePath string) (bool, error) {
+	delivery, err := s.DeliverAIVideoReplicaFile(id, filePath)
+	if err != nil {
+		return false, err
+	}
+	deliveryID := stringValue(delivery["delivery_id"])
+	if deliveryID == "" {
+		return false, errors.New("远程未返回文件投递 ID")
+	}
+	var result map[string]any
+	for i := 0; i < 180; i++ {
+		result, err = s.AIVideoReplicaDelivery(id, deliveryID)
+		if err != nil {
+			return false, err
+		}
+		if stringValue(result["status"]) == "failed" {
+			return false, errors.New(stringValue(result["error"]))
+		}
+		if stringValue(result["status"]) == "succeeded" {
+			break
+		}
+		time.Sleep(2 * time.Second)
+	}
+	rawURL := stringValue(result["url"])
+	if rawURL == "" {
+		return false, errors.New("文件获取超时或下载地址为空")
+	}
+	req, err := http.NewRequest(http.MethodGet, rawURL, nil)
+	if err != nil {
+		return false, err
+	}
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return false, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return false, fmt.Errorf("文件下载失败：HTTP %d", resp.StatusCode)
+	}
+	destination, err := runtime.SaveFileDialog(s.ctx, runtime.SaveDialogOptions{Title: "导出远程文件", DefaultFilename: filepath.Base(filePath), CanCreateDirectories: true})
+	if err != nil || destination == "" {
+		return false, err
+	}
+	out, err := os.Create(destination)
+	if err != nil {
+		return false, err
+	}
+	defer out.Close()
+	_, err = io.Copy(out, resp.Body)
+	return err == nil, err
 }
 
 func (s *Studio) uploadSkill2APIMedia(baseURL, bearer, localPath string) (string, error) {

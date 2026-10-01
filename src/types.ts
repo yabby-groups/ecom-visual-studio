@@ -197,11 +197,26 @@ export type VideoReplicaJob = {
   workflow_kind?: "storyboard" | "ai_replace";
   ai_person_prompt?: string;
   ai_budget?: number;
+  skill2api_request_id?: string;
+  skill2api_delivery_id?: string;
+  skill2api?: Skill2APIStatus;
 };
 export type VideoReplicaPage = {
   items: VideoReplicaJob[];
   total: number;
   has_more: boolean;
+};
+export type Skill2APIStatus = {
+  request_id: string;
+  status: string;
+  phase?: string;
+  question?: string;
+  options?: string[];
+  stdout?: string;
+  stderr?: string;
+  files?: string[];
+  error?: string;
+  delivery_id?: string;
 };
 
 export type AiAction = {

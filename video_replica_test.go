@@ -10,6 +10,16 @@ import (
 	"testing"
 )
 
+func TestDecodeResponseReturnsJSONErrorEnvelopeOnSuccessStatus(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	recorder.WriteHeader(http.StatusOK)
+	_, _ = recorder.Write([]byte(`{"err":"没有权限"}`))
+	response := recorder.Result()
+	if err := decodeResponse(response, &map[string]any{}); err == nil || err.Error() != "没有权限" {
+		t.Fatalf("decodeResponse error = %v, want permission message", err)
+	}
+}
+
 func TestNormalizeVideoGenerationErrorMapsUnauthorized(t *testing.T) {
 	err := normalizeVideoGenerationError(errors.New("Huabot 请求失败：HTTP 401：Unauthorized"))
 	if err == nil || err.Error() != authorizationExpiredMessage {

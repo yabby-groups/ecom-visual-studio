@@ -162,8 +162,11 @@ func (s *Studio) execDataWrite(query string, args ...any) (sql.Result, error) {
 	return s.db.Exec(query, args...)
 }
 
-func (s *Studio) startup(ctx context.Context) { s.ctx = ctx }
-func (s *Studio) shutdown(context.Context)    { _ = s.db.Close() }
+func (s *Studio) startup(ctx context.Context) {
+	s.ctx = ctx
+	go s.resumeAIVideoReplicaJobs()
+}
+func (s *Studio) shutdown(context.Context) { _ = s.db.Close() }
 
 func (s *Studio) migrate() error {
 	statements := []string{
@@ -205,7 +208,7 @@ func (s *Studio) migrate() error {
 		"update custom_templates set user_id='" + localWorkspaceID + "' where user_id<>'" + localWorkspaceID + "'",
 		"update try_on_jobs set user_id='" + localWorkspaceID + "' where user_id<>'" + localWorkspaceID + "'",
 		"update video_replica_jobs set user_id='" + localWorkspaceID + "' where user_id<>'" + localWorkspaceID + "'",
-		"update video_replica_jobs set status='interrupted' where status in ('queued','preparing','generating','downloading','merging')",
+		"update video_replica_jobs set status='interrupted' where task_type<>'ai_replica' and status in ('queued','preparing','generating','downloading','merging')",
 	} {
 		if _, err := s.db.Exec(statement); err != nil {
 			return err

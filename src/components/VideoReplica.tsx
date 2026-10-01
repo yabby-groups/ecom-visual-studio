@@ -116,7 +116,10 @@ export function VideoReplica() {
 
   async function load() {
     try {
-      const result = await client.videoReplicaJobs();
+      // The history panel shows both regular and AI replica jobs. Load the
+      // largest supported page so older AI jobs are not hidden by mixed-task
+      // pagination.
+      const result = await client.videoReplicaJobs(48, 0);
       setJobs(result.items);
       if (selected) {
         const fresh = result.items.find((item) => item.id === selected.id);
@@ -142,9 +145,82 @@ export function VideoReplica() {
   }, [location.state]);
   useEffect(() => {
     if (!jobs.some((job) => isPending(job.status))) return;
-    const timer = window.setInterval(() => void load(), 5000);
+    const timer = window.setInterval(() => {
+      const aiJob =
+        selected?.task_type === "ai_replica" && isPending(selected.status)
+          ? selected
+          : jobs.find(
+              (job) => job.task_type === "ai_replica" && isPending(job.status),
+            );
+      if (aiJob?.skill2api_request_id) void refreshTask(aiJob.id);
+      else void load();
+    }, 5000);
     return () => window.clearInterval(timer);
   }, [jobs.map((job) => `${job.id}:${job.status}`).join("|")]);
+
+  // Hydrate remote stdout/stderr when a historical AI task is selected.
+  useEffect(() => {
+    if (selected?.task_type !== "ai_replica" || !selected.skill2api_request_id)
+      return;
+    void refreshTask(selected.id);
+  }, [selected?.id]);
+
+  async function refreshTask(id: string) {
+    try {
+      const remote = await client.refreshAIVideoReplica(id);
+      setSelected((current) =>
+        current?.id === id
+          ? {
+              ...current,
+              status: remote.status as VideoReplicaJob["status"],
+              skill2api: remote,
+            }
+          : current,
+      );
+      setJobs((items) =>
+        items.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                status: remote.status as VideoReplicaJob["status"],
+                skill2api: remote,
+              }
+            : item,
+        ),
+      );
+    } catch (reason) {
+      const message = operationError(reason, "远程记录已过期或不可用");
+      setSelected((current) =>
+        current?.id === id
+          ? {
+              ...current,
+              skill2api: {
+                request_id: current.skill2api_request_id || "",
+                status: "unavailable",
+                error: message,
+              },
+            }
+          : current,
+      );
+      setError(message);
+    }
+  }
+  async function resumeTask(id: string, answer: string, instruction: string) {
+    try {
+      await client.resumeAIVideoReplica(id, answer, instruction);
+      await refreshTask(id);
+    } catch (reason) {
+      setError(operationError(reason, "无法继续任务"));
+    }
+  }
+  async function terminateTask(id: string) {
+    try {
+      await client.terminateAIVideoReplica(id);
+      await load();
+    } catch (reason) {
+      setError(operationError(reason, "无法终止任务"));
+    }
+  }
 
   async function uploadVideo(file: File) {
     setBusy("upload");
@@ -335,7 +411,25 @@ export function VideoReplica() {
     setBusy(id);
     setError("");
     try {
-      await client.regenerateVideoReplica(id);
+      const job = jobs.find((item) => item.id === id);
+      if (job?.task_type === "ai_replica") {
+        const result = await client.createAIVideoReplica({
+          source_video_path: job.source_video_path,
+          product_path: job.product_reference_path || job.reference_paths[0],
+          prompt: job.prompt,
+          person_prompt: personPrompt,
+          model: job.model,
+          resolution: job.resolution,
+          ratio: job.ratio,
+          budget,
+        });
+        await load();
+        const fresh = await client.videoReplicaJob(result.id);
+        selectJob(fresh);
+      } else {
+        await client.regenerateVideoReplica(id);
+        await load();
+      }
       await load();
     } catch (reason) {
       setError(operationError(reason, "重新生成失败"));
@@ -469,6 +563,9 @@ export function VideoReplica() {
         regenerate={regenerate}
         exportVideo={exportVideo}
         selectJob={selectJob}
+        refreshTask={refreshTask}
+        resumeTask={resumeTask}
+        terminateTask={terminateTask}
       />
     );
 

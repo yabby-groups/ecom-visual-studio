@@ -10,6 +10,11 @@ export const statusText = (status: string) =>
     downloading: "正在下载片段",
     merging: "正在合并视频",
     interrupted: "生成已中断",
+    terminated: "已终止",
+    running: "正在运行",
+    succeeded: "远程任务已完成",
+    waiting_for_input: "等待补充输入",
+    not_found: "远程记录已过期或不可用",
     ready: "已完成",
   })[status] || (status.startsWith("failed") ? "生成失败" : "未知状态");
 
@@ -20,6 +25,7 @@ export const isPending = (status: string) =>
     "submitting",
     "prompting",
     "generating",
+    "running",
     "retrieving",
     "downloading",
     "merging",
