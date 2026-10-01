@@ -172,7 +172,9 @@
   background: rgba(37, 143, 123, 0.16);
   color: #d9f5ec;
   cursor: pointer;
-  transition: background 160ms ease, transform 160ms ease;
+  transition:
+    background 160ms ease,
+    transform 160ms ease;
 }
 .theme-toggle:hover {
   background: rgba(37, 143, 123, 0.32);

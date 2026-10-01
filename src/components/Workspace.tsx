@@ -271,7 +271,11 @@ export function Workspace() {
       setShowCreationGuide(false);
       await load();
       showNotice(
-        one ? "已加入生成队列" : queued ? `${queued} 张画面已加入生成队列` : "没有需要生成的画面",
+        one
+          ? "已加入生成队列"
+          : queued
+            ? `${queued} 张画面已加入生成队列`
+            : "没有需要生成的画面",
         2000,
       );
     } catch (reason) {
@@ -379,7 +383,10 @@ export function Workspace() {
           className="button primary"
           disabled={
             project.assets?.some((item) => isPending(item.status)) ||
-            !project.assets?.some((item) => item.status === "draft" || item.status.startsWith("failed"))
+            !project.assets?.some(
+              (item) =>
+                item.status === "draft" || item.status.startsWith("failed"),
+            )
           }
           onClick={() => void generate(false)}
         >

@@ -14,10 +14,7 @@ export function Nav({
     location.pathname === to ||
     (to !== "/" && location.pathname.startsWith(`${to}/`));
   return (
-    <Link
-      to={to}
-      className={`nav-link ${active ? "active" : ""}`}
-    >
+    <Link to={to} className={`nav-link ${active ? "active" : ""}`}>
       {icon}
       <span>{label}</span>
     </Link>

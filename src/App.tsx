@@ -1,5 +1,11 @@
 import { useEffect } from "react";
-import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import {
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
 import { LoaderCircle } from "lucide-react";
 import { EventsOff, EventsOn } from "../wailsjs/runtime/runtime";
 import { Home } from "./components/Home";

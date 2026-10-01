@@ -199,7 +199,9 @@
   background: #293240;
   color: #edf2f7;
 }
-:root[data-theme="dark"] .template-image-picker-actions .button.secondary:hover:not(:disabled) {
+:root[data-theme="dark"]
+  .template-image-picker-actions
+  .button.secondary:hover:not(:disabled) {
   border-color: #71839c;
   background: #354153;
 }
@@ -251,8 +253,12 @@
 }
 :root[data-theme="dark"] .template-create-actions .template-delete-confirm,
 :root[data-theme="light"] .template-create-actions .template-delete-confirm,
-:root[data-theme="dark"] .template-create-actions .template-delete-confirm:hover:not(:disabled),
-:root[data-theme="light"] .template-create-actions .template-delete-confirm:hover:not(:disabled) {
+:root[data-theme="dark"]
+  .template-create-actions
+  .template-delete-confirm:hover:not(:disabled),
+:root[data-theme="light"]
+  .template-create-actions
+  .template-delete-confirm:hover:not(:disabled) {
   border-color: #9b454b;
   background: #a83e46;
   color: #fff;
@@ -408,16 +414,22 @@
   background: #293240;
   color: #edf2f7;
 }
-:root[data-theme="dark"] .template-tile-actions .button.secondary:hover:not(:disabled) {
+:root[data-theme="dark"]
+  .template-tile-actions
+  .button.secondary:hover:not(:disabled) {
   border-color: #7a8aa2;
   background: #354153;
 }
-:root[data-theme="dark"] .template-tile-actions .button.secondary.template-delete-button {
+:root[data-theme="dark"]
+  .template-tile-actions
+  .button.secondary.template-delete-button {
   border-color: #8b515b;
   background: #3c2933;
   color: #ffd0d2;
 }
-:root[data-theme="dark"] .template-tile-actions .button.secondary.template-delete-button:hover:not(:disabled) {
+:root[data-theme="dark"]
+  .template-tile-actions
+  .button.secondary.template-delete-button:hover:not(:disabled) {
   border-color: #b46a74;
   background: #50303b;
 }
@@ -437,7 +449,9 @@
 :root[data-theme="light"] .template-tile:focus-visible {
   background: #fff8eb;
 }
-:root[data-theme="light"] .template-tile-actions .button.secondary.template-delete-button {
+:root[data-theme="light"]
+  .template-tile-actions
+  .button.secondary.template-delete-button {
   color: #a33c3c;
 }
 

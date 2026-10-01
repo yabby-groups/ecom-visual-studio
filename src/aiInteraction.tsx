@@ -64,7 +64,9 @@ export function AiInteractionProvider({ children }: { children: ReactNode }) {
   const registerPage = useCallback((registration: PageRegistration) => {
     setPage(registration);
     return () => {
-      setPage((current) => (current === registration ? { screen: "工作台", data: {} } : current));
+      setPage((current) =>
+        current === registration ? { screen: "工作台", data: {} } : current,
+      );
     };
   }, []);
 
@@ -79,7 +81,11 @@ export function AiInteractionProvider({ children }: { children: ReactNode }) {
       switch (action.type) {
         case "navigate": {
           const to = stringValue(payload.to);
-          if (!/^\/(?:$|new$|library$|templates$|try-on(?:\/[a-zA-Z0-9]+)?$|projects\/[a-zA-Z0-9]+$)/.test(to)) {
+          if (
+            !/^\/(?:$|new$|library$|templates$|try-on(?:\/[a-zA-Z0-9]+)?$|projects\/[a-zA-Z0-9]+$)/.test(
+              to,
+            )
+          ) {
             throw new Error("AI 请求的跳转地址无效");
           }
           navigate(to);
@@ -95,12 +101,16 @@ export function AiInteractionProvider({ children }: { children: ReactNode }) {
               .filter((key) => typeof payload[key] === "string")
               .map((key) => [key, payload[key]]),
           );
-          if (!Object.keys(patch).length) throw new Error("没有可更新的画面字段");
+          if (!Object.keys(patch).length)
+            throw new Error("没有可更新的画面字段");
           await client.updateAsset(id, patch);
           break;
         }
         case "add_asset":
-          await client.addAsset(stringValue(payload.project_id), stringValue(payload.template_id));
+          await client.addAsset(
+            stringValue(payload.project_id),
+            stringValue(payload.template_id),
+          );
           break;
         case "generate_asset":
           await client.generateAsset(stringValue(payload.id));
@@ -138,7 +148,10 @@ export function AiInteractionProvider({ children }: { children: ReactNode }) {
           await client.createTryOn({
             person_paths: stringList(payload.person_paths),
             garment_paths: stringList(payload.garment_paths),
-            generation_mode: payload.generation_mode === "combinations" ? "combinations" : "combined",
+            generation_mode:
+              payload.generation_mode === "combinations"
+                ? "combinations"
+                : "combined",
             instructions: stringValue(payload.instructions),
             ratio: stringValue(payload.ratio),
           });
@@ -165,7 +178,11 @@ export function AiInteractionProvider({ children }: { children: ReactNode }) {
     }),
     [execute, location.pathname, page, registerPage],
   );
-  return <AiInteractionContext.Provider value={value}>{children}</AiInteractionContext.Provider>;
+  return (
+    <AiInteractionContext.Provider value={value}>
+      {children}
+    </AiInteractionContext.Provider>
+  );
 }
 
 export function useAiInteraction() {

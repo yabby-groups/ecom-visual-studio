@@ -8,7 +8,8 @@ declare global {
 
 export function studio(): StudioBindings {
   const bindings = window.go?.main?.Studio;
-  if (!bindings) throw new Error("桌面服务不可用。请使用 Wails 启动 Ecom Visual Studio。");
+  if (!bindings)
+    throw new Error("桌面服务不可用。请使用 Wails 启动 Ecom Visual Studio。");
   return bindings;
 }
 

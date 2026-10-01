@@ -116,14 +116,33 @@ export const client = {
   }) => call<{ id: string; ids: string[] }>("CreateTryOn", body),
   regenerateTryOn: (id: string) => call("RegenerateTryOn", id),
   deleteTryOn: (id: string) => call("DeleteTryOn", id),
-  uploadVideoReplicaVideo: (name: string, contentType: string, data: number[]) =>
+  uploadVideoReplicaVideo: (
+    name: string,
+    contentType: string,
+    data: number[],
+  ) =>
     call<{ path: string }>("UploadVideoReplicaVideo", name, contentType, data),
-  analyzeVideoReplica: (path: string, referencePaths: string[], productReferencePath: string) =>
-    call<{ storyboard: VideoReplicaJob["storyboard"] }>("AnalyzeVideoReplica", path, referencePaths, productReferencePath),
+  analyzeVideoReplica: (
+    path: string,
+    referencePaths: string[],
+    productReferencePath: string,
+  ) =>
+    call<{ storyboard: VideoReplicaJob["storyboard"] }>(
+      "AnalyzeVideoReplica",
+      path,
+      referencePaths,
+      productReferencePath,
+    ),
   reviewVideoReplicaPrompt: (mode: "replica" | "replace", prompt: string) =>
-    call<{ score: number; issues: string[]; optimized_prompt: string }>("ReviewVideoReplicaPrompt", mode, prompt),
-  updateVideoReplicaStoryboard: (id: string, storyboard: VideoReplicaJob["storyboard"]) =>
-    call("UpdateVideoReplicaStoryboard", id, storyboard),
+    call<{ score: number; issues: string[]; optimized_prompt: string }>(
+      "ReviewVideoReplicaPrompt",
+      mode,
+      prompt,
+    ),
+  updateVideoReplicaStoryboard: (
+    id: string,
+    storyboard: VideoReplicaJob["storyboard"],
+  ) => call("UpdateVideoReplicaStoryboard", id, storyboard),
   confirmVideoReplicaStoryboard: (id: string) =>
     call("ConfirmVideoReplicaStoryboard", id),
   videoReplicaJobs: (limit = 12, offset = 0) =>
@@ -142,8 +161,14 @@ export const client = {
     ratio: string;
   }) => call<{ id: string }>("CreateVideoReplica", body),
   createAIVideoReplica: (body: {
-    source_video_path: string; product_path: string; prompt: string; person_prompt: string;
-    model: string; resolution: string; ratio: string; budget: number;
+    source_video_path: string;
+    product_path: string;
+    prompt: string;
+    person_prompt: string;
+    model: string;
+    resolution: string;
+    ratio: string;
+    budget: number;
   }) => call<{ id: string }>("CreateAIVideoReplica", body),
   regenerateVideoReplica: (id: string) => call("RegenerateVideoReplica", id),
   analyze: (body: { mode: string; product: string; reference: string }) =>

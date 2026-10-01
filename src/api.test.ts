@@ -96,7 +96,9 @@ describe("client settings refresh", () => {
 
     await expect(client.tokenSettings()).resolves.toEqual({ tokens: [] });
     await expect(client.models()).resolves.toEqual({ models: [] });
-    await expect(client.refreshTokenSettings()).resolves.toEqual({ tokens: [] });
+    await expect(client.refreshTokenSettings()).resolves.toEqual({
+      tokens: [],
+    });
     await expect(client.refreshModels()).resolves.toEqual({ models: [] });
 
     expect(tokenSettings).toHaveBeenCalledOnce();
@@ -118,7 +120,9 @@ describe("client video prompt review", () => {
       value: { go: { main: { Studio: { ReviewVideoReplicaPrompt: review } } } },
     });
 
-    await expect(client.reviewVideoReplicaPrompt("replica", "展示产品")).resolves.toMatchObject({ score: 88 });
+    await expect(
+      client.reviewVideoReplicaPrompt("replica", "展示产品"),
+    ).resolves.toMatchObject({ score: 88 });
     expect(review).toHaveBeenCalledWith("replica", "展示产品");
   });
 });

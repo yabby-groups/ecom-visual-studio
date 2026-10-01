@@ -17,7 +17,10 @@ function Bootstrap() {
 // Establish the subscription once at startup so system-theme changes also update
 // the React tree's consumers without requiring a page reload.
 function ThemeBootstrap() {
-  useSyncExternalStore(subscribeTheme, () => document.documentElement.dataset.theme);
+  useSyncExternalStore(
+    subscribeTheme,
+    () => document.documentElement.dataset.theme,
+  );
   return <Bootstrap />;
 }
 

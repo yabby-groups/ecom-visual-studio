@@ -26,9 +26,17 @@ export function Library() {
   const [videoError, setVideoError] = useState("");
   const visibleProjects = filterProjects(projects, filter);
   useEffect(() => {
-    void client.videoReplicaJobs(48, 0).then((result) => setVideoJobs(result.items)).catch((reason) => {
-      setVideoError(userFacingError(reason instanceof Error ? reason.message : "", "无法加载视频作品"));
-    });
+    void client
+      .videoReplicaJobs(48, 0)
+      .then((result) => setVideoJobs(result.items))
+      .catch((reason) => {
+        setVideoError(
+          userFacingError(
+            reason instanceof Error ? reason.message : "",
+            "无法加载视频作品",
+          ),
+        );
+      });
   }, []);
   useEffect(
     () =>
@@ -82,18 +90,75 @@ export function Library() {
             </button>
           ))}
         </div>
-        <section className="library-video-section" aria-labelledby="video-works-heading">
+        <section
+          className="library-video-section"
+          aria-labelledby="video-works-heading"
+        >
           <div className="library-section-heading">
-            <div><span className="eyebrow">视频作品</span><h2 id="video-works-heading">视频重制</h2></div>
-            <button className="button secondary" type="button" onClick={() => navigate("/video-replica")}>新建视频</button>
-          </div>
-          {videoError && <p className="notice notice-error" role="alert">{videoError}</p>}
-          {videoJobs.length ? <div className="library-video-grid">{videoJobs.map((job) => <article className="library-video-item" key={job.id}>
-            <button type="button" className="library-video-preview" onClick={() => navigate("/video-replica", { state: { jobId: job.id } })}>
-              {job.file_path ? <video src={fileUrl(job.file_path)} preload="metadata" /> : <Film size={28} />}
+            <div>
+              <span className="eyebrow">视频作品</span>
+              <h2 id="video-works-heading">视频重制</h2>
+            </div>
+            <button
+              className="button secondary"
+              type="button"
+              onClick={() => navigate("/video-replica")}
+            >
+              新建视频
             </button>
-            <div className="library-video-copy"><strong>{job.model}</strong><span>{job.status.startsWith("failed") ? "生成失败" : job.status === "ready" ? "已完成" : "处理中"} · {job.duration} 秒</span><time>{new Date(job.created_at * 1000).toLocaleString()}</time></div>
-          </article>)}</div> : <div className="library-video-empty"><Video size={20} /><span>还没有视频作品</span><button className="text-button" type="button" onClick={() => navigate("/video-replica")}>开始重制</button></div>}
+          </div>
+          {videoError && (
+            <p className="notice notice-error" role="alert">
+              {videoError}
+            </p>
+          )}
+          {videoJobs.length ? (
+            <div className="library-video-grid">
+              {videoJobs.map((job) => (
+                <article className="library-video-item" key={job.id}>
+                  <button
+                    type="button"
+                    className="library-video-preview"
+                    onClick={() =>
+                      navigate("/video-replica", { state: { jobId: job.id } })
+                    }
+                  >
+                    {job.file_path ? (
+                      <video src={fileUrl(job.file_path)} preload="metadata" />
+                    ) : (
+                      <Film size={28} />
+                    )}
+                  </button>
+                  <div className="library-video-copy">
+                    <strong>{job.model}</strong>
+                    <span>
+                      {job.status.startsWith("failed")
+                        ? "生成失败"
+                        : job.status === "ready"
+                          ? "已完成"
+                          : "处理中"}{" "}
+                      · {job.duration} 秒
+                    </span>
+                    <time>
+                      {new Date(job.created_at * 1000).toLocaleString()}
+                    </time>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="library-video-empty">
+              <Video size={20} />
+              <span>还没有视频作品</span>
+              <button
+                className="text-button"
+                type="button"
+                onClick={() => navigate("/video-replica")}
+              >
+                开始重制
+              </button>
+            </div>
+          )}
         </section>
         {visibleProjects.length ? (
           <div className="art-grid library-art-grid">

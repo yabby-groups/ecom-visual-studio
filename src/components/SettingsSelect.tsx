@@ -57,7 +57,11 @@ export function SettingsSelect({
         aria-controls={listId}
         onClick={() => setOpen((isOpen) => !isOpen)}
         onKeyDown={(event) => {
-          if (event.key === "ArrowDown" || event.key === "Enter" || event.key === " ") {
+          if (
+            event.key === "ArrowDown" ||
+            event.key === "Enter" ||
+            event.key === " "
+          ) {
             event.preventDefault();
             setOpen(true);
           }
@@ -102,7 +106,9 @@ export function SettingsSelect({
               <span className="settings-select-content">
                 <span className="settings-select-label">{option.label}</span>
                 {option.detail && (
-                  <span className="settings-select-detail">{option.detail}</span>
+                  <span className="settings-select-detail">
+                    {option.detail}
+                  </span>
                 )}
               </span>
             </button>
