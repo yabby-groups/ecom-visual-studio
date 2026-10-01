@@ -172,13 +172,14 @@ export type VideoReplicaProgress = {
   completed_segments: number;
   total_segments: number;
   current_segment: number;
+  message?: string;
 };
 export type VideoReplicaJob = {
   id: string;
   source_video_path: string;
   reference_paths: string[];
   product_reference_path: string;
-  task_type: "auto" | "reference" | "extend" | "replace";
+  task_type: "auto" | "reference" | "extend" | "replace" | "ai_replica";
   model: string;
   prompt: string;
   storyboard: VideoReplicaStoryboardItem[];
@@ -193,6 +194,9 @@ export type VideoReplicaJob = {
   versions: VideoReplicaVersion[];
   segments: VideoReplicaSegment[];
   progress: VideoReplicaProgress;
+  workflow_kind?: "storyboard" | "ai_replace";
+  ai_person_prompt?: string;
+  ai_budget?: number;
 };
 export type VideoReplicaPage = {
   items: VideoReplicaJob[];

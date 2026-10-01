@@ -1007,6 +1007,16 @@ func (s *Studio) populateVideoReplicaSegments(job map[string]any) error {
 		"phase": job["status"], "completed_segments": completed,
 		"total_segments": len(segments), "current_segment": current,
 	}
+	if job["task_type"] == "ai_replica" {
+		completed = 0
+		if job["status"] == "ready" {
+			completed = 1
+		}
+		job["progress"] = map[string]any{
+			"phase": job["status"], "completed_segments": completed,
+			"total_segments": 1, "current_segment": 0,
+		}
+	}
 	return nil
 }
 

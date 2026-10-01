@@ -34,6 +34,10 @@ export function ConfirmVideoReplicaStoryboard(arg1) {
   return window['go']['main']['Studio']['ConfirmVideoReplicaStoryboard'](arg1);
 }
 
+export function CreateAIVideoReplica(arg1) {
+  return window['go']['main']['Studio']['CreateAIVideoReplica'](arg1);
+}
+
 export function CreatePack(arg1, arg2) {
   return window['go']['main']['Studio']['CreatePack'](arg1, arg2);
 }

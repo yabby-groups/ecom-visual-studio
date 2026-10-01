@@ -141,6 +141,10 @@ export const client = {
     resolution: string;
     ratio: string;
   }) => call<{ id: string }>("CreateVideoReplica", body),
+  createAIVideoReplica: (body: {
+    source_video_path: string; product_path: string; prompt: string; person_prompt: string;
+    model: string; resolution: string; ratio: string; budget: number;
+  }) => call<{ id: string }>("CreateAIVideoReplica", body),
   regenerateVideoReplica: (id: string) => call("RegenerateVideoReplica", id),
   analyze: (body: { mode: string; product: string; reference: string }) =>
     call<{ description: string; benefits: string[] }>("Analyze", body),

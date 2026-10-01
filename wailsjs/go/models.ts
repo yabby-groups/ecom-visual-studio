@@ -1,5 +1,31 @@
 export namespace main {
 
+	export class AIVideoReplicaInput {
+	    source_video_path: string;
+	    product_path: string;
+	    prompt: string;
+	    person_prompt: string;
+	    model: string;
+	    resolution: string;
+	    ratio: string;
+	    budget: number;
+
+	    static createFrom(source: any = {}) {
+	        return new AIVideoReplicaInput(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.source_video_path = source["source_video_path"];
+	        this.product_path = source["product_path"];
+	        this.prompt = source["prompt"];
+	        this.person_prompt = source["person_prompt"];
+	        this.model = source["model"];
+	        this.resolution = source["resolution"];
+	        this.ratio = source["ratio"];
+	        this.budget = source["budget"];
+	    }
+	}
 	export class AssetPatch {
 	    title: string;
 	    template: string;
@@ -214,3 +240,4 @@ export namespace main {
 	}
 
 }
+

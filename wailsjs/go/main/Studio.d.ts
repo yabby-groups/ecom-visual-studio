@@ -18,6 +18,8 @@ export function ChooseStorageDirectory():Promise<Record<string, any>>;
 
 export function ConfirmVideoReplicaStoryboard(arg1:string):Promise<Record<string, boolean>>;
 
+export function CreateAIVideoReplica(arg1:main.AIVideoReplicaInput):Promise<Record<string, string>>;
+
 export function CreatePack(arg1:string,arg2:main.PackInput):Promise<Record<string, boolean>>;
 
 export function CreateProject(arg1:main.ProjectInput):Promise<Record<string, string>>;
