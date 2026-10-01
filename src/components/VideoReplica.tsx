@@ -64,6 +64,7 @@ export function VideoReplica() {
   );
   const [error, setError] = useState("");
   const [terminatingID, setTerminatingID] = useState("");
+  const [resumingID, setResumingID] = useState("");
   const [review, setReview] = useState<{
     score: number;
     issues: string[];
@@ -111,6 +112,7 @@ export function VideoReplica() {
     if (job.task_type !== "ai_replica") setTaskType(job.task_type);
     setMode(job.task_type === "ai_replica" ? "ai_replica" : "replica");
     setDuration(job.duration);
+    setSourceDuration(job.duration || null);
     setRatio(job.ratio);
     setResolution(job.resolution);
   }
@@ -212,11 +214,17 @@ export function VideoReplica() {
     }
   }
   async function resumeTask(id: string, answer: string, instruction: string) {
+    setResumingID(id);
+    setError("");
     try {
       await client.resumeAIVideoReplica(id, answer, instruction);
-      await refreshTask(id);
+      await load();
+      return true;
     } catch (reason) {
       setError(operationError(reason, "无法继续任务"));
+      return false;
+    } finally {
+      setResumingID("");
     }
   }
   async function terminateTask(id: string) {
@@ -267,6 +275,7 @@ export function VideoReplica() {
       );
       setSourcePath(result.path);
       setSourcePreview(fileUrl(result.path));
+      setSourceDuration(Number(result.duration_seconds));
     } catch (reason) {
       setError(operationError(reason, "添加视频失败"));
     } finally {
@@ -363,6 +372,14 @@ export function VideoReplica() {
       setError("请添加一张商品图片");
       return;
     }
+    if (mode === "ai_replica" && sourceDuration !== null && sourceDuration > 30.5) {
+      setError("AI 复刻仅支持 30 秒以内的源视频");
+      return;
+    }
+    if (mode === "ai_replica" && (!Number.isFinite(budget) || budget <= 0)) {
+      setError("预算必须大于 0");
+      return;
+    }
     setBusy("create");
     setError("");
     try {
@@ -450,11 +467,14 @@ export function VideoReplica() {
   }
 
   async function exportVideo(path: string) {
+    setBusy("export");
     setError("");
     try {
       await client.downloadAsset(path);
     } catch (reason) {
       setError(operationError(reason, "导出视频失败"));
+    } finally {
+      setBusy("");
     }
   }
 
@@ -544,6 +564,7 @@ export function VideoReplica() {
         scriptReady={scriptReady}
         busy={busy}
         videoReadProgress={videoReadProgress}
+        sourceDuration={sourceDuration}
         productReferencePath={productReferencePath}
         prompt={prompt}
         personPrompt={personPrompt}
@@ -578,6 +599,7 @@ export function VideoReplica() {
         resumeTask={resumeTask}
         terminateTask={terminateTask}
         terminating={terminatingID === selected?.id}
+        resuming={resumingID === selected?.id}
       />
     );
 

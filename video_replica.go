@@ -175,7 +175,10 @@ func (s *Studio) UploadVideoReplicaVideo(name, contentType string, data []byte) 
 		}
 		return nil, errors.New("视频时长不能超过 5 分钟")
 	}
-	return map[string]string{"path": "uploads/" + filepath.Base(path)}, nil
+	return map[string]string{
+		"path":             "uploads/" + filepath.Base(path),
+		"duration_seconds": strconv.FormatFloat(seconds, 'f', -1, 64),
+	}, nil
 }
 
 func (s *Studio) AnalyzeVideoReplica(path string, referencePaths []string, productReferencePath string) (map[string]any, error) {

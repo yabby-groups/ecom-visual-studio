@@ -197,7 +197,7 @@ func TestTerminateAIVideoReplicaKeepsLocalTerminationWhenRemoteFails(t *testing.
 	}
 }
 
-func TestResumeAIVideoReplicaOmitsEmptyInstruction(t *testing.T) {
+func TestResumeAIVideoReplicaUsesDefaultInstructionWhenInterrupted(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var payload map[string]string
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
@@ -206,8 +206,8 @@ func TestResumeAIVideoReplicaOmitsEmptyInstruction(t *testing.T) {
 		if got := payload["request_id"]; got != "remote-request" {
 			t.Fatalf("request_id = %q", got)
 		}
-		if _, ok := payload["instruction"]; ok {
-			t.Fatalf("payload = %#v, should omit empty instruction", payload)
+		if got := payload["instruction"]; got != "继续执行当前任务" {
+			t.Fatalf("instruction = %q", got)
 		}
 		_, _ = w.Write([]byte(`{"status":"running"}`))
 	}))
@@ -218,9 +218,56 @@ func TestResumeAIVideoReplicaOmitsEmptyInstruction(t *testing.T) {
 	studio.httpClient = server.Client()
 	studio.huabotBearer = "test-token"
 	studio.huabotBearerExpiry = time.Now().Add(time.Hour)
-	insertAIVideoReplicaTestJob(t, studio, "job-resume", "generating", "remote-request")
+	insertAIVideoReplicaTestJob(t, studio, "job-resume", "interrupted", "remote-request")
 	if _, err := studio.ResumeAIVideoReplica("job-resume", "", ""); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestRefreshAIVideoReplicaPersistsWaitingForInput(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"status":"waiting_for_input","question":"请选择素材"}`))
+	}))
+	defer server.Close()
+	t.Setenv("HUABOT_WEB_BASE_URL", server.URL)
+
+	studio := newAIVideoReplicaTestStudio(t)
+	studio.httpClient = server.Client()
+	studio.huabotBearer = "test-token"
+	studio.huabotBearerExpiry = time.Now().Add(time.Hour)
+	insertAIVideoReplicaTestJob(t, studio, "job-waiting", "generating", "remote-request")
+
+	result, err := studio.RefreshAIVideoReplica("job-waiting")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result["status"]; got != "waiting_for_input" {
+		t.Fatalf("status = %v, want waiting_for_input", got)
+	}
+	var status string
+	if err := studio.db.QueryRow("select status from video_replica_jobs where id=?", "job-waiting").Scan(&status); err != nil {
+		t.Fatal(err)
+	}
+	if status != "waiting_for_input" {
+		t.Fatalf("stored status = %q, want waiting_for_input", status)
+	}
+}
+
+func TestResumeAIVideoReplicaRejectsActiveTask(t *testing.T) {
+	studio := newAIVideoReplicaTestStudio(t)
+	insertAIVideoReplicaTestJob(t, studio, "job-active", "generating", "remote-request")
+
+	if _, err := studio.ResumeAIVideoReplica("job-active", "", "continue"); err == nil || err.Error() != "当前任务不能恢复" {
+		t.Fatalf("resume error = %v", err)
+	}
+}
+
+func TestTerminateAIVideoReplicaRejectsTerminalTask(t *testing.T) {
+	studio := newAIVideoReplicaTestStudio(t)
+	insertAIVideoReplicaTestJob(t, studio, "job-ready", "ready", "remote-request")
+
+	if _, err := studio.TerminateAIVideoReplica("job-ready"); err == nil || err.Error() != "当前任务不能终止" {
+		t.Fatalf("terminate error = %v", err)
 	}
 }
 

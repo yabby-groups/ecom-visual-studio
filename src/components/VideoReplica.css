@@ -354,6 +354,26 @@
   opacity: 0;
   cursor: pointer;
 }
+.video-upload-prompt.is-disabled,
+.video-replace-action.is-disabled,
+.reference-add.is-disabled {
+  border-color: var(--line);
+  background: var(--surface-inset);
+  color: var(--muted);
+  cursor: not-allowed;
+}
+.video-upload-prompt.is-disabled input,
+.video-replace-action.is-disabled input,
+.reference-add.is-disabled input {
+  cursor: not-allowed;
+}
+.video-replica :is(.button, .reference-remove, .video-history-select):disabled {
+  border-color: var(--line);
+  background: var(--surface-inset);
+  color: var(--muted);
+  cursor: not-allowed;
+  opacity: 1;
+}
 .video-replace-action {
   position: relative;
   align-self: flex-end;

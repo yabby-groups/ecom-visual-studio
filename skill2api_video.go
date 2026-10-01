@@ -9,6 +9,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 	"io"
 	"log"
+	"math"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -30,6 +31,21 @@ type AIVideoReplicaInput struct {
 	Budget          float64 `json:"budget"`
 }
 
+const aiVideoReplicaMaxDuration = 30.0
+
+func aiVideoReplicaPendingStatus(status string) bool {
+	switch status {
+	case "queued", "preparing", "submitting", "prompting", "generating", "running", "retrieving", "downloading", "merging":
+		return true
+	default:
+		return false
+	}
+}
+
+func aiVideoReplicaResumableStatus(status string) bool {
+	return status == "interrupted" || status == "terminated"
+}
+
 func (s *Studio) CreateAIVideoReplica(input AIVideoReplicaInput) (map[string]string, error) {
 	user, err := s.currentUser()
 	if err != nil {
@@ -38,7 +54,7 @@ func (s *Studio) CreateAIVideoReplica(input AIVideoReplicaInput) (map[string]str
 	if strings.TrimSpace(input.Prompt) == "" {
 		return nil, errors.New("请填写复刻说明")
 	}
-	if input.Budget <= 0 {
+	if math.IsNaN(input.Budget) || math.IsInf(input.Budget, 0) || input.Budget <= 0 {
 		return nil, errors.New("预算必须大于 0")
 	}
 	if input.Model == "" {
@@ -50,8 +66,16 @@ func (s *Studio) CreateAIVideoReplica(input AIVideoReplicaInput) (map[string]str
 	if input.Ratio == "" {
 		input.Ratio = "9:16"
 	}
-	if _, err = s.replicaSourcePath(input.SourceVideoPath); err != nil {
+	sourcePath, err := s.replicaSourcePath(input.SourceVideoPath)
+	if err != nil {
 		return nil, err
+	}
+	seconds, err := videoDuration(sourcePath)
+	if err != nil {
+		return nil, errors.New("无法读取视频时长，请确认已安装 ffprobe")
+	}
+	if seconds > aiVideoReplicaMaxDuration+videoDurationTolerance {
+		return nil, errors.New("AI 复刻仅支持 30 秒以内的源视频")
 	}
 	if _, err = s.uploadedImagePath(input.ProductPath); err != nil {
 		return nil, err
@@ -59,7 +83,7 @@ func (s *Studio) CreateAIVideoReplica(input AIVideoReplicaInput) (map[string]str
 	id := newID("video-ai-replica")
 	refs, _ := json.Marshal([]string{input.ProductPath})
 	if err = s.writeTransaction(func(tx *sql.Tx) error {
-		_, e := tx.Exec("insert into video_replica_jobs(id,user_id,source_video_path,reference_paths,product_reference_path,task_type,model,prompt,storyboard,storyboard_confirmed,duration,resolution,ratio,status,current_run_id,created_at,ai_person_prompt,ai_budget) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", id, localWorkspaceID, input.SourceVideoPath, string(refs), input.ProductPath, "ai_replica", input.Model, input.Prompt, "[]", 1, 0, input.Resolution, input.Ratio, "queued", "", time.Now().Unix(), input.PersonPrompt, input.Budget)
+		_, e := tx.Exec("insert into video_replica_jobs(id,user_id,source_video_path,reference_paths,product_reference_path,task_type,model,prompt,storyboard,storyboard_confirmed,duration,resolution,ratio,status,current_run_id,created_at,ai_person_prompt,ai_budget) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", id, localWorkspaceID, input.SourceVideoPath, string(refs), input.ProductPath, "ai_replica", input.Model, input.Prompt, "[]", 1, int(math.Ceil(seconds)), input.Resolution, input.Ratio, "queued", "", time.Now().Unix(), input.PersonPrompt, input.Budget)
 		return e
 	}); err != nil {
 		return nil, err
@@ -167,9 +191,9 @@ func (s *Studio) runAIVideoReplica(id, userID string, input AIVideoReplicaInput)
 			return
 		}
 		setStatus("submitting")
-		prompt := fmt.Sprintf("克隆参考视频的镜头节奏、动作和构图，将目标商品替换为参考商品。参考视频：%s；商品参考图：%s。", videoURL, imageURL)
+		prompt := fmt.Sprintf("克隆参考视频的镜头节奏、动作和构图，将目标商品替换为参考商品。参考视频：%s ；商品参考图：%s 。", videoURL, imageURL)
 		if strings.TrimSpace(input.PersonPrompt) != "" {
-			prompt += " 替换人物为 " + strings.TrimSpace(input.PersonPrompt)
+			prompt += " 替换人物为: " + strings.TrimSpace(input.PersonPrompt)
 		}
 		prompt += fmt.Sprintf("\n%s\n尺寸 %s %s\n预算 %s 美元", input.Prompt, input.Resolution, input.Ratio, strconv.FormatFloat(input.Budget, 'f', -1, 64))
 		var submitted struct {
@@ -217,7 +241,7 @@ func (s *Studio) runAIVideoReplica(id, userID string, input AIVideoReplicaInput)
 		state := stringValue(status["status"])
 		switch state {
 		case "waiting_for_input":
-			fail(errors.New("Skill2API 需要补充输入，请在任务控制台继续"))
+			setStatus("waiting_for_input")
 			return
 		case "failed", "terminated":
 			reason := stringValue(status["error"])
@@ -367,6 +391,18 @@ func (s *Studio) RefreshAIVideoReplica(id string) (map[string]any, error) {
 	s.saveSkill2APIStatusSnapshot(id, status)
 	remoteState := stringValue(status["status"])
 	status["remote_status"] = remoteState
+	if remoteState == "waiting_for_input" && localStatus != "terminated" && localStatus != "ready" {
+		if localStatus != "waiting_for_input" {
+			if err = s.writeTransaction(func(tx *sql.Tx) error {
+				_, queryErr := tx.Exec("update video_replica_jobs set status='waiting_for_input' where id=? and task_type='ai_replica' and status <> 'terminated'", id)
+				return queryErr
+			}); err != nil {
+				return nil, err
+			}
+		}
+		status["status"] = "waiting_for_input"
+		return status, nil
+	}
 	status["status"] = localStatus
 	if remoteState == "succeeded" {
 		var localStatus, filePath string
@@ -444,25 +480,70 @@ func (s *Studio) skill2APIStatus(requestID, bearer string) (map[string]any, erro
 }
 
 func (s *Studio) ResumeAIVideoReplica(id, answer, instruction string) (map[string]any, error) {
-	if strings.TrimSpace(answer) != "" && strings.TrimSpace(instruction) != "" {
+	answer = strings.TrimSpace(answer)
+	instruction = strings.TrimSpace(instruction)
+	if answer != "" && instruction != "" {
 		return nil, errors.New("answer 和 instruction 只能填写一个")
 	}
 	rid, user, err := s.skill2APIRequest(id)
 	if err != nil {
 		return nil, err
 	}
+	var localStatus string
+	if err = s.db.QueryRow("select status from video_replica_jobs where id=? and task_type='ai_replica'", id).Scan(&localStatus); err != nil {
+		return nil, err
+	}
+	if localStatus == "waiting_for_input" {
+		if answer == "" {
+			return nil, errors.New("请先填写任务回答")
+		}
+	} else if aiVideoReplicaResumableStatus(localStatus) {
+		if answer != "" {
+			return nil, errors.New("当前任务不等待回答，请使用追加题词继续")
+		}
+	} else {
+		return nil, errors.New("当前任务不能恢复")
+	}
 	bearer, err := s.currentHuabotBearer(user.ID)
 	if err != nil {
 		return nil, err
 	}
 	payload := map[string]string{"request_id": rid}
-	if strings.TrimSpace(answer) != "" {
+	if answer != "" {
 		payload["answer"] = answer
-	} else if strings.TrimSpace(instruction) != "" {
+	} else {
+		if instruction == "" {
+			instruction = "继续执行当前任务"
+		}
 		payload["instruction"] = instruction
 	}
 	var result map[string]any
 	err = jsonRequest(s.httpClient, http.MethodPost, s.huabotConfig().WebBase+"/api/skill2api/resume/", bearer, payload, &result)
+	if err != nil {
+		return result, err
+	}
+	if err = s.writeTransaction(func(tx *sql.Tx) error {
+		updated, queryErr := tx.Exec("update video_replica_jobs set status='generating',generation_started_at=coalesce(generation_started_at,?) where id=? and task_type='ai_replica' and status=?", time.Now().Unix(), id, localStatus)
+		if queryErr != nil {
+			return queryErr
+		}
+		count, queryErr := updated.RowsAffected()
+		if queryErr != nil {
+			return queryErr
+		}
+		if count != 1 {
+			return errors.New("任务状态已变化，请刷新后重试")
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	var input AIVideoReplicaInput
+	if err = s.db.QueryRow("select source_video_path,product_reference_path,prompt,ai_person_prompt,model,resolution,ratio,ai_budget from video_replica_jobs where id=?", id).Scan(&input.SourceVideoPath, &input.ProductPath, &input.Prompt, &input.PersonPrompt, &input.Model, &input.Resolution, &input.Ratio, &input.Budget); err != nil {
+		return nil, err
+	}
+	result["status"] = "generating"
+	go s.runAIVideoReplica(id, user.ID, input)
 	return result, err
 }
 
@@ -471,9 +552,18 @@ func (s *Studio) TerminateAIVideoReplica(id string) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	var rid string
+	var rid, localStatus string
 	if err = s.writeTransaction(func(tx *sql.Tx) error {
-		updated, queryErr := tx.Exec("update video_replica_jobs set status='terminated' where id=? and task_type='ai_replica'", id)
+		if queryErr := tx.QueryRow("select status,coalesce(skill2api_request_id,'') from video_replica_jobs where id=? and task_type='ai_replica'", id).Scan(&localStatus, &rid); queryErr != nil {
+			if queryErr == sql.ErrNoRows {
+				return errors.New("历史任务不存在")
+			}
+			return queryErr
+		}
+		if !aiVideoReplicaPendingStatus(localStatus) {
+			return errors.New("当前任务不能终止")
+		}
+		updated, queryErr := tx.Exec("update video_replica_jobs set status='terminated' where id=? and task_type='ai_replica' and status=?", id, localStatus)
 		if queryErr != nil {
 			return queryErr
 		}
@@ -481,10 +571,10 @@ func (s *Studio) TerminateAIVideoReplica(id string) (map[string]any, error) {
 		if queryErr != nil {
 			return queryErr
 		}
-		if count == 0 {
-			return errors.New("历史任务不存在")
+		if count != 1 {
+			return errors.New("任务状态已变化，请刷新后重试")
 		}
-		return tx.QueryRow("select coalesce(skill2api_request_id,'') from video_replica_jobs where id=?", id).Scan(&rid)
+		return nil
 	}); err != nil {
 		return nil, err
 	}

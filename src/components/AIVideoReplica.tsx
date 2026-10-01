@@ -16,6 +16,7 @@ import { failureReason, fileUrl, isPending, statusText } from "../utils/assets";
 import { Shell } from "./Shell";
 import { SettingsSelect } from "./SettingsSelect";
 import { client } from "../api";
+import { aiVideoReplicaControls } from "../utils/aiVideoReplicaState";
 
 type Review = {
   score: number;
@@ -30,6 +31,7 @@ type Props = {
   scriptReady: boolean;
   busy: string;
   videoReadProgress: number | null;
+  sourceDuration: number | null;
   productReferencePath: string;
   prompt: string;
   personPrompt: string;
@@ -61,9 +63,10 @@ type Props = {
   exportVideo: (path: string) => void;
   selectJob: (job: VideoReplicaJob) => void;
   refreshTask: (id: string) => Promise<void>;
-  resumeTask: (id: string, answer: string, instruction: string) => void;
-  terminateTask: (id: string) => void;
+  resumeTask: (id: string, answer: string, instruction: string) => Promise<boolean>;
+  terminateTask: (id: string) => Promise<void>;
   terminating: boolean;
+  resuming: boolean;
 };
 
 export function AIVideoReplica(props: Props) {
@@ -113,6 +116,22 @@ export function AIVideoReplica(props: Props) {
   const failed = p.selected?.status.startsWith("failed")
     ? failureReason(p.selected.status)
     : "";
+  const controls = aiVideoReplicaControls({
+    status: p.selected?.status,
+    requestID: p.selected?.skill2api_request_id,
+    busy: !!p.busy,
+    resuming: p.resuming,
+    terminating: p.terminating,
+  });
+  const invalidBudget = !Number.isFinite(p.budget) || p.budget <= 0;
+  const sourceTooLong = p.sourceDuration !== null && p.sourceDuration > 30.5;
+  const createDisabled =
+    controls.draftLocked ||
+    !p.sourceReady ||
+    !p.replaceReady ||
+    !p.scriptReady ||
+    invalidBudget ||
+    sourceTooLong;
   return (
     <Shell>
       <header className="workspace-header video-replica-header">
@@ -128,6 +147,7 @@ export function AIVideoReplica(props: Props) {
           <button
             className="button secondary"
             type="button"
+            disabled={controls.draftLocked}
             onClick={() => p.setMode("replica")}
           >
             <RefreshCw size={15} />
@@ -183,12 +203,15 @@ export function AIVideoReplica(props: Props) {
                 ) : p.sourcePreview ? (
                   <>
                     <video src={p.sourcePreview} controls />
-                    <label className="video-replace-action">
+                    <label
+                      className={`video-replace-action ${controls.draftLocked ? "is-disabled" : ""}`}
+                    >
                       <Upload size={15} />
                       重新选择
                       <input
                         type="file"
                         accept="video/mp4,video/webm,video/quicktime"
+                        disabled={controls.draftLocked}
                         onChange={(e) => {
                           const f = e.target.files?.[0];
                           e.target.value = "";
@@ -198,13 +221,16 @@ export function AIVideoReplica(props: Props) {
                     </label>
                   </>
                 ) : (
-                  <label className="video-upload-prompt">
+                  <label
+                    className={`video-upload-prompt ${controls.draftLocked ? "is-disabled" : ""}`}
+                  >
                     <Film size={30} />
                     <strong>点击选择本机视频</strong>
                     <span>支持 MP4 / WebM / MOV，具体限制由所选模型决定</span>
-                    <input
-                      type="file"
-                      accept="video/mp4,video/webm,video/quicktime"
+                      <input
+                        type="file"
+                        accept="video/mp4,video/webm,video/quicktime"
+                        disabled={controls.draftLocked}
                       onChange={(e) => {
                         const f = e.target.files?.[0];
                         e.target.value = "";
@@ -242,6 +268,7 @@ export function AIVideoReplica(props: Props) {
                       type="button"
                       className="reference-remove"
                       aria-label="移除商品图片"
+                      disabled={controls.draftLocked}
                       onClick={() => {
                         p.setReferencePaths([]);
                         p.setProductReferencePath("");
@@ -251,13 +278,17 @@ export function AIVideoReplica(props: Props) {
                     </button>
                   </div>
                 ) : (
-                  <label className="reference-add">
+                  <label
+                    className={`reference-add ${controls.draftLocked ? "is-disabled" : ""}`}
+                  >
                     <Upload size={17} />
                     <input
                       type="file"
                       accept="image/jpeg,image/png,image/webp"
+                      disabled={controls.draftLocked}
                       onChange={(e) => {
                         const f = e.target.files?.[0];
+                        e.target.value = "";
                         if (f) p.uploadReference(f);
                       }}
                     />
@@ -281,6 +312,7 @@ export function AIVideoReplica(props: Props) {
               <textarea
                 className="video-script"
                 value={p.prompt}
+                disabled={controls.draftLocked}
                 onChange={(e) => {
                   p.setPrompt(e.target.value);
                   p.setReview(null);
@@ -291,7 +323,7 @@ export function AIVideoReplica(props: Props) {
                 <button
                   className="button secondary"
                   type="button"
-                  disabled={!!p.busy || !p.prompt.trim()}
+                  disabled={controls.draftLocked || !p.prompt.trim()}
                   onClick={p.reviewPrompt}
                 >
                   {p.busy === "review" ? (
@@ -324,7 +356,7 @@ export function AIVideoReplica(props: Props) {
                     <button
                       className="button primary"
                       type="button"
-                      disabled={p.review.source !== p.prompt}
+                      disabled={controls.draftLocked || p.review.source !== p.prompt}
                       onClick={p.adoptReview}
                     >
                       <Check size={16} />
@@ -333,6 +365,7 @@ export function AIVideoReplica(props: Props) {
                     <button
                       className="button secondary"
                       type="button"
+                      disabled={controls.draftLocked}
                       onClick={() => p.setReview(null)}
                     >
                       保留当前内容
@@ -354,6 +387,7 @@ export function AIVideoReplica(props: Props) {
                         { value: "deepseek-v4-pro", label: "DeepSeek V4 Pro" },
                         { value: "gpt-6-luna", label: "GPT 6 Luna" },
                       ]}
+                      disabled={controls.draftLocked}
                       onChange={p.setAiModel}
                     />
                   </label>
@@ -366,6 +400,7 @@ export function AIVideoReplica(props: Props) {
                         value,
                         label: value,
                       }))}
+                      disabled={controls.draftLocked}
                       onChange={p.setRatio}
                     />
                   </label>
@@ -378,6 +413,7 @@ export function AIVideoReplica(props: Props) {
                         value,
                         label: value,
                       }))}
+                      disabled={controls.draftLocked}
                       onChange={p.setResolution}
                     />
                   </label>
@@ -385,6 +421,7 @@ export function AIVideoReplica(props: Props) {
                     人物说明
                     <input
                       value={p.personPrompt}
+                      disabled={controls.draftLocked}
                       onChange={(e) => p.setPersonPrompt(e.target.value)}
                       placeholder="可选"
                     />
@@ -396,6 +433,7 @@ export function AIVideoReplica(props: Props) {
                       min="0.01"
                       step="0.01"
                       value={p.budget}
+                      disabled={controls.draftLocked}
                       onChange={(e) => p.setBudget(Number(e.target.value))}
                     />
                   </label>
@@ -404,12 +442,7 @@ export function AIVideoReplica(props: Props) {
               <button
                 className="button primary workflow-action"
                 type="button"
-                disabled={
-                  !!p.busy ||
-                  !p.sourceReady ||
-                  !p.replaceReady ||
-                  !p.scriptReady
-                }
+                disabled={createDisabled}
                 onClick={p.create}
               >
                 {p.busy === "create" ? (
@@ -419,6 +452,16 @@ export function AIVideoReplica(props: Props) {
                 )}
                 开始 AI 复刻
               </button>
+              {sourceTooLong && (
+                <p className="notice notice-error" role="alert">
+                  AI 复刻仅支持 30 秒以内的源视频。
+                </p>
+              )}
+              {invalidBudget && (
+                <p className="notice notice-error" role="alert">
+                  预算必须大于 0。
+                </p>
+              )}
             </div>
           </section>
           <section className="video-replica-preview">
@@ -476,10 +519,11 @@ export function AIVideoReplica(props: Props) {
               >
                 <strong>任务控制台</strong>
                 <div className="prompt-review-actions">
-                  {p.selected.status === "waiting_for_input" ? (
+                  {controls.waitingForInput ? (
                     <>
                       <input
                         value={answer}
+                        disabled={!controls.canAnswer}
                         onChange={(e) => setAnswer(e.target.value)}
                         placeholder={
                           p.selected.skill2api?.question || "请输入回答"
@@ -488,16 +532,16 @@ export function AIVideoReplica(props: Props) {
                       <button
                         className="button primary"
                         type="button"
-                        disabled={!answer.trim()}
-                        onClick={() => {
-                          p.resumeTask(p.selected!.id, answer, "");
-                          setAnswer("");
+                        disabled={!answer.trim() || !controls.canAnswer}
+                        onClick={async () => {
+                          if (await p.resumeTask(p.selected!.id, answer, ""))
+                            setAnswer("");
                         }}
                       >
-                        提交
+                        {p.resuming ? "正在提交" : "提交"}
                       </button>
                     </>
-                  ) : (
+                  ) : controls.canResume ? (
                     <>
                       <input
                         value={instruction}
@@ -507,22 +551,27 @@ export function AIVideoReplica(props: Props) {
                       <button
                         className="button secondary"
                         type="button"
-                        disabled={p.selected.status === "running"}
-                        onClick={() => {
-                          p.resumeTask(p.selected!.id, "", instruction);
-                          setInstruction("");
+                        disabled={!controls.canResume}
+                        onClick={async () => {
+                          if (await p.resumeTask(p.selected!.id, "", instruction))
+                            setInstruction("");
                         }}
                       >
-                        恢复任务
+                        {p.resuming ? "正在恢复" : "恢复任务"}
                       </button>
                     </>
+                  ) : null}
+                  {p.resuming && (
+                    <span className="generation-progress-detail" role="status">
+                      正在恢复远端任务…
+                    </span>
                   )}
-                  {isPending(p.selected.status) && (
+                  {controls.canTerminate && (
                     <button
                       className="button secondary"
                       type="button"
-                      disabled={p.terminating}
-                      onClick={() => p.terminateTask(p.selected!.id)}
+                      disabled={!controls.canTerminate}
+                      onClick={() => void p.terminateTask(p.selected!.id)}
                     >
                       <X size={16} />
                       {p.terminating ? "正在终止" : "终止"}
@@ -532,7 +581,7 @@ export function AIVideoReplica(props: Props) {
                 <button
                   className="button secondary"
                   type="button"
-                  disabled={logsLoading}
+                  disabled={logsLoading || !controls.canOpenLogs}
                   onClick={() => void openLogs()}
                 >
                   <Terminal size={16} />
@@ -666,15 +715,16 @@ export function AIVideoReplica(props: Props) {
                   className="button secondary"
                   type="button"
                   onClick={() => p.regenerate(p.selected!.id)}
-                  disabled={!!p.busy || isPending(p.selected!.status)}
+                  disabled={!controls.canRegenerate}
                 >
                   <RefreshCw size={16} />
                   再次生成
                 </button>
                 {p.selected.file_path && (
                   <button
-                    className="button secondary"
-                    type="button"
+                  className="button secondary"
+                  type="button"
+                  disabled={!!p.busy || controls.draftLocked}
                     onClick={() => p.exportVideo(p.selected!.file_path!)}
                   >
                     <Download size={16} />
@@ -702,6 +752,7 @@ export function AIVideoReplica(props: Props) {
                 <button
                   type="button"
                   className="video-history-select"
+                  disabled={controls.draftLocked}
                   onClick={() => p.selectJob(job)}
                 >
                   <span>AI 复刻</span>

@@ -122,7 +122,12 @@ export const client = {
     contentType: string,
     data: number[],
   ) =>
-    call<{ path: string }>("UploadVideoReplicaVideo", name, contentType, data),
+    call<{ path: string; duration_seconds: string }>(
+      "UploadVideoReplicaVideo",
+      name,
+      contentType,
+      data,
+    ),
   analyzeVideoReplica: (
     path: string,
     referencePaths: string[],
