@@ -7,6 +7,7 @@ import type { VideoReplicaJob, VideoReplicaStoryboardItem, VideoReplicaSegment }
 import { failureReason, fileUrl, isPending, statusText, userFacingError } from "../utils/assets";
 import { Shell } from "./Shell";
 import { SettingsSelect } from "./SettingsSelect";
+import { AIVideoReplica } from "./AIVideoReplica";
 import "./VideoReplica.css";
 
 const defaultStoryboard: VideoReplicaStoryboardItem[] = [];
@@ -210,6 +211,19 @@ export function VideoReplica() {
   const phaseIndex = selected ? phaseSteps.findIndex(([phase]) => phase === selected.status) : -1;
   const aiControls = mode === "ai_replica" ? <div className="video-controls ai-replica-controls"><label>人物替换说明<input value={personPrompt} onChange={(event) => setPersonPrompt(event.target.value)} /></label><label>预算（美元）<input type="number" min="0.01" step="0.01" value={budget} onChange={(event) => setBudget(Number(event.target.value))} /></label><label>执行模型<input value={aiModel} onChange={(event) => setAiModel(event.target.value)} /></label></div> : null;
 
+  if (mode === "ai_replica") return <AIVideoReplica
+    sourceReady={sourceReady} sourcePreview={sourcePreview} replaceReady={replaceReady} scriptReady={scriptReady}
+    busy={busy} videoReadProgress={videoReadProgress} productReferencePath={productReferencePath} prompt={prompt}
+    personPrompt={personPrompt} budget={budget} aiModel={aiModel} ratio={ratio} resolution={resolution} review={review}
+    selected={selected} displayed={displayed} error={error} jobs={jobs} setMode={setMode} setPrompt={setPrompt}
+    setReview={setReview} setPersonPrompt={setPersonPrompt} setBudget={setBudget} setAiModel={setAiModel}
+    setRatio={setRatio} setResolution={setResolution} setReferencePaths={setReferencePaths}
+    setProductReferencePath={setProductReferencePath} uploadVideo={uploadVideo} uploadReference={uploadReference}
+    reviewPrompt={reviewPrompt} adoptReview={adoptReview} create={create} regenerate={regenerate}
+    exportVideo={exportVideo} selectJob={selectJob}
+  />;
+
+  /*
   if (mode === "ai_replica") {
     const aiPhases = [["queued", "等待提交"], ["preparing", "准备素材"], ["submitting", "提交任务"], ["generating", "模型生成"], ["retrieving", "获取结果"], ["ready", "完成"]] as const;
     const aiPhaseIndex = selected ? aiPhases.findIndex(([phase]) => phase === selected.status) : -1;
@@ -234,6 +248,7 @@ export function VideoReplica() {
       </main>
     </Shell>;
   }
+  */
 
   return <Shell>
     <header className="workspace-header video-replica-header">
