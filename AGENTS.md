@@ -55,13 +55,15 @@ Treat `.codegraph/` as local generated state. Do not add it, `.codex/`, `.loopx/
 - Every supported screen must be readable in both `data-theme="light"` and `data-theme="dark"`; inspect component overrides, overlays, cards, inputs, notices, and modal surfaces together.
 - Foreground/background combinations must meet WCAG AA contrast targets where applicable: 4.5:1 for normal text and 3:1 for large text and graphical controls. Do not use low-contrast gray text, transparent text, or a single purple/blue gradient palette as the dominant UI treatment.
 - Every interactive button or button-like control must remain visibly identifiable in default, hover, active, `:focus-visible`, and disabled states. This includes text buttons, icon buttons, back links, tabs, selectors, upload controls, custom cards, and modal actions.
+- Every button activation must produce immediate, perceptible feedback. For asynchronous work, show a loading or progress state for its full duration, prevent accidental duplicate submission where appropriate, and surface a clear success, failure, or required-next-step result; a click must never appear to do nothing.
 - A disabled button may be muted but must retain readable text/icon, a discernible boundary or surface, and a visible disabled state; never rely on opacity alone. Focus must have a clear non-color-only outline or ring.
 - Button text and icons must not blend into the background, be clipped, overflow their container, or disappear behind an overlay. Check long labels, loading labels, narrow widths, and both themes.
 - Before handoff, inspect all button selectors in `src/**/*.css` and the rendered states in both themes. A build passing alone does not prove visual button visibility.
 
 ## Go/Wails data and generation safety
 
-- Every protected Go method calls the existing authorization checks, and all project, asset, template, token, model, settings, and file queries are scoped to the authenticated user.
+- This is a local, single-user desktop application. Do not add multi-user accounts, tenant isolation, roles, or per-user query scoping unless explicitly requested. Existing authorization checks may remain where they protect local credentials, provider access, or other sensitive operations, but user identity is not a required product concern.
+- When user authorization is explicitly part of a feature, every protected Go method calls the existing authorization checks, and related queries are scoped to the authenticated user.
 - `APP_SECRET_KEY`, Huabot tokens, and `.env` values are server-side or local encrypted storage concerns. Persist tokens only through the existing encryption helpers; never return raw token values to React.
 - Write files only below the configured application data directory and validate type, size, traversal, and symlink boundaries before writing or serving uploads/generated files.
 - Preserve the asset lifecycle: methods mark work `queued`, generation advances it to `generating`, and completion records `ready` with a relative file path or `failed: <message>`.
@@ -69,7 +71,7 @@ Treat `.codegraph/` as local generated state. Do not add it, `.codex/`, `.loopx/
 
 ## Test and repository hygiene
 
-- Extend the relevant `*_test.go` or frontend test for authentication, authorization, persistence, validation, response shape, pack construction, asset state, or theme/button behavior.
+- Extend the relevant `*_test.go` or frontend test for explicitly requested authentication/authorization, persistence, validation, response shape, pack construction, asset state, or theme/button behavior.
 - Tests must use deterministic fixture IDs and clean up only records created by the test; never assume an empty developer database.
 - Keep changes scoped. Do not reformat broad unrelated sections of `app.go`, `src/App.tsx`, or `src/styles.css` during targeted work.
 - Use ASCII in code and documentation unless non-ASCII text is required for user-facing Chinese product copy.
