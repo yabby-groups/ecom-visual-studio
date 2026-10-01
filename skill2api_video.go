@@ -105,7 +105,7 @@ func (s *Studio) runAIVideoReplica(id, userID string, input AIVideoReplicaInput)
 			err = errors.New("未知错误")
 		}
 		if writeErr := s.writeTransaction(func(tx *sql.Tx) error {
-			_, e := tx.Exec("update video_replica_jobs set status=? where id=?", "failed: "+truncate(err.Error()), id)
+			_, e := tx.Exec("update video_replica_jobs set status=? where id=? and status <> 'terminated'", "failed: "+truncate(err.Error()), id)
 			return e
 		}); writeErr != nil {
 			// There is no caller to return this asynchronous error to; retain it in the process log.
@@ -117,11 +117,14 @@ func (s *Studio) runAIVideoReplica(id, userID string, input AIVideoReplicaInput)
 			return
 		}
 		if err := s.writeTransaction(func(tx *sql.Tx) error {
-			_, e := tx.Exec("update video_replica_jobs set status=?,generation_started_at=coalesce(generation_started_at,?) where id=?", status, time.Now().Unix(), id)
+			_, e := tx.Exec("update video_replica_jobs set status=?,generation_started_at=coalesce(generation_started_at,?) where id=? and status <> 'terminated'", status, time.Now().Unix(), id)
 			return e
 		}); err != nil {
 			fmt.Printf("video replica %s: failed to persist status %q: %v\n", id, status, err)
 		}
+	}
+	if isTerminated() {
+		return
 	}
 	bearer, err := s.currentHuabotBearer(userID)
 	if err != nil {
@@ -144,14 +147,23 @@ func (s *Studio) runAIVideoReplica(id, userID string, input AIVideoReplicaInput)
 	}
 	if requestID == "" {
 		setStatus("preparing")
+		if isTerminated() {
+			return
+		}
 		videoURL, uploadErr := s.uploadSkill2APIMedia(config.WebBase, bearer, input.SourceVideoPath)
 		if uploadErr != nil {
 			fail(uploadErr)
 			return
 		}
+		if isTerminated() {
+			return
+		}
 		imageURL, uploadErr := s.uploadSkill2APIMedia(config.WebBase, bearer, input.ProductPath)
 		if uploadErr != nil {
 			fail(uploadErr)
+			return
+		}
+		if isTerminated() {
 			return
 		}
 		setStatus("submitting")
@@ -163,6 +175,9 @@ func (s *Studio) runAIVideoReplica(id, userID string, input AIVideoReplicaInput)
 		var submitted struct {
 			RequestID string `json:"request_id"`
 		}
+		if isTerminated() {
+			return
+		}
 		if err = jsonRequest(s.httpClient, http.MethodPost, config.WebBase+"/api/skill2api/generate/", bearer, map[string]any{"prompt": prompt, "skill_name": "hypit", "model": input.Model}, &submitted); err != nil {
 			fail(err)
 			return
@@ -173,10 +188,18 @@ func (s *Studio) runAIVideoReplica(id, userID string, input AIVideoReplicaInput)
 			return
 		}
 		if err = s.writeTransaction(func(tx *sql.Tx) error {
-			_, e := tx.Exec("update video_replica_jobs set skill2api_request_id=?,status=? where id=? and status <> 'terminated'", requestID, "generating", id)
+			// Retain a raced submission id, but never restore a terminated task.
+			_, e := tx.Exec("update video_replica_jobs set skill2api_request_id=?,status=case when status='terminated' then status else ? end where id=?", requestID, "generating", id)
 			return e
 		}); err != nil {
 			fail(err)
+			return
+		}
+		if isTerminated() {
+			var ignored map[string]any
+			if terminateErr := jsonRequest(s.httpClient, http.MethodPost, config.WebBase+"/api/skill2api/terminate/", bearer, map[string]string{"request_id": requestID}, &ignored); terminateErr != nil {
+				log.Printf("video replica %s: terminate raced submission %s: %v", id, requestID, terminateErr)
+			}
 			return
 		}
 	}
@@ -190,6 +213,7 @@ func (s *Studio) runAIVideoReplica(id, userID string, input AIVideoReplicaInput)
 			fail(err)
 			return
 		}
+		s.saveSkill2APIStatusSnapshot(id, status)
 		state := stringValue(status["status"])
 		switch state {
 		case "waiting_for_input":
@@ -206,6 +230,9 @@ func (s *Studio) runAIVideoReplica(id, userID string, input AIVideoReplicaInput)
 			fail(errors.New(reason))
 			return
 		case "succeeded":
+			if isTerminated() {
+				return
+			}
 			files, _ := status["files"].([]any)
 			var filePath string
 			for _, item := range files {
@@ -227,6 +254,9 @@ func (s *Studio) runAIVideoReplica(id, userID string, input AIVideoReplicaInput)
 			var delivery struct {
 				DeliveryID string `json:"delivery_id"`
 			}
+			if isTerminated() {
+				return
+			}
 			if err = jsonRequest(s.httpClient, http.MethodPost, config.WebBase+"/api/skill2api/file/", bearer, map[string]string{"request_id": requestID, "file_path": filePath}, &delivery); err != nil {
 				fail(err)
 				return
@@ -244,6 +274,9 @@ func (s *Studio) runAIVideoReplica(id, userID string, input AIVideoReplicaInput)
 			}
 			for i := 0; i < 180; i++ {
 				time.Sleep(2 * time.Second)
+				if isTerminated() {
+					return
+				}
 				var result map[string]any
 				if err = jsonRequest(s.httpClient, http.MethodGet, config.WebBase+"/api/skill2api/file/delivery/?request_id="+url.QueryEscape(requestID)+"&delivery_id="+url.QueryEscape(delivery.DeliveryID), bearer, nil, &result); err != nil {
 					fail(err)
@@ -258,6 +291,9 @@ func (s *Studio) runAIVideoReplica(id, userID string, input AIVideoReplicaInput)
 					rawURL := stringValue(result["url"])
 					if rawURL == "" {
 						fail(errors.New("Skill2API 文件 URL 为空"))
+						return
+					}
+					if isTerminated() {
 						return
 					}
 					if err = s.downloadAIVideo(id, rawURL, bearer); err != nil {
@@ -297,37 +333,112 @@ func (s *Studio) skill2APIRequest(id string) (string, User, error) {
 }
 
 func (s *Studio) RefreshAIVideoReplica(id string) (map[string]any, error) {
-	rid, user, err := s.skill2APIRequest(id)
+	log.Printf("RefreshAIVideoReplica: %s\n", id)
+	user, err := s.currentUser()
 	if err != nil {
 		return nil, err
+	}
+	var localStatus, rid, snapshotJSON string
+	if err = s.db.QueryRow("select status,coalesce(skill2api_request_id,''),coalesce(skill2api_status_snapshot,'{}') from video_replica_jobs where id=? and task_type='ai_replica'", id).Scan(&localStatus, &rid, &snapshotJSON); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, errors.New("历史任务不存在")
+		}
+		return nil, err
+	}
+	result := map[string]any{"request_id": rid, "status": localStatus}
+	snapshot := decodeSkill2APIStatusSnapshot(snapshotJSON)
+	// Terminal local states still need a remote status read so the console can
+	// hydrate its final stdout/stderr without allowing remote state to overwrite
+	// the durable local display state.
+	if rid == "" {
+		return result, nil
 	}
 	bearer, err := s.currentHuabotBearer(user.ID)
 	if err != nil {
 		return nil, err
 	}
-	var status map[string]any
-	err = jsonRequest(s.httpClient, http.MethodGet, s.huabotConfig().WebBase+"/api/skill2api/status/?request_id="+url.QueryEscape(rid), bearer, nil, &status)
+	status, err := s.skill2APIStatus(rid, bearer)
 	if err != nil {
-		return nil, err
+		mergeSkill2APIStatus(result, snapshot)
+		result["remote_status"] = "unavailable"
+		result["remote_error"] = err.Error()
+		return result, nil
 	}
-	state := stringValue(status["status"])
-	status["status"] = state
-	if state == "succeeded" {
+	s.saveSkill2APIStatusSnapshot(id, status)
+	remoteState := stringValue(status["status"])
+	status["remote_status"] = remoteState
+	status["status"] = localStatus
+	if remoteState == "succeeded" {
 		var localStatus, filePath string
 		if err := s.db.QueryRow("select status,coalesce(file_path,'') from video_replica_jobs where id=?", id).Scan(&localStatus, &filePath); err != nil {
 			log.Printf("video replica %s: no job row while loading local completion state: %v", id, err)
 			return nil, err
 		}
 		if filePath != "" || localStatus == "ready" {
-			state = "ready"
+			status["status"] = "ready"
 		} else {
-			state = "retrieving"
+			status["status"] = "retrieving"
 		}
-	} else if err := s.writeTransaction(func(tx *sql.Tx) error {
-		_, e := tx.Exec("update video_replica_jobs set status=? where id=?", state, id)
-		return e
+	}
+	return status, nil
+}
+
+func decodeSkill2APIStatusSnapshot(raw string) map[string]any {
+	var snapshot map[string]any
+	if json.Unmarshal([]byte(raw), &snapshot) != nil {
+		return map[string]any{}
+	}
+	return snapshot
+}
+
+func mergeSkill2APIStatus(result, snapshot map[string]any) {
+	for key, value := range snapshot {
+		result[key] = value
+	}
+}
+
+func (s *Studio) saveSkill2APIStatusSnapshot(id string, status map[string]any) {
+	snapshot := map[string]any{}
+	for _, key := range []string{"stdout", "stderr", "files", "question", "options", "phase", "error"} {
+		if value, ok := status[key]; ok {
+			snapshot[key] = value
+		}
+	}
+	if len(snapshot) == 0 {
+		return
+	}
+	raw, err := json.Marshal(snapshot)
+	if err != nil {
+		return
+	}
+	if err = s.writeTransaction(func(tx *sql.Tx) error {
+		_, queryErr := tx.Exec("update video_replica_jobs set skill2api_status_snapshot=? where id=?", string(raw), id)
+		return queryErr
 	}); err != nil {
+		log.Printf("video replica %s: persist Skill2API log snapshot: %v", id, err)
+	}
+}
+
+// skill2APIStatus intentionally accepts a terminal task's error field. The
+// status endpoint uses it for states such as "terminated by user" while still
+// returning stdout/stderr that the desktop must display.
+func (s *Studio) skill2APIStatus(requestID, bearer string) (map[string]any, error) {
+	req, err := http.NewRequest(http.MethodGet, s.huabotConfig().WebBase+"/api/skill2api/status/?request_id="+url.QueryEscape(requestID), nil)
+	if err != nil {
 		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+bearer)
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return nil, fmt.Errorf("Skill2API 状态查询失败：HTTP %d", resp.StatusCode)
+	}
+	var status map[string]any
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 8<<20)).Decode(&status); err != nil {
+		return nil, fmt.Errorf("Skill2API 状态响应无效：%w", err)
 	}
 	return status, nil
 }
@@ -347,7 +458,7 @@ func (s *Studio) ResumeAIVideoReplica(id, answer, instruction string) (map[strin
 	payload := map[string]string{"request_id": rid}
 	if strings.TrimSpace(answer) != "" {
 		payload["answer"] = answer
-	} else {
+	} else if strings.TrimSpace(instruction) != "" {
 		payload["instruction"] = instruction
 	}
 	var result map[string]any
@@ -356,22 +467,43 @@ func (s *Studio) ResumeAIVideoReplica(id, answer, instruction string) (map[strin
 }
 
 func (s *Studio) TerminateAIVideoReplica(id string) (map[string]any, error) {
-	rid, user, err := s.skill2APIRequest(id)
+	user, err := s.currentUser()
 	if err != nil {
 		return nil, err
+	}
+	var rid string
+	if err = s.writeTransaction(func(tx *sql.Tx) error {
+		updated, queryErr := tx.Exec("update video_replica_jobs set status='terminated' where id=? and task_type='ai_replica'", id)
+		if queryErr != nil {
+			return queryErr
+		}
+		count, queryErr := updated.RowsAffected()
+		if queryErr != nil {
+			return queryErr
+		}
+		if count == 0 {
+			return errors.New("历史任务不存在")
+		}
+		return tx.QueryRow("select coalesce(skill2api_request_id,'') from video_replica_jobs where id=?", id).Scan(&rid)
+	}); err != nil {
+		return nil, err
+	}
+	result := map[string]any{"request_id": rid, "status": "terminated"}
+	if rid == "" {
+		return result, nil
 	}
 	bearer, err := s.currentHuabotBearer(user.ID)
 	if err != nil {
-		return nil, err
+		result["remote_error"] = err.Error()
+		return result, nil
 	}
-	var result map[string]any
-	err = jsonRequest(s.httpClient, http.MethodPost, s.huabotConfig().WebBase+"/api/skill2api/terminate/", bearer, map[string]string{"request_id": rid}, &result)
-	if err == nil {
-		if _, err = s.db.Exec("update video_replica_jobs set status='terminated' where id=?", id); err != nil {
-			return nil, err
-		}
+	var remote map[string]any
+	if err = jsonRequest(s.httpClient, http.MethodPost, s.huabotConfig().WebBase+"/api/skill2api/terminate/", bearer, map[string]string{"request_id": rid}, &remote); err != nil {
+		result["remote_error"] = err.Error()
+		return result, nil
 	}
-	return result, err
+	result["remote_status"] = stringValue(remote["status"])
+	return result, nil
 }
 
 func (s *Studio) DeliverAIVideoReplicaFile(id, filePath string) (map[string]any, error) {
@@ -549,7 +681,7 @@ func (s *Studio) downloadAIVideo(id, rawURL, bearer string) error {
 		if e != nil {
 			return e
 		}
-		_, e = tx.Exec("update video_replica_jobs set status='ready',file_path=? where id=?", path, id)
+		_, e = tx.Exec("update video_replica_jobs set status='ready',file_path=? where id=? and status <> 'terminated'", path, id)
 		return e
 	})
 }

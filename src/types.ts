@@ -209,6 +209,8 @@ export type VideoReplicaPage = {
 export type Skill2APIStatus = {
   request_id: string;
   status: string;
+  remote_status?: string;
+  remote_error?: string;
   phase?: string;
   question?: string;
   options?: string[];

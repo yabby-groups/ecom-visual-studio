@@ -489,10 +489,15 @@ func (s *Studio) VideoReplicaJob(id string) (map[string]any, error) {
 }
 
 func (s *Studio) attachSkill2APIFields(job map[string]any) {
-	var requestID, deliveryID string
-	if err := s.db.QueryRow("select skill2api_request_id,skill2api_delivery_id from video_replica_jobs where id=?", job["id"]).Scan(&requestID, &deliveryID); err == nil {
+	var requestID, deliveryID, snapshotJSON string
+	if err := s.db.QueryRow("select skill2api_request_id,skill2api_delivery_id,coalesce(skill2api_status_snapshot,'{}') from video_replica_jobs where id=?", job["id"]).Scan(&requestID, &deliveryID, &snapshotJSON); err == nil {
 		job["skill2api_request_id"] = requestID
 		job["skill2api_delivery_id"] = deliveryID
+		if snapshot := decodeSkill2APIStatusSnapshot(snapshotJSON); len(snapshot) > 0 {
+			snapshot["request_id"] = requestID
+			snapshot["status"] = job["status"]
+			job["skill2api"] = snapshot
+		}
 	}
 }
 

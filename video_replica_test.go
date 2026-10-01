@@ -1,6 +1,8 @@
 package main
 
 import (
+	"database/sql"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -8,7 +10,219 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	_ "modernc.org/sqlite"
 )
+
+func newAIVideoReplicaTestStudio(t *testing.T) *Studio {
+	t.Helper()
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	studio := &Studio{db: db, dataDir: t.TempDir(), httpClient: http.DefaultClient, masterKey: make([]byte, 32), user: &User{ID: "test-user"}}
+	if err := studio.migrate(); err != nil {
+		t.Fatal(err)
+	}
+	return studio
+}
+
+func insertAIVideoReplicaTestJob(t *testing.T, studio *Studio, id, status, requestID string) {
+	t.Helper()
+	_, err := studio.db.Exec(`insert into video_replica_jobs
+		(id,user_id,source_video_path,reference_paths,product_reference_path,task_type,model,prompt,storyboard,storyboard_confirmed,duration,resolution,ratio,status,created_at,skill2api_request_id)
+		values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, id, localWorkspaceID, "uploads/source.mp4", "[]", "uploads/product.png", "ai_replica", "qwen3.8-flash", "replace", "[]", 1, 0, "480p", "9:16", status, time.Now().Unix(), requestID)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestTerminateAIVideoReplicaPersistsBeforeRemoteSubmission(t *testing.T) {
+	studio := newAIVideoReplicaTestStudio(t)
+	insertAIVideoReplicaTestJob(t, studio, "job-preparing", "preparing", "")
+
+	result, err := studio.TerminateAIVideoReplica("job-preparing")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result["status"]; got != "terminated" {
+		t.Fatalf("result status = %v, want terminated", got)
+	}
+	var status string
+	if err := studio.db.QueryRow("select status from video_replica_jobs where id=?", "job-preparing").Scan(&status); err != nil {
+		t.Fatal(err)
+	}
+	if status != "terminated" {
+		t.Fatalf("stored status = %q, want terminated", status)
+	}
+}
+
+func TestRefreshAIVideoReplicaKeepsLocalPreSubmissionPhase(t *testing.T) {
+	studio := newAIVideoReplicaTestStudio(t)
+	insertAIVideoReplicaTestJob(t, studio, "job-preparing", "preparing", "")
+
+	result, err := studio.RefreshAIVideoReplica("job-preparing")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result["status"]; got != "preparing" {
+		t.Fatalf("result status = %v, want preparing", got)
+	}
+}
+
+func TestRefreshAIVideoReplicaDoesNotLetRemoteRunningReplaceLocalPhase(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/skill2api/status/" {
+			t.Fatalf("path = %q", r.URL.Path)
+		}
+		_, _ = w.Write([]byte(`{"status":"running","stdout":"still working"}`))
+	}))
+	defer server.Close()
+	t.Setenv("HUABOT_WEB_BASE_URL", server.URL)
+
+	studio := newAIVideoReplicaTestStudio(t)
+	studio.httpClient = server.Client()
+	studio.huabotBearer = "test-token"
+	studio.huabotBearerExpiry = time.Now().Add(time.Hour)
+	insertAIVideoReplicaTestJob(t, studio, "job-running", "generating", "remote-request")
+
+	result, err := studio.RefreshAIVideoReplica("job-running")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result["status"]; got != "generating" {
+		t.Fatalf("display status = %v, want generating", got)
+	}
+	if got := result["remote_status"]; got != "running" {
+		t.Fatalf("remote status = %v, want running", got)
+	}
+	var status string
+	if err := studio.db.QueryRow("select status from video_replica_jobs where id=?", "job-running").Scan(&status); err != nil {
+		t.Fatal(err)
+	}
+	if status != "generating" {
+		t.Fatalf("stored status = %q, want generating", status)
+	}
+}
+
+func TestRefreshAIVideoReplicaReturnsLogsAfterLocalTermination(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"status":"terminated","error":"terminated by user","stdout":"before termination","stderr":"final detail"}`))
+	}))
+	defer server.Close()
+	t.Setenv("HUABOT_WEB_BASE_URL", server.URL)
+
+	studio := newAIVideoReplicaTestStudio(t)
+	studio.httpClient = server.Client()
+	studio.huabotBearer = "test-token"
+	studio.huabotBearerExpiry = time.Now().Add(time.Hour)
+	insertAIVideoReplicaTestJob(t, studio, "job-terminated", "terminated", "remote-request")
+
+	result, err := studio.RefreshAIVideoReplica("job-terminated")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result["status"]; got != "terminated" {
+		t.Fatalf("display status = %v, want terminated", got)
+	}
+	if got := result["stdout"]; got != "before termination" {
+		t.Fatalf("stdout = %v", got)
+	}
+	if got := result["stderr"]; got != "final detail" {
+		t.Fatalf("stderr = %v", got)
+	}
+}
+
+func TestRefreshAIVideoReplicaFallsBackToLocalSnapshotWhenRemoteIsDeleted(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"error":"request deleted"}`))
+	}))
+	defer server.Close()
+	t.Setenv("HUABOT_WEB_BASE_URL", server.URL)
+
+	studio := newAIVideoReplicaTestStudio(t)
+	studio.httpClient = server.Client()
+	studio.huabotBearer = "test-token"
+	studio.huabotBearerExpiry = time.Now().Add(time.Hour)
+	insertAIVideoReplicaTestJob(t, studio, "job-deleted", "terminated", "remote-request")
+	if _, err := studio.db.Exec("update video_replica_jobs set skill2api_status_snapshot=? where id=?", `{"stdout":"saved output","stderr":"saved error"}`, "job-deleted"); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := studio.RefreshAIVideoReplica("job-deleted")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result["stdout"]; got != "saved output" {
+		t.Fatalf("stdout = %v", got)
+	}
+	if got := result["remote_status"]; got != "unavailable" {
+		t.Fatalf("remote status = %v, want unavailable", got)
+	}
+}
+
+func TestTerminateAIVideoReplicaKeepsLocalTerminationWhenRemoteFails(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/skill2api/terminate/" {
+			t.Fatalf("path = %q", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte(`{"error":"remote unavailable"}`))
+	}))
+	defer server.Close()
+	t.Setenv("HUABOT_WEB_BASE_URL", server.URL)
+
+	studio := newAIVideoReplicaTestStudio(t)
+	studio.httpClient = server.Client()
+	studio.huabotBearer = "test-token"
+	studio.huabotBearerExpiry = time.Now().Add(time.Hour)
+	insertAIVideoReplicaTestJob(t, studio, "job-remote", "generating", "remote-request")
+
+	result, err := studio.TerminateAIVideoReplica("job-remote")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := result["remote_error"]; !ok {
+		t.Fatalf("result = %#v, want remote_error", result)
+	}
+	var status string
+	if err := studio.db.QueryRow("select status from video_replica_jobs where id=?", "job-remote").Scan(&status); err != nil {
+		t.Fatal(err)
+	}
+	if status != "terminated" {
+		t.Fatalf("stored status = %q, want terminated", status)
+	}
+}
+
+func TestResumeAIVideoReplicaOmitsEmptyInstruction(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload map[string]string
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatal(err)
+		}
+		if got := payload["request_id"]; got != "remote-request" {
+			t.Fatalf("request_id = %q", got)
+		}
+		if _, ok := payload["instruction"]; ok {
+			t.Fatalf("payload = %#v, should omit empty instruction", payload)
+		}
+		_, _ = w.Write([]byte(`{"status":"running"}`))
+	}))
+	defer server.Close()
+	t.Setenv("HUABOT_WEB_BASE_URL", server.URL)
+
+	studio := newAIVideoReplicaTestStudio(t)
+	studio.httpClient = server.Client()
+	studio.huabotBearer = "test-token"
+	studio.huabotBearerExpiry = time.Now().Add(time.Hour)
+	insertAIVideoReplicaTestJob(t, studio, "job-resume", "generating", "remote-request")
+	if _, err := studio.ResumeAIVideoReplica("job-resume", "", ""); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func TestDecodeResponseReturnsJSONErrorEnvelopeOnSuccessStatus(t *testing.T) {
 	recorder := httptest.NewRecorder()

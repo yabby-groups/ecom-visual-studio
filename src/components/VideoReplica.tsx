@@ -63,6 +63,7 @@ export function VideoReplica() {
     null,
   );
   const [error, setError] = useState("");
+  const [terminatingID, setTerminatingID] = useState("");
   const [review, setReview] = useState<{
     score: number;
     issues: string[];
@@ -123,7 +124,13 @@ export function VideoReplica() {
       setJobs(result.items);
       if (selected) {
         const fresh = result.items.find((item) => item.id === selected.id);
-        if (fresh) selectJob(fresh);
+        if (fresh)
+          selectJob({
+            ...fresh,
+            // The list response is local-only; do not discard hydrated remote
+            // stdout/stderr while a status refresh is in flight or after stop.
+            skill2api: selected.skill2api,
+          });
       }
     } catch (reason) {
       setError(operationError(reason, "无法加载视频任务"));
@@ -146,14 +153,13 @@ export function VideoReplica() {
   useEffect(() => {
     if (!jobs.some((job) => isPending(job.status))) return;
     const timer = window.setInterval(() => {
-      const aiJob =
-        selected?.task_type === "ai_replica" && isPending(selected.status)
-          ? selected
-          : jobs.find(
-              (job) => job.task_type === "ai_replica" && isPending(job.status),
-            );
-      if (aiJob?.skill2api_request_id) void refreshTask(aiJob.id);
-      else void load();
+      void load();
+      const aiJobs = jobs.filter(
+        (job) => job.task_type === "ai_replica" && isPending(job.status),
+      );
+      for (const job of aiJobs) {
+        if (job.skill2api_request_id) void refreshTask(job.id);
+      }
     }, 5000);
     return () => window.clearInterval(timer);
   }, [jobs.map((job) => `${job.id}:${job.status}`).join("|")]);
@@ -214,11 +220,16 @@ export function VideoReplica() {
     }
   }
   async function terminateTask(id: string) {
+    setTerminatingID(id);
+    setError("");
     try {
-      await client.terminateAIVideoReplica(id);
+      const result = await client.terminateAIVideoReplica(id);
       await load();
+      if (typeof result.remote_error === "string") setError(result.remote_error);
     } catch (reason) {
       setError(operationError(reason, "无法终止任务"));
+    } finally {
+      setTerminatingID("");
     }
   }
 
@@ -566,6 +577,7 @@ export function VideoReplica() {
         refreshTask={refreshTask}
         resumeTask={resumeTask}
         terminateTask={terminateTask}
+        terminating={terminatingID === selected?.id}
       />
     );
 

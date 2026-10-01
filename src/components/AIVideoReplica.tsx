@@ -60,9 +60,10 @@ type Props = {
   regenerate: (id: string) => void;
   exportVideo: (path: string) => void;
   selectJob: (job: VideoReplicaJob) => void;
-  refreshTask: (id: string) => void;
+  refreshTask: (id: string) => Promise<void>;
   resumeTask: (id: string, answer: string, instruction: string) => void;
   terminateTask: (id: string) => void;
+  terminating: boolean;
 };
 
 export function AIVideoReplica(props: Props) {
@@ -70,6 +71,7 @@ export function AIVideoReplica(props: Props) {
   const [answer, setAnswer] = useState("");
   const [instruction, setInstruction] = useState("");
   const [logsOpen, setLogsOpen] = useState(false);
+  const [logsLoading, setLogsLoading] = useState(false);
   const [logTab, setLogTab] = useState<"stdout" | "stderr" | "files">("stdout");
   const [fileBusy, setFileBusy] = useState("");
   const [fileError, setFileError] = useState("");
@@ -85,6 +87,16 @@ export function AIVideoReplica(props: Props) {
       setFileError(String(reason));
     } finally {
       setFileBusy("");
+    }
+  }
+  async function openLogs() {
+    if (!p.selected) return;
+    setLogsLoading(true);
+    try {
+      await p.refreshTask(p.selected.id);
+      setLogsOpen(true);
+    } finally {
+      setLogsLoading(false);
     }
   }
   const phases = [
@@ -427,8 +439,9 @@ export function AIVideoReplica(props: Props) {
                 <div className="generation-progress-head">
                   <strong>{statusText(p.selected.status)}</strong>
                   <span>
-                    {p.selected.progress?.completed_segments ?? 0}/
-                    {p.selected.progress?.total_segments ?? 1} 完成
+                    {p.selected.status === "generating"
+                      ? "远端进度不可量化"
+                      : phases.find(([phase]) => phase === p.selected?.status)?.[1]}
                   </span>
                 </div>
                 <div className="generation-phase-list ai-generation-phase-list">
@@ -443,11 +456,16 @@ export function AIVideoReplica(props: Props) {
                   ))}
                 </div>
                 {isPending(p.selected.status) && (
-                  <div
-                    className="generation-indeterminate"
-                    role="progressbar"
-                    aria-label="AI 复刻生成进行中"
-                  />
+                  <>
+                    <div
+                      className="generation-indeterminate"
+                      role="progressbar"
+                      aria-label="AI 复刻生成进行中"
+                    />
+                    {p.selected.status === "generating" && (
+                      <p className="generation-progress-detail">远端进度不可量化</p>
+                    )}
+                  </>
                 )}
               </div>
             )}
@@ -484,7 +502,7 @@ export function AIVideoReplica(props: Props) {
                       <input
                         value={instruction}
                         onChange={(e) => setInstruction(e.target.value)}
-                        placeholder="追加题词"
+                        placeholder="追加题词（可选）"
                       />
                       <button
                         className="button secondary"
@@ -495,7 +513,7 @@ export function AIVideoReplica(props: Props) {
                           setInstruction("");
                         }}
                       >
-                        恢复
+                        恢复任务
                       </button>
                     </>
                   )}
@@ -503,23 +521,22 @@ export function AIVideoReplica(props: Props) {
                     <button
                       className="button secondary"
                       type="button"
+                      disabled={p.terminating}
                       onClick={() => p.terminateTask(p.selected!.id)}
                     >
                       <X size={16} />
-                      终止
+                      {p.terminating ? "正在终止" : "终止"}
                     </button>
                   )}
                 </div>
                 <button
                   className="button secondary"
                   type="button"
-                  onClick={() => {
-                    p.refreshTask(p.selected!.id);
-                    setLogsOpen(true);
-                  }}
+                  disabled={logsLoading}
+                  onClick={() => void openLogs()}
                 >
                   <Terminal size={16} />
-                  查看运行日志
+                  {logsLoading ? "正在读取日志" : "查看运行日志"}
                 </button>
                 {!p.selected.skill2api_request_id && (
                   <small>
@@ -573,6 +590,11 @@ export function AIVideoReplica(props: Props) {
                       </button>
                     ))}
                   </div>
+                  {p.selected.skill2api?.remote_error && (
+                    <p className="generation-progress-detail" role="status">
+                      远端记录不可用，正在显示本地日志快照。
+                    </p>
+                  )}
                   {logTab === "files" && (
                     <div className="skill2api-file-list">
                       {p.selected.skill2api?.files?.map((path) => (

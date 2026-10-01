@@ -250,6 +250,7 @@ func (s *Studio) migrate() error {
 	for _, statement := range []string{
 		"alter table video_replica_jobs add column skill2api_request_id text not null default ''",
 		"alter table video_replica_jobs add column skill2api_delivery_id text not null default ''",
+		"alter table video_replica_jobs add column skill2api_status_snapshot text not null default '{}'",
 		"alter table video_replica_jobs add column ai_person_prompt text not null default ''",
 		"alter table video_replica_jobs add column ai_budget real not null default 2",
 	} {
