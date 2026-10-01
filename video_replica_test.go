@@ -199,6 +199,10 @@ func TestTerminateAIVideoReplicaKeepsLocalTerminationWhenRemoteFails(t *testing.
 
 func TestResumeAIVideoReplicaUsesDefaultInstructionWhenInterrupted(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			_, _ = w.Write([]byte(`{"status":"interrupted"}`))
+			return
+		}
 		var payload map[string]string
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			t.Fatal(err)
@@ -221,6 +225,41 @@ func TestResumeAIVideoReplicaUsesDefaultInstructionWhenInterrupted(t *testing.T)
 	insertAIVideoReplicaTestJob(t, studio, "job-resume", "interrupted", "remote-request")
 	if _, err := studio.ResumeAIVideoReplica("job-resume", "", ""); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestResumeAIVideoReplicaAdoptsRemoteRunningTask(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Fatalf("unexpected %s %s request", r.Method, r.URL.Path)
+		}
+		_, _ = w.Write([]byte(`{"status":"running","stdout":"still working"}`))
+	}))
+	defer server.Close()
+	t.Setenv("HUABOT_WEB_BASE_URL", server.URL)
+
+	studio := newAIVideoReplicaTestStudio(t)
+	studio.httpClient = server.Client()
+	studio.huabotBearer = "test-token"
+	studio.huabotBearerExpiry = time.Now().Add(time.Hour)
+	insertAIVideoReplicaTestJob(t, studio, "job-running-resume", "interrupted", "remote-request")
+
+	result, err := studio.ResumeAIVideoReplica("job-running-resume", "", "继续执行")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result["status"]; got != "generating" {
+		t.Fatalf("result status = %v, want generating", got)
+	}
+	if got := result["remote_status"]; got != "running" {
+		t.Fatalf("remote status = %v, want running", got)
+	}
+	var status string
+	if err := studio.db.QueryRow("select status from video_replica_jobs where id=?", "job-running-resume").Scan(&status); err != nil {
+		t.Fatal(err)
+	}
+	if status != "generating" {
+		t.Fatalf("stored status = %q, want generating", status)
 	}
 }
 

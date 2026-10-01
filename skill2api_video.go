@@ -357,7 +357,6 @@ func (s *Studio) skill2APIRequest(id string) (string, User, error) {
 }
 
 func (s *Studio) RefreshAIVideoReplica(id string) (map[string]any, error) {
-	log.Printf("RefreshAIVideoReplica: %s\n", id)
 	user, err := s.currentUser()
 	if err != nil {
 		return nil, err
@@ -369,6 +368,7 @@ func (s *Studio) RefreshAIVideoReplica(id string) (map[string]any, error) {
 		}
 		return nil, err
 	}
+	log.Printf("RefreshAIVideoReplica: rid: %s localstatus: %s\n", rid, localStatus)
 	result := map[string]any{"request_id": rid, "status": localStatus}
 	snapshot := decodeSkill2APIStatusSnapshot(snapshotJSON)
 	// Terminal local states still need a remote status read so the console can
@@ -493,20 +493,45 @@ func (s *Studio) ResumeAIVideoReplica(id, answer, instruction string) (map[strin
 	if err = s.db.QueryRow("select status from video_replica_jobs where id=? and task_type='ai_replica'", id).Scan(&localStatus); err != nil {
 		return nil, err
 	}
-	if localStatus == "waiting_for_input" {
-		if answer == "" {
-			return nil, errors.New("请先填写任务回答")
-		}
-	} else if aiVideoReplicaResumableStatus(localStatus) {
-		if answer != "" {
-			return nil, errors.New("当前任务不等待回答，请使用追加题词继续")
-		}
-	} else {
+	if localStatus != "waiting_for_input" && !aiVideoReplicaResumableStatus(localStatus) {
 		return nil, errors.New("当前任务不能恢复")
 	}
 	bearer, err := s.currentHuabotBearer(user.ID)
 	if err != nil {
 		return nil, err
+	}
+	remoteStatus, err := s.skill2APIStatus(rid, bearer)
+	if err != nil {
+		return nil, err
+	}
+	if stringValue(remoteStatus["status"]) == "running" {
+		if err = s.writeTransaction(func(tx *sql.Tx) error {
+			updated, queryErr := tx.Exec("update video_replica_jobs set status='generating',generation_started_at=coalesce(generation_started_at,?) where id=? and task_type='ai_replica' and status=?", time.Now().Unix(), id, localStatus)
+			if queryErr != nil {
+				return queryErr
+			}
+			count, queryErr := updated.RowsAffected()
+			if queryErr != nil {
+				return queryErr
+			}
+			if count != 1 {
+				return errors.New("任务状态已变化，请刷新后重试")
+			}
+			return nil
+		}); err != nil {
+			return nil, err
+		}
+		remoteStatus["status"] = "generating"
+		remoteStatus["remote_status"] = "running"
+		remoteStatus["request_id"] = rid
+		return remoteStatus, nil
+	}
+	if localStatus == "waiting_for_input" {
+		if answer == "" {
+			return nil, errors.New("请先填写任务回答")
+		}
+	} else if answer != "" {
+		return nil, errors.New("当前任务不等待回答，请使用追加题词继续")
 	}
 	payload := map[string]string{"request_id": rid}
 	if answer != "" {
