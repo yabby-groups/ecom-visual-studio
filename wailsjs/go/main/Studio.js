@@ -70,6 +70,10 @@ export function DeleteTryOn(arg1) {
   return window['go']['main']['Studio']['DeleteTryOn'](arg1);
 }
 
+export function DeleteVideoReplica(arg1) {
+  return window['go']['main']['Studio']['DeleteVideoReplica'](arg1);
+}
+
 export function DeliverAIVideoReplicaFile(arg1, arg2) {
   return window['go']['main']['Studio']['DeliverAIVideoReplicaFile'](arg1, arg2);
 }
@@ -124,6 +128,10 @@ export function PickImage() {
 
 export function PollHuabotAuthorization(arg1) {
   return window['go']['main']['Studio']['PollHuabotAuthorization'](arg1);
+}
+
+export function PrepareVideoReplicaPreview(arg1) {
+  return window['go']['main']['Studio']['PrepareVideoReplicaPreview'](arg1);
 }
 
 export function Project(arg1) {

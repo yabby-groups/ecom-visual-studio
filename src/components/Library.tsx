@@ -1,11 +1,11 @@
-import { Film, Shirt, Trash2, Video } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Film, ImagePlus, LoaderCircle, MoreHorizontal, Shirt, Trash2, Video, X } from "lucide-react";
+import { type ReactElement, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { client } from "../api";
 import { useAiInteraction } from "../aiInteraction";
 import { useAppStore } from "../store";
 import type { TryOnJob, VideoReplicaJob } from "../types";
-import { fileUrl, userFacingError } from "../utils/assets";
+import { fileUrl, statusText, userFacingError } from "../utils/assets";
 import {
   filterVideoWorks,
   libraryTabs,
@@ -13,6 +13,7 @@ import {
   videoReplicaPath,
 } from "../utils/libraryWorks";
 import { Notice } from "./Notice";
+import { ConfirmDialog } from "./ConfirmDialog";
 import { ProjectCard } from "./ProjectCard";
 import { Shell } from "./Shell";
 import "./Library.css";
@@ -25,6 +26,21 @@ const tabCopy: Record<LibraryTabID, { title: string; empty: string }> = {
   "try-on": { title: "换装作品", empty: "还没有换装作品" },
   "video-replica": { title: "普通复刻视频", empty: "还没有普通复刻视频" },
   "ai-video-replica": { title: "AI 复刻视频", empty: "还没有 AI 复刻视频" },
+};
+
+type LibraryPreview = {
+  kind: "image" | "video";
+  title: string;
+  detail: string;
+  path: string | null;
+  editPath: string;
+};
+
+type LibraryDeletion = {
+  kind: "project" | "try-on" | "video";
+  id: string;
+  title: string;
+  message: string;
 };
 
 export function Library() {
@@ -40,6 +56,10 @@ export function Library() {
   const [videoJobs, setVideoJobs] = useState<VideoReplicaJob[]>([]);
   const [tryOnJobs, setTryOnJobs] = useState<TryOnJob[]>([]);
   const [worksError, setWorksError] = useState("");
+  const [preview, setPreview] = useState<LibraryPreview | null>(null);
+  const [deletingID, setDeletingID] = useState("");
+  const [pendingDeletion, setPendingDeletion] = useState<LibraryDeletion | null>(null);
+  const [deleteError, setDeleteError] = useState("");
   const activeTab = libraryTabs.find((item) => item.id === tab)!;
   const visibleVideos = useMemo(
     () =>
@@ -57,6 +77,33 @@ export function Library() {
       .then(([videos, tryOns]) => {
         setVideoJobs(videos.items);
         setTryOnJobs(tryOns.items);
+        void Promise.all(
+          videos.items
+            .filter((job) => job.status === "ready" && job.file_path && !job.preview_path)
+            .map(async (job) => {
+              try {
+                const result = await client.prepareVideoReplicaPreview(job.id);
+                return [job.id, result.preview_path] as const;
+              } catch {
+                return null;
+              }
+            }),
+        ).then((results) => {
+          const previews = new Map(
+            results.filter(
+              (result): result is readonly [string, string | null] =>
+                result !== null && Boolean(result[1]),
+            ),
+          );
+          if (previews.size > 0) {
+            setVideoJobs((current) =>
+              current.map((job) => ({
+                ...job,
+                preview_path: previews.get(job.id) ?? job.preview_path,
+              })),
+            );
+          }
+        });
       })
       .catch((reason) => {
         setWorksError(
@@ -85,17 +132,47 @@ export function Library() {
     [projects, registerPage, tab],
   );
 
-  async function remove(id: string) {
-    if (!window.confirm("确定删除这个项目及其生成图片吗？")) return;
+  useEffect(() => {
+    setPreview(null);
+  }, [tab]);
+
+  useEffect(() => {
+    if (!preview) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setPreview(null);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [preview]);
+
+  function requestDelete(deletion: LibraryDeletion) {
+    setDeleteError("");
+    setPendingDeletion(deletion);
+  }
+
+  async function confirmDelete() {
+    if (!pendingDeletion) return;
+    const { id, kind } = pendingDeletion;
+    setDeletingID(id);
     try {
-      await client.deleteProject(id);
-      await refresh();
-      setNotice({ text: "项目已删除", tone: "success" });
+      if (kind === "project") {
+        await client.deleteProject(id);
+        await refresh();
+        setNotice({ text: "项目已删除", tone: "success" });
+      } else if (kind === "try-on") {
+        await client.deleteTryOn(id);
+        setTryOnJobs((jobs) => jobs.filter((job) => job.id !== id));
+        setNotice({ text: "换装作品已删除", tone: "success" });
+      } else {
+        await client.deleteVideoReplica(id);
+        setVideoJobs((jobs) => jobs.filter((job) => job.id !== id));
+        setNotice({ text: "视频作品已删除", tone: "success" });
+      }
+      setPendingDeletion(null);
     } catch (reason) {
-      setNotice({
-        text: reason instanceof Error ? reason.message : "删除项目失败",
-        tone: "error",
-      });
+      setDeleteError(reason instanceof Error ? reason.message : "删除作品失败");
+    } finally {
+      setDeletingID("");
     }
   }
 
@@ -103,34 +180,47 @@ export function Library() {
     if (!visibleVideos.length)
       return <EmptyWorks tab={tab} onCreate={() => navigate(activeTab.createPath)} />;
     return (
-      <div className="library-video-grid">
+      <div className="art-grid library-art-grid">
         {visibleVideos.map((job) => (
-          <article className="library-video-item" key={job.id}>
-            <button
-              type="button"
-              className="library-video-preview"
-              onClick={() => navigate(videoReplicaPath(job))}
-              aria-label={`打开 ${tabCopy[tab].title}详情`}
-            >
-              {job.file_path ? (
-                <video src={fileUrl(job.file_path)} preload="metadata" />
-              ) : (
-                <Film size={28} />
-              )}
-            </button>
-            <div className="library-video-copy">
-              <strong>{job.model}</strong>
-              <span>
-                {job.status.startsWith("failed")
-                  ? "生成失败"
-                  : job.status === "ready"
-                    ? "已完成"
-                    : "处理中"}{" "}
-                · {job.duration} 秒
-              </span>
-              <time>{new Date(job.created_at * 1000).toLocaleString()}</time>
-            </div>
-          </article>
+          <LibraryWorkCard
+            key={job.id}
+            type={tabCopy[tab].title}
+            title={job.model}
+            detail={`${statusText(job.status)} · ${job.duration} 秒`}
+            imagePath={job.status === "ready" ? job.preview_path : null}
+            icon={<Film size={28} />}
+            preview={
+              job.status === "ready" && job.file_path
+                ? {
+                    kind: "video",
+                    title: job.model,
+                    detail: `${tabCopy[tab].title} · ${job.duration} 秒`,
+                    path: job.file_path,
+                    editPath: videoReplicaPath(job),
+                  }
+                : {
+                    kind: "video",
+                    title: job.model,
+                    detail: `${tabCopy[tab].title} · ${statusText(job.status)}`,
+                    path: null,
+                    editPath: videoReplicaPath(job),
+                  }
+            }
+            onPreview={setPreview}
+          >
+            <DeleteWorkButton
+              title={job.model}
+              deleting={deletingID === job.id}
+              onDelete={() =>
+                requestDelete({
+                  kind: "video",
+                  id: job.id,
+                  title: job.model,
+                  message: "将删除这条视频记录及其所有生成文件。原始参考素材会保留，且此操作无法撤销。",
+                })
+              }
+            />
+          </LibraryWorkCard>
         ))}
       </div>
     );
@@ -140,33 +230,37 @@ export function Library() {
     if (!tryOnJobs.length)
       return <EmptyWorks tab={tab} onCreate={() => navigate(activeTab.createPath)} />;
     return (
-      <div className="library-video-grid">
+      <div className="art-grid library-art-grid">
         {tryOnJobs.map((job) => (
-          <article className="library-video-item" key={job.id}>
-            <button
-              type="button"
-              className="library-video-preview"
-              onClick={() => navigate(`/try-on/${job.id}`)}
-              aria-label="打开换装详情"
-            >
-              {job.file_path ? (
-                <img src={fileUrl(job.file_path)} alt="已生成的换装图片" />
-              ) : (
-                <Shirt size={28} />
-              )}
-            </button>
-            <div className="library-video-copy">
-              <strong>换装任务 · {job.ratio}</strong>
-              <span>
-                {job.status.startsWith("failed")
-                  ? "生成失败"
-                  : job.status === "ready"
-                    ? "已完成"
-                    : "处理中"}
-              </span>
-              <time>{new Date(job.created_at * 1000).toLocaleString()}</time>
-            </div>
-          </article>
+          <LibraryWorkCard
+            key={job.id}
+            type="换装作品"
+            title={`换装任务 · ${job.ratio}`}
+            detail={statusText(job.status)}
+            imagePath={job.file_path}
+            icon={<Shirt size={28} />}
+            preview={{
+              kind: "image",
+              title: `换装任务 · ${job.ratio}`,
+              detail: statusText(job.status),
+              path: job.file_path,
+              editPath: `/try-on/${job.id}`,
+            }}
+            onPreview={setPreview}
+          >
+            <DeleteWorkButton
+              title={`换装任务 · ${job.ratio}`}
+              deleting={deletingID === job.id}
+              onDelete={() =>
+                requestDelete({
+                  kind: "try-on",
+                  id: job.id,
+                  title: `换装任务 · ${job.ratio}`,
+                  message: "将删除这条换装记录及其所有生成图片。人物和服装参考图会保留，且此操作无法撤销。",
+                })
+              }
+            />
+          </LibraryWorkCard>
         ))}
       </div>
     );
@@ -225,7 +319,14 @@ export function Library() {
                     <button
                       className="icon-button destructive"
                       type="button"
-                      onClick={() => void remove(project.id)}
+                      onClick={() =>
+                        requestDelete({
+                          kind: "project",
+                          id: project.id,
+                          title: project.name,
+                          message: "将删除这个项目及其生成图片，且此操作无法撤销。",
+                        })
+                      }
                       aria-label={`删除 ${project.name}`}
                     >
                       <Trash2 size={17} />
@@ -249,8 +350,154 @@ export function Library() {
             onClose={() => setNotice(null)}
           />
         )}
+        {preview && (
+          <LibraryPreview
+            preview={preview}
+            onClose={() => setPreview(null)}
+            onEdit={() => {
+              setPreview(null);
+              navigate(preview.editPath);
+            }}
+          />
+        )}
+        {pendingDeletion && (
+          <ConfirmDialog
+            title={`删除${pendingDeletion.title}？`}
+            message={pendingDeletion.message}
+            confirmLabel="确认删除"
+            error={deleteError}
+            loading={deletingID === pendingDeletion.id}
+            onCancel={() => setPendingDeletion(null)}
+            onConfirm={() => void confirmDelete()}
+          />
+        )}
       </div>
     </Shell>
+  );
+}
+
+function LibraryWorkCard({
+  type,
+  title,
+  detail,
+  imagePath,
+  icon,
+  preview,
+  onPreview,
+  children,
+}: {
+  type: string;
+  title: string;
+  detail: string;
+  imagePath?: string | null;
+  icon: ReactElement;
+  preview: LibraryPreview;
+  onPreview: (preview: LibraryPreview) => void;
+  children?: ReactElement;
+}) {
+  return (
+    <article className="library-work-card">
+      <button
+        type="button"
+        className="project-card library-work-card-main"
+        onClick={() => onPreview(preview)}
+        aria-label={`预览 ${title}`}
+      >
+        <div className="project-preview library-work-cover">
+          {imagePath ? (
+            <img src={fileUrl(imagePath)} alt="" />
+          ) : (
+            icon
+          )}
+        </div>
+        <div>
+          <span>{detail}</span>
+          <h3>{title}</h3>
+          <p>{type}</p>
+        </div>
+        <MoreHorizontal size={18} />
+      </button>
+      {children}
+    </article>
+  );
+}
+
+function DeleteWorkButton({
+  title,
+  deleting,
+  onDelete,
+}: {
+  title: string;
+  deleting: boolean;
+  onDelete: () => void;
+}) {
+  return (
+    <button
+      className="icon-button destructive"
+      type="button"
+      disabled={deleting}
+      onClick={onDelete}
+      aria-label={deleting ? `正在删除 ${title}` : `删除 ${title}`}
+    >
+      {deleting ? <LoaderCircle className="spin" size={17} /> : <Trash2 size={17} />}
+    </button>
+  );
+}
+
+function LibraryPreview({
+  preview,
+  onClose,
+  onEdit,
+}: {
+  preview: LibraryPreview;
+  onClose: () => void;
+  onEdit: () => void;
+}) {
+  const playable = preview.kind === "video" && Boolean(preview.path);
+  return (
+    <div className="library-preview-backdrop" role="presentation" onClick={onClose}>
+      <section
+        className="library-preview-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${preview.title}预览`}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="library-preview-media">
+          {preview.path ? (
+            playable ? (
+              <video controls preload="metadata" src={fileUrl(preview.path)} />
+            ) : (
+              <img src={fileUrl(preview.path)} alt={preview.title} />
+            )
+          ) : (
+            <div className="library-preview-unavailable">
+              {preview.kind === "video" ? <Film size={36} /> : <ImagePlus size={36} />}
+              <span>该作品暂时没有可预览的成品</span>
+            </div>
+          )}
+        </div>
+        <div className="library-preview-footer">
+          <div>
+            <h2>{preview.title}</h2>
+            <p>{preview.detail}</p>
+          </div>
+          <div className="library-preview-actions">
+            <button className="button primary" type="button" onClick={onEdit}>
+              继续编辑
+            </button>
+            <button
+              className="icon-button"
+              type="button"
+              onClick={onClose}
+              aria-label="关闭作品预览"
+            >
+              <X size={20} />
+            </button>
+          </div>
+        </div>
+      </section>
+    </div>
   );
 }
 

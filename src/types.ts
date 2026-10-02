@@ -189,6 +189,7 @@ export type VideoReplicaJob = {
   ratio: string;
   status: AssetStatus;
   file_path: string | null;
+  preview_path: string | null;
   generation_started_at: number | null;
   created_at: number;
   versions: VideoReplicaVersion[];

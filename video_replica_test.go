@@ -39,6 +39,96 @@ func insertAIVideoReplicaTestJob(t *testing.T, studio *Studio, id, status, reque
 	}
 }
 
+func TestDeleteVideoReplicaRemovesTerminalJobAndGeneratedFiles(t *testing.T) {
+	studio := newAIVideoReplicaTestStudio(t)
+	const id = "job-delete-video"
+	const outputPath = "generated/video-replica/job-delete-video/result.mp4"
+	insertAIVideoReplicaTestJob(t, studio, id, "ready", "")
+	if err := os.MkdirAll(filepath.Join(studio.dataDir, "storage", "generated", "video-replica", id), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	fullPath := filepath.Join(studio.dataDir, "storage", filepath.FromSlash(outputPath))
+	if err := os.WriteFile(fullPath, []byte("video"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	previewPath := filepath.Join(studio.dataDir, "storage", "generated", "video-replica", id, "result.jpg")
+	if err := os.WriteFile(previewPath, []byte("cover"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := studio.db.Exec("update video_replica_jobs set file_path=? where id=?", outputPath, id); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := studio.db.Exec("insert into video_replica_versions(id,job_id,file_path,created_at) values(?,?,?,?)", "version-delete-video", id, outputPath, time.Now().Unix()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := studio.DeleteVideoReplica(id); err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	if err := studio.db.QueryRow("select count(*) from video_replica_jobs where id=?", id).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatalf("deleted video job still exists: %d", count)
+	}
+	if _, err := os.Stat(fullPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("generated output still exists: %v", err)
+	}
+	if _, err := os.Stat(previewPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("generated preview still exists: %v", err)
+	}
+}
+
+func TestEnsureVideoReplicaPreviewCreatesStaticCover(t *testing.T) {
+	studio := newAIVideoReplicaTestStudio(t)
+	const videoPath = "generated/video-replica/job-cover/result.mp4"
+	videoFile := filepath.Join(studio.dataDir, "storage", filepath.FromSlash(videoPath))
+	if err := os.MkdirAll(filepath.Dir(videoFile), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(videoFile, []byte("video"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	toolDir := t.TempDir()
+	ffmpeg := filepath.Join(toolDir, "ffmpeg")
+	if err := os.WriteFile(ffmpeg, []byte("#!/bin/sh\nout=\"\"\nfor arg do out=\"$arg\"; done\nprintf cover > \"$out\"\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	oldPath := os.Getenv("PATH")
+	if err := os.Setenv("PATH", toolDir+string(os.PathListSeparator)+oldPath); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Setenv("PATH", oldPath) })
+
+	preview, err := studio.ensureVideoReplicaPreview(videoPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preview != "generated/video-replica/job-cover/result.jpg" {
+		t.Fatalf("preview path = %q", preview)
+	}
+	cover, err := os.ReadFile(filepath.Join(studio.dataDir, "storage", filepath.FromSlash(preview)))
+	if err != nil || string(cover) != "cover" {
+		t.Fatalf("preview contents = %q, error = %v", cover, err)
+	}
+}
+
+func TestVideoReplicaPreviewPathRejectsUnsafeInputs(t *testing.T) {
+	for _, path := range []string{"uploads/video.mp4", "generated/../uploads/video.mp4", "/tmp/video.mp4", "generated/video/result.mov"} {
+		if _, err := videoReplicaPreviewPath(path); err == nil {
+			t.Fatalf("unsafe preview path accepted: %q", path)
+		}
+	}
+}
+
+func TestDeleteVideoReplicaRejectsActiveJob(t *testing.T) {
+	studio := newAIVideoReplicaTestStudio(t)
+	insertAIVideoReplicaTestJob(t, studio, "job-delete-active", "generating", "")
+	if _, err := studio.DeleteVideoReplica("job-delete-active"); err == nil || !strings.Contains(err.Error(), "不能删除") {
+		t.Fatalf("active delete error = %v", err)
+	}
+}
+
 func TestAIVideoReplicaJobReturnsSavedPersonSettings(t *testing.T) {
 	studio := newAIVideoReplicaTestStudio(t)
 	insertAIVideoReplicaTestJob(t, studio, "job-person-settings", "ready", "")

@@ -425,6 +425,89 @@ func (s *Studio) ConfirmVideoReplicaStoryboard(id string) (map[string]bool, erro
 	return map[string]bool{"ok": true}, nil
 }
 
+func (s *Studio) DeleteVideoReplica(id string) (map[string]bool, error) {
+	paths := []string{}
+	err := s.writeTransaction(func(tx *sql.Tx) error {
+		var status string
+		var currentPath sql.NullString
+		if err := tx.QueryRow("select status,file_path from video_replica_jobs where id=?", id).Scan(&status, &currentPath); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return errors.New("视频记录不存在")
+			}
+			return err
+		}
+		if videoReplicaIsActive(status) {
+			return errors.New("正在生成的视频任务不能删除")
+		}
+		if currentPath.Valid {
+			paths = append(paths, currentPath.String)
+			if preview, previewErr := videoReplicaPreviewPath(currentPath.String); previewErr == nil {
+				paths = append(paths, preview)
+			}
+		}
+		for _, table := range []string{"video_replica_versions", "video_replica_segments"} {
+			rows, err := tx.Query("select file_path from "+table+" where job_id=? and file_path is not null", id)
+			if err != nil {
+				return err
+			}
+			for rows.Next() {
+				var path string
+				if err = rows.Scan(&path); err != nil {
+					rows.Close()
+					return err
+				}
+				paths = append(paths, path)
+				if preview, previewErr := videoReplicaPreviewPath(path); previewErr == nil {
+					paths = append(paths, preview)
+				}
+			}
+			if err = rows.Close(); err != nil {
+				return err
+			}
+			if err = rows.Err(); err != nil {
+				return err
+			}
+		}
+		for _, table := range []string{"video_replica_versions", "video_replica_segments"} {
+			if _, err := tx.Exec("delete from "+table+" where job_id=?", id); err != nil {
+				return err
+			}
+		}
+		_, err := tx.Exec("delete from video_replica_jobs where id=?", id)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	s.removeVideoReplicaFiles(paths)
+	return map[string]bool{"ok": true}, nil
+}
+
+func videoReplicaIsActive(status string) bool {
+	switch status {
+	case "queued", "preparing", "submitting", "prompting", "generating", "running", "retrieving", "downloading", "merging", "waiting_for_input":
+		return true
+	default:
+		return false
+	}
+}
+
+func (s *Studio) removeVideoReplicaFiles(paths []string) {
+	allowed := filepath.Join(s.dataDir, "storage", "generated", "video-replica")
+	for _, path := range paths {
+		relativePath := filepath.Clean(filepath.FromSlash(path))
+		if filepath.IsAbs(relativePath) {
+			continue
+		}
+		target := filepath.Join(s.dataDir, "storage", relativePath)
+		relativeToAllowed, err := filepath.Rel(allowed, target)
+		if err != nil || relativeToAllowed == "." || strings.HasPrefix(relativeToAllowed, ".."+string(filepath.Separator)) || filepath.IsAbs(relativeToAllowed) {
+			continue
+		}
+		_ = os.Remove(target)
+	}
+}
+
 func (s *Studio) VideoReplicaJobs(limit, offset int) (map[string]any, error) {
 	if limit < 1 || limit > 48 || offset < 0 {
 		return nil, errors.New("分页参数无效")
@@ -454,6 +537,7 @@ func (s *Studio) VideoReplicaJobs(limit, offset int) (map[string]any, error) {
 		if err = s.populateVideoReplicaSegments(job); err != nil {
 			return nil, err
 		}
+		s.attachVideoReplicaPreview(job)
 		s.attachSkill2APIFields(job)
 		items = append(items, job)
 	}
@@ -484,8 +568,51 @@ func (s *Studio) VideoReplicaJob(id string) (map[string]any, error) {
 	if err = s.populateVideoReplicaSegments(job); err != nil {
 		return nil, err
 	}
+	s.attachVideoReplicaPreview(job)
 	s.attachSkill2APIFields(job)
 	return job, nil
+}
+
+// PrepareVideoReplicaPreview creates the missing static cover for a completed
+// video. It is used to backfill works created before cover generation existed.
+func (s *Studio) PrepareVideoReplicaPreview(id string) (map[string]any, error) {
+	if _, err := s.currentUser(); err != nil {
+		return nil, err
+	}
+	var status string
+	var videoPath sql.NullString
+	if err := s.db.QueryRow("select status,file_path from video_replica_jobs where id=?", id).Scan(&status, &videoPath); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, errors.New("视频任务不存在")
+		}
+		return nil, err
+	}
+	if status != "ready" || !videoPath.Valid || videoPath.String == "" {
+		return map[string]any{"preview_path": nil}, nil
+	}
+	preview, err := s.ensureVideoReplicaPreview(videoPath.String)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"preview_path": preview}, nil
+}
+
+func (s *Studio) attachVideoReplicaPreview(job map[string]any) {
+	job["preview_path"] = nil
+	if job["status"] != "ready" {
+		return
+	}
+	path, ok := job["file_path"].(string)
+	if !ok || path == "" {
+		return
+	}
+	preview, err := videoReplicaPreviewPath(path)
+	if err != nil {
+		return
+	}
+	if _, err = s.generatedAssetPath(preview); err == nil {
+		job["preview_path"] = preview
+	}
 }
 
 func (s *Studio) attachSkill2APIFields(job map[string]any) {
@@ -714,6 +841,9 @@ func (s *Studio) runVideoSegments(id, runID, providerUserID, source, refsJSON, p
 	path, err := s.mergeVideoSegments(id, runID, source, segments, duration)
 	if err != nil {
 		return err
+	}
+	if _, previewErr := s.ensureVideoReplicaPreview(path); previewErr != nil {
+		log.Printf("video replica %s: preview generation failed: %v", id, previewErr)
 	}
 	return s.writeTransaction(func(tx *sql.Tx) error {
 		var previous sql.NullString
@@ -1160,6 +1290,45 @@ func videoDuration(path string) (float64, error) {
 		return 0, err
 	}
 	return strconv.ParseFloat(strings.TrimSpace(string(output)), 64)
+}
+
+func videoReplicaPreviewPath(videoPath string) (string, error) {
+	clean := filepath.Clean(filepath.FromSlash(videoPath))
+	if filepath.IsAbs(clean) || clean != filepath.FromSlash(videoPath) || !strings.HasPrefix(clean, "generated"+string(filepath.Separator)) || !strings.EqualFold(filepath.Ext(clean), ".mp4") {
+		return "", errors.New("视频封面路径无效")
+	}
+	return filepath.ToSlash(strings.TrimSuffix(clean, filepath.Ext(clean)) + ".jpg"), nil
+}
+
+func (s *Studio) ensureVideoReplicaPreview(videoPath string) (string, error) {
+	input, err := s.generatedAssetPath(videoPath)
+	if err != nil {
+		return "", err
+	}
+	previewPath, err := videoReplicaPreviewPath(videoPath)
+	if err != nil {
+		return "", err
+	}
+	preview, err := s.generatedAssetOutputPath(previewPath)
+	if err != nil {
+		return "", err
+	}
+	if info, statErr := os.Stat(preview); statErr == nil && info.Mode().IsRegular() && info.Size() > 0 {
+		return previewPath, nil
+	}
+	if err := os.MkdirAll(filepath.Dir(preview), 0o700); err != nil {
+		return "", err
+	}
+	command := exec.Command(mediaToolPath("ffmpeg"), "-y", "-ss", "0.5", "-i", input, "-frames:v", "1", "-vf", "scale=768:-2", "-q:v", "3", preview)
+	if output, err := command.CombinedOutput(); err != nil {
+		_ = os.Remove(preview)
+		return "", fmt.Errorf("提取视频封面失败：%s", strings.TrimSpace(string(output)))
+	}
+	info, err := os.Stat(preview)
+	if err != nil || !info.Mode().IsRegular() || info.Size() == 0 {
+		return "", errors.New("视频封面文件无效")
+	}
+	return previewPath, nil
 }
 
 func videoHasAudio(path string) error {

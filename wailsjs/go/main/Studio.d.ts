@@ -36,6 +36,8 @@ export function DeleteTemplate(arg1:string):Promise<Record<string, boolean>>;
 
 export function DeleteTryOn(arg1:string):Promise<Record<string, boolean>>;
 
+export function DeleteVideoReplica(arg1:string):Promise<Record<string, boolean>>;
+
 export function DeliverAIVideoReplicaFile(arg1:string,arg2:string):Promise<Record<string, any>>;
 
 export function DownloadAIVideoReplicaFile(arg1:string,arg2:string):Promise<boolean>;
@@ -63,6 +65,8 @@ export function NotifyGeneration(arg1:string,arg2:string):Promise<void>;
 export function PickImage():Promise<Record<string, string>>;
 
 export function PollHuabotAuthorization(arg1:string):Promise<Record<string, any>>;
+
+export function PrepareVideoReplicaPreview(arg1:string):Promise<Record<string, any>>;
 
 export function Project(arg1:string):Promise<Record<string, any>>;
 

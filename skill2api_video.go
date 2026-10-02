@@ -1056,6 +1056,9 @@ func (s *Studio) downloadAIVideo(id, rawURL, bearer string) error {
 	if closeErr != nil {
 		return closeErr
 	}
+	if _, previewErr := s.ensureVideoReplicaPreview(path); previewErr != nil {
+		log.Printf("video replica %s: preview generation failed: %v", id, previewErr)
+	}
 	return s.writeTransaction(func(tx *sql.Tx) error {
 		_, e := tx.Exec("insert into video_replica_versions(id,job_id,source_version_id,file_path,created_at) values(?,?,?,?,?)", newID("video-version"), id, nil, path, time.Now().Unix())
 		if e != nil {

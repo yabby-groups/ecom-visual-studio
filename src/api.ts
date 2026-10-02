@@ -153,6 +153,8 @@ export const client = {
     call("ConfirmVideoReplicaStoryboard", id),
   videoReplicaJobs: (limit = 12, offset = 0) =>
     call<VideoReplicaPage>("VideoReplicaJobs", limit, offset),
+  prepareVideoReplicaPreview: (id: string) =>
+    call<{ preview_path: string | null }>("PrepareVideoReplicaPreview", id),
   videoReplicaJob: (id: string) => call<VideoReplicaJob>("VideoReplicaJob", id),
   createVideoReplica: (body: {
     source_video_path: string;
@@ -196,6 +198,7 @@ export const client = {
   pullAIVideoReplicaResult: (id: string) =>
     call<boolean>("PullAIVideoReplicaResult", id),
   regenerateVideoReplica: (id: string) => call("RegenerateVideoReplica", id),
+  deleteVideoReplica: (id: string) => call("DeleteVideoReplica", id),
   analyze: (body: { mode: string; product: string; reference: string }) =>
     call<{ description: string; benefits: string[] }>("Analyze", body),
   chat: async (
