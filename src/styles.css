@@ -723,20 +723,23 @@ select:focus {
 
 /* Keep editable VideoReplica fields on the dark surface instead of the
    global light input default. */
-:root[data-theme="dark"] .video-replica
+:root[data-theme="dark"]
+  .video-replica
   :is(input:not([type="hidden"]), textarea, select) {
   border-color: var(--line-strong);
   background: var(--surface-inset);
   color: var(--ink);
 }
 
-:root[data-theme="dark"] .video-replica
+:root[data-theme="dark"]
+  .video-replica
   :is(input:not([type="hidden"]), textarea, select)::placeholder {
   color: var(--muted);
   opacity: 1;
 }
 
-:root[data-theme="dark"] .video-replica
+:root[data-theme="dark"]
+  .video-replica
   :is(input:not([type="hidden"]), textarea, select):focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(37, 143, 123, 0.24);

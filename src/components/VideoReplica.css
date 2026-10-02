@@ -204,9 +204,9 @@
   /* overflow: hidden; */
 }
 .video-replica-preview-container {
-    overflow: scroll;
-    height: 100%;
-    max-height: calc(100vh - 180px);
+  overflow: scroll;
+  height: 100%;
+  max-height: calc(100vh - 180px);
 }
 .video-replica-panel,
 .video-replica-preview,

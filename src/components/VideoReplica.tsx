@@ -1,17 +1,19 @@
-import { Check, Film, LoaderCircle, Play, RefreshCw, ShieldCheck, Upload, X } from "lucide-react";
+import {
+  Check,
+  Film,
+  LoaderCircle,
+  Play,
+  RefreshCw,
+  ShieldCheck,
+  Upload,
+  X,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { useLocation, useParams } from "react-router-dom";
 import { client } from "../api";
 import { useRequireAiAuth } from "../auth";
-import type {
-  VideoReplicaJob,
-  VideoReplicaStoryboardItem,
-} from "../types";
-import {
-  fileUrl,
-  isPending,
-  userFacingError,
-} from "../utils/assets";
+import type { VideoReplicaJob, VideoReplicaStoryboardItem } from "../types";
+import { fileUrl, isPending, userFacingError } from "../utils/assets";
 import { Shell } from "./Shell";
 import { SettingsSelect } from "./SettingsSelect";
 import { VideoReplicaPreview } from "./VideoReplicaPreview";
@@ -201,7 +203,9 @@ export function VideoReplica() {
     try {
       const result = await client.upload(file);
       setReferencePaths((paths) => [...paths, result.path]);
-      setProductReferencePath((path) => (mode === "replace" || !path ? result.path : path));
+      setProductReferencePath((path) =>
+        mode === "replace" || !path ? result.path : path,
+      );
     } catch (reason) {
       setError(operationError(reason, "添加图片失败"));
     } finally {
@@ -833,9 +837,7 @@ export function VideoReplica() {
         <section className="video-replica-history">
           <div className="video-replica-panel-head">
             <h2>历史任务</h2>
-            <span>
-              {jobs.length} 条
-            </span>
+            <span>{jobs.length} 条</span>
           </div>
           <VideoWorksList
             jobs={jobs}

@@ -65,9 +65,11 @@ export function aiVideoReplicaControls({
       (status === "interrupted" || status === "terminated") &&
       hasRequest &&
       !taskOperation,
-    canTerminate: (active || waitingForInput) && status !== "retrieving" && !taskOperation,
+    canTerminate:
+      (active || waitingForInput) && status !== "retrieving" && !taskOperation,
     canPullResult,
-    canRegenerate: !!status && regenerableStatus(status) && !taskOperation && !busy,
+    canRegenerate:
+      !!status && regenerableStatus(status) && !taskOperation && !busy,
     canOpenLogs: hasRequest && !taskOperation,
   };
 }

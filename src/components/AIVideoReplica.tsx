@@ -105,7 +105,9 @@ export function AIVideoReplica() {
   const [jobs, setJobs] = useState<VideoReplicaJob[]>([]);
   const [selected, setSelected] = useState<VideoReplicaJob | null>(null);
   const [busy, setBusy] = useState("");
-  const [videoReadProgress, setVideoReadProgress] = useState<number | null>(null);
+  const [videoReadProgress, setVideoReadProgress] = useState<number | null>(
+    null,
+  );
   const [error, setError] = useState("");
   const [terminatingID, setTerminatingID] = useState("");
   const [resumingID, setResumingID] = useState("");
@@ -146,7 +148,9 @@ export function AIVideoReplica() {
   async function load() {
     try {
       const result = await client.videoReplicaJobs(48, 0);
-      const aiJobs = result.items.filter((job) => job.task_type === "ai_replica");
+      const aiJobs = result.items.filter(
+        (job) => job.task_type === "ai_replica",
+      );
       setJobs(aiJobs);
       if (selected) {
         const fresh = aiJobs.find((job) => job.id === selected.id);
@@ -158,18 +162,21 @@ export function AIVideoReplica() {
   }
   useEffect(() => void load(), []);
   useEffect(() => {
-    const jobID = routeJobID || (location.state as { jobId?: string } | null)?.jobId;
+    const jobID =
+      routeJobID || (location.state as { jobId?: string } | null)?.jobId;
     if (!jobID) return;
-    void client.videoReplicaJob(jobID).then(selectJob).catch((reason) =>
-      setError(operationError(reason, "无法打开视频作品")),
-    );
+    void client
+      .videoReplicaJob(jobID)
+      .then(selectJob)
+      .catch((reason) => setError(operationError(reason, "无法打开视频作品")));
   }, [location.state, routeJobID]);
   useEffect(() => {
     if (!jobs.some((job) => isPending(job.status))) return;
     const timer = window.setInterval(() => {
       void load();
       jobs.forEach((job) => {
-        if (isPending(job.status) && job.skill2api_request_id) void refreshTask(job.id);
+        if (isPending(job.status) && job.skill2api_request_id)
+          void refreshTask(job.id);
       });
     }, 5000);
     return () => window.clearInterval(timer);
@@ -181,7 +188,13 @@ export function AIVideoReplica() {
     try {
       const remote = await client.refreshAIVideoReplica(id);
       const update = (job: VideoReplicaJob) =>
-        job.id === id ? { ...job, status: remote.status as VideoReplicaJob["status"], skill2api: remote } : job;
+        job.id === id
+          ? {
+              ...job,
+              status: remote.status as VideoReplicaJob["status"],
+              skill2api: remote,
+            }
+          : job;
       setSelected((current) => (current ? update(current) : current));
       setJobs((items) => items.map(update));
     } catch (reason) {
@@ -189,99 +202,254 @@ export function AIVideoReplica() {
     }
   }
   async function uploadVideo(file: File) {
-    setBusy("upload"); setVideoReadProgress(0); setSourceDuration(null); setError("");
+    setBusy("upload");
+    setVideoReadProgress(0);
+    setSourceDuration(null);
+    setError("");
     try {
       const buffer = await new Promise<ArrayBuffer>((resolve, reject) => {
         const reader = new FileReader();
-        reader.onprogress = (event) => event.lengthComputable && setVideoReadProgress(Math.round((event.loaded / event.total) * 100));
-        reader.onload = () => reader.result instanceof ArrayBuffer ? resolve(reader.result) : reject(new Error("无法读取视频文件"));
-        reader.onerror = () => reject(reader.error || new Error("无法读取视频文件"));
+        reader.onprogress = (event) =>
+          event.lengthComputable &&
+          setVideoReadProgress(Math.round((event.loaded / event.total) * 100));
+        reader.onload = () =>
+          reader.result instanceof ArrayBuffer
+            ? resolve(reader.result)
+            : reject(new Error("无法读取视频文件"));
+        reader.onerror = () =>
+          reject(reader.error || new Error("无法读取视频文件"));
         reader.readAsArrayBuffer(file);
       });
-      const result = await client.uploadVideoReplicaVideo(file.name, file.type, Array.from(new Uint8Array(buffer)));
-      setSourcePath(result.path); setSourcePreview(fileUrl(result.path)); setSourceDuration(Number(result.duration_seconds));
-    } catch (reason) { setError(operationError(reason, "添加视频失败")); }
-    finally { setBusy(""); setVideoReadProgress(null); }
+      const result = await client.uploadVideoReplicaVideo(
+        file.name,
+        file.type,
+        Array.from(new Uint8Array(buffer)),
+      );
+      setSourcePath(result.path);
+      setSourcePreview(fileUrl(result.path));
+      setSourceDuration(Number(result.duration_seconds));
+    } catch (reason) {
+      setError(operationError(reason, "添加视频失败"));
+    } finally {
+      setBusy("");
+      setVideoReadProgress(null);
+    }
   }
   async function uploadReference(file: File) {
-    setBusy("reference"); setError("");
-    try { const result = await client.upload(file); setReferencePaths([result.path]); setProductReferencePath(result.path); }
-    catch (reason) { setError(operationError(reason, "添加图片失败")); }
-    finally { setBusy(""); }
+    setBusy("reference");
+    setError("");
+    try {
+      const result = await client.upload(file);
+      setReferencePaths([result.path]);
+      setProductReferencePath(result.path);
+    } catch (reason) {
+      setError(operationError(reason, "添加图片失败"));
+    } finally {
+      setBusy("");
+    }
   }
   async function reviewPrompt() {
     if (!prompt.trim()) return setError("请先填写要审核的描述");
     if (!requireAiAuth()) return;
-    setBusy("review"); setError("");
-    try { const result = await client.reviewVideoReplicaPrompt("replica", prompt); setReview({ ...result, source: prompt }); }
-    catch (reason) { setError(operationError(reason, "AI 审核失败")); }
-    finally { setBusy(""); }
+    setBusy("review");
+    setError("");
+    try {
+      const result = await client.reviewVideoReplicaPrompt("replica", prompt);
+      setReview({ ...result, source: prompt });
+    } catch (reason) {
+      setError(operationError(reason, "AI 审核失败"));
+    } finally {
+      setBusy("");
+    }
   }
   function adoptReview() {
     if (!review || review.source !== prompt) return;
-    setPrompt(review.optimized_prompt); setReview(null);
+    setPrompt(review.optimized_prompt);
+    setReview(null);
   }
   async function create() {
     if (!requireAiAuth()) return;
-    if (!sourcePath || !prompt.trim()) return setError("请先选择视频并填写复刻说明");
+    if (!sourcePath || !prompt.trim())
+      return setError("请先选择视频并填写复刻说明");
     if (referencePaths.length !== 1) return setError("请添加一张商品图片");
-    if (!Number.isFinite(budget) || budget <= 0) return setError("预算必须大于 0");
-    setBusy("create"); setError("");
+    if (!Number.isFinite(budget) || budget <= 0)
+      return setError("预算必须大于 0");
+    setBusy("create");
+    setError("");
     try {
-      const result = await client.createAIVideoReplica({ source_video_path: sourcePath, product_path: productReferencePath || referencePaths[0], prompt, person_prompt: personPrompt, model: aiModel, resolution, ratio, budget });
-      await load(); selectJob(await client.videoReplicaJob(result.id));
-    } catch (reason) { setError(operationError(reason, "创建 AI 复刻任务失败")); }
-    finally { setBusy(""); }
+      const result = await client.createAIVideoReplica({
+        source_video_path: sourcePath,
+        product_path: productReferencePath || referencePaths[0],
+        prompt,
+        person_prompt: personPrompt,
+        model: aiModel,
+        resolution,
+        ratio,
+        budget,
+      });
+      await load();
+      selectJob(await client.videoReplicaJob(result.id));
+    } catch (reason) {
+      setError(operationError(reason, "创建 AI 复刻任务失败"));
+    } finally {
+      setBusy("");
+    }
   }
   async function regenerate(id: string) {
-    const job = jobs.find((item) => item.id === id); if (!job) return;
-    setBusy(id); setError("");
+    const job = jobs.find((item) => item.id === id);
+    if (!job) return;
+    setBusy(id);
+    setError("");
     try {
-      const result = await client.createAIVideoReplica({ source_video_path: job.source_video_path, product_path: job.product_reference_path || job.reference_paths[0], prompt: job.prompt, person_prompt: job.ai_person_prompt ?? personPrompt, model: job.model, resolution: job.resolution, ratio: job.ratio, budget: job.ai_budget ?? budget });
-      await load(); selectJob(await client.videoReplicaJob(result.id));
-    } catch (reason) { setError(operationError(reason, "重新生成失败")); }
-    finally { setBusy(""); }
+      const result = await client.createAIVideoReplica({
+        source_video_path: job.source_video_path,
+        product_path: job.product_reference_path || job.reference_paths[0],
+        prompt: job.prompt,
+        person_prompt: job.ai_person_prompt ?? personPrompt,
+        model: job.model,
+        resolution: job.resolution,
+        ratio: job.ratio,
+        budget: job.ai_budget ?? budget,
+      });
+      await load();
+      selectJob(await client.videoReplicaJob(result.id));
+    } catch (reason) {
+      setError(operationError(reason, "重新生成失败"));
+    } finally {
+      setBusy("");
+    }
   }
-  async function resumeTask(id: string, answerValue: string, instructionValue: string) {
-    setResumingID(id); setError("");
-    try { await client.resumeAIVideoReplica(id, answerValue, instructionValue); await load(); return true; }
-    catch (reason) { setError(operationError(reason, "无法继续任务")); return false; }
-    finally { setResumingID(""); }
+  async function resumeTask(
+    id: string,
+    answerValue: string,
+    instructionValue: string,
+  ) {
+    setResumingID(id);
+    setError("");
+    try {
+      await client.resumeAIVideoReplica(id, answerValue, instructionValue);
+      await load();
+      return true;
+    } catch (reason) {
+      setError(operationError(reason, "无法继续任务"));
+      return false;
+    } finally {
+      setResumingID("");
+    }
   }
   async function terminateTask(id: string) {
-    setTerminatingID(id); setError("");
-    try { const result = await client.terminateAIVideoReplica(id); await load(); if (typeof result.remote_error === "string") setError(result.remote_error); }
-    catch (reason) { setError(operationError(reason, "无法终止任务")); }
-    finally { setTerminatingID(""); }
+    setTerminatingID(id);
+    setError("");
+    try {
+      const result = await client.terminateAIVideoReplica(id);
+      await load();
+      if (typeof result.remote_error === "string")
+        setError(result.remote_error);
+    } catch (reason) {
+      setError(operationError(reason, "无法终止任务"));
+    } finally {
+      setTerminatingID("");
+    }
   }
   async function pullResult(id: string) {
-    setPullingResultID(id); setError("");
-    try { const ok = await client.pullAIVideoReplicaResult(id); selectJob(await client.videoReplicaJob(id)); if (ok) setMediaRefreshToken((value) => value + 1); await load(); return ok; }
-    catch (reason) { setError(operationError(reason, "无法拉取远程结果")); return false; }
-    finally { setPullingResultID(""); }
+    setPullingResultID(id);
+    setError("");
+    try {
+      const ok = await client.pullAIVideoReplicaResult(id);
+      selectJob(await client.videoReplicaJob(id));
+      if (ok) setMediaRefreshToken((value) => value + 1);
+      await load();
+      return ok;
+    } catch (reason) {
+      setError(operationError(reason, "无法拉取远程结果"));
+      return false;
+    } finally {
+      setPullingResultID("");
+    }
   }
   async function exportVideo(path: string) {
-    setBusy("export"); setError("");
-    try { await client.downloadAsset(path); }
-    catch (reason) { setError(operationError(reason, "导出视频失败")); }
-    finally { setBusy(""); }
+    setBusy("export");
+    setError("");
+    try {
+      await client.downloadAsset(path);
+    } catch (reason) {
+      setError(operationError(reason, "导出视频失败"));
+    } finally {
+      setBusy("");
+    }
   }
   async function downloadFile(path: string) {
     if (!selected) return;
-    setFileBusy(path); setFileError("");
-    try { if (!(await client.downloadAIVideoReplicaFile(selected.id, path))) throw new Error("文件未保存"); }
-    catch (reason) { setFileError(String(reason)); }
-    finally { setFileBusy(""); }
+    setFileBusy(path);
+    setFileError("");
+    try {
+      if (!(await client.downloadAIVideoReplicaFile(selected.id, path)))
+        throw new Error("文件未保存");
+    } catch (reason) {
+      setFileError(String(reason));
+    } finally {
+      setFileBusy("");
+    }
   }
   async function openLogs() {
     if (!selected) return;
     setLogsLoading(true);
-    try { await refreshTask(selected.id); setLogsOpen(true); }
-    finally { setLogsLoading(false); }
+    try {
+      await refreshTask(selected.id);
+      setLogsOpen(true);
+    } finally {
+      setLogsLoading(false);
+    }
   }
   const p: Props = {
-    sourceReady: Boolean(sourcePath), sourcePreview, replaceReady: referencePaths.length === 1, scriptReady: Boolean(prompt.trim()), busy, videoReadProgress, sourceDuration, productReferencePath, prompt, personPrompt, budget, aiModel, ratio, resolution, review, selected, displayed: selected?.file_path ? `${fileUrl(selected.file_path)}?refresh=${mediaRefreshToken}` : "", error, jobs,
-    openReplica: () => navigate("/video-replica"), setPrompt, setReview, setPersonPrompt, setBudget, setAiModel, setRatio, setResolution, setReferencePaths, setProductReferencePath, uploadVideo, uploadReference, reviewPrompt, adoptReview, create, regenerate, exportVideo, selectJob, refreshTask, resumeTask, terminateTask, pullResult, refreshJobs: load, clearDeletedJob, pullingResult: pullingResultID === selected?.id, terminating: terminatingID === selected?.id, resuming: resumingID === selected?.id,
+    sourceReady: Boolean(sourcePath),
+    sourcePreview,
+    replaceReady: referencePaths.length === 1,
+    scriptReady: Boolean(prompt.trim()),
+    busy,
+    videoReadProgress,
+    sourceDuration,
+    productReferencePath,
+    prompt,
+    personPrompt,
+    budget,
+    aiModel,
+    ratio,
+    resolution,
+    review,
+    selected,
+    displayed: selected?.file_path
+      ? `${fileUrl(selected.file_path)}?refresh=${mediaRefreshToken}`
+      : "",
+    error,
+    jobs,
+    openReplica: () => navigate("/video-replica"),
+    setPrompt,
+    setReview,
+    setPersonPrompt,
+    setBudget,
+    setAiModel,
+    setRatio,
+    setResolution,
+    setReferencePaths,
+    setProductReferencePath,
+    uploadVideo,
+    uploadReference,
+    reviewPrompt,
+    adoptReview,
+    create,
+    regenerate,
+    exportVideo,
+    selectJob,
+    refreshTask,
+    resumeTask,
+    terminateTask,
+    pullResult,
+    refreshJobs: load,
+    clearDeletedJob,
+    pullingResult: pullingResultID === selected?.id,
+    terminating: terminatingID === selected?.id,
+    resuming: resumingID === selected?.id,
   };
   const phases = [
     ["queued", "等待提交"],
@@ -642,117 +810,304 @@ export function AIVideoReplica() {
                 {p.selected ? statusText(p.selected.status) : "等待生成"}
               </span>
             </div>
-            <div  className="video-replica-preview-container">
-            {p.selected && (
-              <div
-                className="video-generation-progress ai-progress"
-                aria-live="polite"
-              >
-                <div className="generation-progress-head">
-                  <strong>{statusText(p.selected.status)}</strong>
-                  <span>
-                    {p.selected.status === "generating"
-                      ? "远端进度不可量化"
-                      : phases.find(
-                          ([phase]) => phase === p.selected?.status,
-                        )?.[1]}
-                  </span>
-                </div>
-                <div className="generation-phase-list ai-generation-phase-list">
-                  {phases.map(([phase, label], index) => (
-                    <div
-                      className={`generation-phase ${p.selected?.status === "ready" || (phaseIndex >= 0 && index < phaseIndex) ? "done" : ""} ${p.selected?.status === phase ? "active" : ""}`}
-                      key={phase}
-                    >
-                      <span className="generation-phase-dot" />
-                      <span>{label}</span>
-                    </div>
-                  ))}
-                </div>
-                {isPending(p.selected.status) && (
-                  <>
-                    <div
-                      className="generation-indeterminate"
-                      role="progressbar"
-                      aria-label="AI 复刻生成进行中"
-                    />
-                    {p.selected.status === "generating" && (
-                      <p className="generation-progress-detail">
-                        远端进度不可量化
-                      </p>
-                    )}
-                  </>
-                )}
-              </div>
-            )}
-            {p.selected?.task_type === "ai_replica" && (
-              <div
-                className="video-replica-panel skill2api-console"
-                aria-live="polite"
-              >
-                <strong>任务控制台</strong>
-                <div className="prompt-review-actions">
-                  {controls.waitingForInput ? (
-                    <>
-                      <input
-                        value={answer}
-                        disabled={!controls.canAnswer}
-                        onChange={(e) => setAnswer(e.target.value)}
-                        placeholder={
-                          p.selected.skill2api?.question || "请输入回答"
-                        }
-                      />
-                      <button
-                        className="button primary"
-                        type="button"
-                        disabled={!answer.trim() || !controls.canAnswer}
-                        onClick={async () => {
-                          if (await p.resumeTask(p.selected!.id, answer, ""))
-                            setAnswer("");
-                        }}
+            <div className="video-replica-preview-container">
+              {p.selected && (
+                <div
+                  className="video-generation-progress ai-progress"
+                  aria-live="polite"
+                >
+                  <div className="generation-progress-head">
+                    <strong>{statusText(p.selected.status)}</strong>
+                    <span>
+                      {p.selected.status === "generating"
+                        ? "远端进度不可量化"
+                        : phases.find(
+                            ([phase]) => phase === p.selected?.status,
+                          )?.[1]}
+                    </span>
+                  </div>
+                  <div className="generation-phase-list ai-generation-phase-list">
+                    {phases.map(([phase, label], index) => (
+                      <div
+                        className={`generation-phase ${p.selected?.status === "ready" || (phaseIndex >= 0 && index < phaseIndex) ? "done" : ""} ${p.selected?.status === phase ? "active" : ""}`}
+                        key={phase}
                       >
-                        {p.resuming ? "正在提交" : "提交"}
-                      </button>
-                    </>
-                  ) : controls.canResume ? (
+                        <span className="generation-phase-dot" />
+                        <span>{label}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {isPending(p.selected.status) && (
                     <>
-                      <input
-                        value={instruction}
-                        onChange={(e) => setInstruction(e.target.value)}
-                        placeholder="追加题词（可选）"
+                      <div
+                        className="generation-indeterminate"
+                        role="progressbar"
+                        aria-label="AI 复刻生成进行中"
                       />
+                      {p.selected.status === "generating" && (
+                        <p className="generation-progress-detail">
+                          远端进度不可量化
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+              {p.selected?.task_type === "ai_replica" && (
+                <div
+                  className="video-replica-panel skill2api-console"
+                  aria-live="polite"
+                >
+                  <strong>任务控制台</strong>
+                  <div className="prompt-review-actions">
+                    {controls.waitingForInput ? (
+                      <>
+                        <input
+                          value={answer}
+                          disabled={!controls.canAnswer}
+                          onChange={(e) => setAnswer(e.target.value)}
+                          placeholder={
+                            p.selected.skill2api?.question || "请输入回答"
+                          }
+                        />
+                        <button
+                          className="button primary"
+                          type="button"
+                          disabled={!answer.trim() || !controls.canAnswer}
+                          onClick={async () => {
+                            if (await p.resumeTask(p.selected!.id, answer, ""))
+                              setAnswer("");
+                          }}
+                        >
+                          {p.resuming ? "正在提交" : "提交"}
+                        </button>
+                      </>
+                    ) : controls.canResume ? (
+                      <>
+                        <input
+                          value={instruction}
+                          onChange={(e) => setInstruction(e.target.value)}
+                          placeholder="追加题词（可选）"
+                        />
+                        <button
+                          className="button secondary"
+                          type="button"
+                          disabled={!controls.canResume}
+                          onClick={async () => {
+                            if (
+                              await p.resumeTask(
+                                p.selected!.id,
+                                "",
+                                instruction,
+                              )
+                            )
+                              setInstruction("");
+                          }}
+                        >
+                          {p.resuming ? "正在恢复" : "恢复任务"}
+                        </button>
+                      </>
+                    ) : null}
+                    {p.resuming && (
+                      <span
+                        className="generation-progress-detail"
+                        role="status"
+                      >
+                        正在恢复远端任务…
+                      </span>
+                    )}
+                    {controls.canTerminate && (
                       <button
                         className="button secondary"
                         type="button"
-                        disabled={!controls.canResume}
-                        onClick={async () => {
-                          if (
-                            await p.resumeTask(p.selected!.id, "", instruction)
-                          )
-                            setInstruction("");
-                        }}
+                        disabled={!controls.canTerminate}
+                        onClick={() => void p.terminateTask(p.selected!.id)}
                       >
-                        {p.resuming ? "正在恢复" : "恢复任务"}
+                        <X size={16} />
+                        {p.terminating ? "正在终止" : "终止"}
                       </button>
-                    </>
-                  ) : null}
-                  {p.resuming && (
-                    <span className="generation-progress-detail" role="status">
-                      正在恢复远端任务…
-                    </span>
+                    )}
+                    {controls.canPullResult && (
+                      <button
+                        className="button primary"
+                        type="button"
+                        disabled={p.pullingResult}
+                        onClick={() => void p.pullResult(p.selected!.id)}
+                      >
+                        <Download size={16} />
+                        {p.pullingResult
+                          ? "正在重新拉取"
+                          : p.selected.file_path
+                            ? "重新拉取结果"
+                            : "手动拉取结果"}
+                      </button>
+                    )}
+                  </div>
+                  <button
+                    className="button secondary"
+                    type="button"
+                    disabled={logsLoading || !controls.canOpenLogs}
+                    onClick={() => void openLogs()}
+                  >
+                    <Terminal size={16} />
+                    {logsLoading ? "正在读取日志" : "查看运行日志"}
+                  </button>
+                  {!p.selected.skill2api_request_id && (
+                    <small>
+                      该历史任务尚未关联远程请求，请使用“再次生成”恢复。
+                    </small>
                   )}
-                  {controls.canTerminate && (
+                </div>
+              )}
+              {logsOpen && p.selected?.task_type === "ai_replica" && (
+                <div
+                  className="skill2api-log-backdrop"
+                  role="presentation"
+                  onClick={() => setLogsOpen(false)}
+                >
+                  <section
+                    className="skill2api-log-dialog"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="skill2api-log-title"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="skill2api-log-header">
+                      <div>
+                        <span className="step-kicker">SKILL2API</span>
+                        <h2 id="skill2api-log-title">运行日志</h2>
+                      </div>
+                      <button
+                        className="icon-button"
+                        type="button"
+                        aria-label="关闭日志"
+                        onClick={() => setLogsOpen(false)}
+                      >
+                        <X size={18} />
+                      </button>
+                    </div>
+                    <div
+                      className="skill2api-log-tabs"
+                      role="tablist"
+                      aria-label="远程任务记录"
+                    >
+                      {(["stdout", "stderr", "files"] as const).map((tab) => (
+                        <button
+                          key={tab}
+                          className="button secondary"
+                          type="button"
+                          role="tab"
+                          aria-selected={logTab === tab}
+                          onClick={() => setLogTab(tab)}
+                        >
+                          {tab === "files" ? "文件" : tab}
+                        </button>
+                      ))}
+                    </div>
+                    {p.selected.skill2api?.remote_error && (
+                      <p className="generation-progress-detail" role="status">
+                        远端记录不可用，正在显示本地日志快照。
+                      </p>
+                    )}
+                    {logTab === "files" && (
+                      <div className="skill2api-file-list">
+                        {p.selected.skill2api?.files?.map((path) => (
+                          <button
+                            className="button secondary"
+                            key={path}
+                            type="button"
+                            disabled={!!fileBusy}
+                            onClick={() => void downloadFile(path)}
+                          >
+                            <Download size={16} />
+                            <span>
+                              {fileBusy === path ? "正在获取：" : ""}
+                              {path}
+                            </span>
+                          </button>
+                        ))}
+                        {fileError && <p role="alert">{fileError}</p>}
+                      </div>
+                    )}
+                    <div className="skill2api-log-grid" role="tabpanel">
+                      <div>
+                        <pre className={logTab === "stderr" ? "error" : ""}>
+                          {logTab === "stdout"
+                            ? p.selected.skill2api?.stdout || "暂无标准输出"
+                            : logTab === "stderr"
+                              ? p.selected.skill2api?.stderr ||
+                                "远程错误输出不可用"
+                              : p.selected.skill2api?.files?.join("\n") ||
+                                "远程文件列表不可用"}
+                        </pre>
+                      </div>
+                    </div>
+                  </section>
+                </div>
+              )}
+              <div className="video-stage">
+                {p.displayed ? (
+                  <video key={p.displayed} src={p.displayed} controls />
+                ) : (
+                  <>
+                    <Film size={38} />
+                    <strong>
+                      {failed
+                        ? "生成失败"
+                        : controls.canPullResult
+                          ? "远端结果尚未保存到本机"
+                          : "等待生成结果"}
+                    </strong>
+                    <p>
+                      {failed ||
+                        (controls.canPullResult
+                          ? "请手动拉取结果，保存完成后会显示在这里"
+                          : "提交任务后，生成视频会显示在这里")}
+                    </p>
+                  </>
+                )}
+              </div>
+              {failed && (
+                <p
+                  className="notice notice-error video-generation-error"
+                  role="alert"
+                >
+                  {failed}
+                </p>
+              )}
+              <div className="preview-meta">
+                <span>
+                  <small>原视频</small>
+                  <b>{p.sourceReady ? "已选择" : "未选择"}</b>
+                </span>
+                <span>
+                  <small>商品参考图</small>
+                  <b>{p.replaceReady ? "已添加" : "未添加"}</b>
+                </span>
+              </div>
+              {p.selected && (
+                <div className="video-result-actions">
+                  <button
+                    className="button secondary"
+                    type="button"
+                    onClick={() => p.regenerate(p.selected!.id)}
+                    disabled={!controls.canRegenerate}
+                  >
+                    <RefreshCw size={16} />
+                    再次生成
+                  </button>
+                  {p.selected.file_path && (
                     <button
                       className="button secondary"
                       type="button"
-                      disabled={!controls.canTerminate}
-                      onClick={() => void p.terminateTask(p.selected!.id)}
+                      disabled={!!p.busy || controls.draftLocked}
+                      onClick={() => p.exportVideo(p.selected!.file_path!)}
                     >
-                      <X size={16} />
-                      {p.terminating ? "正在终止" : "终止"}
+                      <Download size={16} />
+                      导出视频
                     </button>
                   )}
-                  {controls.canPullResult && (
+                  {!p.selected.file_path && controls.canPullResult && (
                     <button
                       className="button primary"
                       type="button"
@@ -760,191 +1115,11 @@ export function AIVideoReplica() {
                       onClick={() => void p.pullResult(p.selected!.id)}
                     >
                       <Download size={16} />
-                      {p.pullingResult
-                        ? "正在重新拉取"
-                        : p.selected.file_path
-                          ? "重新拉取结果"
-                          : "手动拉取结果"}
+                      {p.pullingResult ? "正在拉取结果" : "手动拉取结果"}
                     </button>
                   )}
                 </div>
-                <button
-                  className="button secondary"
-                  type="button"
-                  disabled={logsLoading || !controls.canOpenLogs}
-                  onClick={() => void openLogs()}
-                >
-                  <Terminal size={16} />
-                  {logsLoading ? "正在读取日志" : "查看运行日志"}
-                </button>
-                {!p.selected.skill2api_request_id && (
-                  <small>
-                    该历史任务尚未关联远程请求，请使用“再次生成”恢复。
-                  </small>
-                )}
-              </div>
-            )}
-            {logsOpen && p.selected?.task_type === "ai_replica" && (
-              <div
-                className="skill2api-log-backdrop"
-                role="presentation"
-                onClick={() => setLogsOpen(false)}
-              >
-                <section
-                  className="skill2api-log-dialog"
-                  role="dialog"
-                  aria-modal="true"
-                  aria-labelledby="skill2api-log-title"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <div className="skill2api-log-header">
-                    <div>
-                      <span className="step-kicker">SKILL2API</span>
-                      <h2 id="skill2api-log-title">运行日志</h2>
-                    </div>
-                    <button
-                      className="icon-button"
-                      type="button"
-                      aria-label="关闭日志"
-                      onClick={() => setLogsOpen(false)}
-                    >
-                      <X size={18} />
-                    </button>
-                  </div>
-                  <div
-                    className="skill2api-log-tabs"
-                    role="tablist"
-                    aria-label="远程任务记录"
-                  >
-                    {(["stdout", "stderr", "files"] as const).map((tab) => (
-                      <button
-                        key={tab}
-                        className="button secondary"
-                        type="button"
-                        role="tab"
-                        aria-selected={logTab === tab}
-                        onClick={() => setLogTab(tab)}
-                      >
-                        {tab === "files" ? "文件" : tab}
-                      </button>
-                    ))}
-                  </div>
-                  {p.selected.skill2api?.remote_error && (
-                    <p className="generation-progress-detail" role="status">
-                      远端记录不可用，正在显示本地日志快照。
-                    </p>
-                  )}
-                  {logTab === "files" && (
-                    <div className="skill2api-file-list">
-                      {p.selected.skill2api?.files?.map((path) => (
-                        <button
-                          className="button secondary"
-                          key={path}
-                          type="button"
-                          disabled={!!fileBusy}
-                          onClick={() => void downloadFile(path)}
-                        >
-                          <Download size={16} />
-                          <span>
-                            {fileBusy === path ? "正在获取：" : ""}
-                            {path}
-                          </span>
-                        </button>
-                      ))}
-                      {fileError && <p role="alert">{fileError}</p>}
-                    </div>
-                  )}
-                  <div className="skill2api-log-grid" role="tabpanel">
-                    <div>
-                      <pre className={logTab === "stderr" ? "error" : ""}>
-                        {logTab === "stdout"
-                          ? p.selected.skill2api?.stdout || "暂无标准输出"
-                          : logTab === "stderr"
-                            ? p.selected.skill2api?.stderr ||
-                              "远程错误输出不可用"
-                            : p.selected.skill2api?.files?.join("\n") ||
-                              "远程文件列表不可用"}
-                      </pre>
-                    </div>
-                  </div>
-                </section>
-              </div>
-            )}
-            <div className="video-stage">
-              {p.displayed ? (
-                <video key={p.displayed} src={p.displayed} controls />
-              ) : (
-                <>
-                  <Film size={38} />
-                  <strong>
-                    {failed
-                      ? "生成失败"
-                      : controls.canPullResult
-                        ? "远端结果尚未保存到本机"
-                        : "等待生成结果"}
-                  </strong>
-                  <p>
-                    {failed ||
-                      (controls.canPullResult
-                        ? "请手动拉取结果，保存完成后会显示在这里"
-                        : "提交任务后，生成视频会显示在这里")}
-                  </p>
-                </>
               )}
-            </div>
-            {failed && (
-              <p
-                className="notice notice-error video-generation-error"
-                role="alert"
-              >
-                {failed}
-              </p>
-            )}
-            <div className="preview-meta">
-              <span>
-                <small>原视频</small>
-                <b>{p.sourceReady ? "已选择" : "未选择"}</b>
-              </span>
-              <span>
-                <small>商品参考图</small>
-                <b>{p.replaceReady ? "已添加" : "未添加"}</b>
-              </span>
-            </div>
-            {p.selected && (
-              <div className="video-result-actions">
-                <button
-                  className="button secondary"
-                  type="button"
-                  onClick={() => p.regenerate(p.selected!.id)}
-                  disabled={!controls.canRegenerate}
-                >
-                  <RefreshCw size={16} />
-                  再次生成
-                </button>
-                {p.selected.file_path && (
-                  <button
-                    className="button secondary"
-                    type="button"
-                    disabled={!!p.busy || controls.draftLocked}
-                    onClick={() => p.exportVideo(p.selected!.file_path!)}
-                  >
-                    <Download size={16} />
-                    导出视频
-                  </button>
-                )}
-                {!p.selected.file_path && controls.canPullResult && (
-                  <button
-                    className="button primary"
-                    type="button"
-                    disabled={p.pullingResult}
-                    onClick={() => void p.pullResult(p.selected!.id)}
-                  >
-                    <Download size={16} />
-                    {p.pullingResult ? "正在拉取结果" : "手动拉取结果"}
-                  </button>
-                )}
-              </div>
-            )}
             </div>
           </section>
         </div>

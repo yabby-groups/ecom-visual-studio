@@ -6,9 +6,12 @@ describe("videoPreviewRatio", () => {
     [1920, 1080, "1920 / 1080"],
     [1080, 1920, "1080 / 1920"],
     [1080, 1080, "1080 / 1080"],
-  ])("returns the intrinsic ratio for %ix%i video", (width, height, expected) => {
-    expect(videoPreviewRatio(width, height)).toBe(expected);
-  });
+  ])(
+    "returns the intrinsic ratio for %ix%i video",
+    (width, height, expected) => {
+      expect(videoPreviewRatio(width, height)).toBe(expected);
+    },
+  );
 
   it.each([
     [0, 1080],

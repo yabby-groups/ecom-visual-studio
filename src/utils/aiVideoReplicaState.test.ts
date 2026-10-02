@@ -46,7 +46,10 @@ describe("aiVideoReplicaControls", () => {
       aiVideoReplicaControls({ status: "interrupted", requestID: "remote-1" }),
     ).toMatchObject({ canResume: true, canRegenerate: true });
     expect(
-      aiVideoReplicaControls({ status: "failed: provider unavailable", requestID: "remote-1" }),
+      aiVideoReplicaControls({
+        status: "failed: provider unavailable",
+        requestID: "remote-1",
+      }),
     ).toMatchObject({ canResume: false, canRegenerate: true });
     expect(
       aiVideoReplicaControls({ status: "terminated", requestID: "remote-1" }),
@@ -60,7 +63,9 @@ describe("aiVideoReplicaControls", () => {
   });
 
   it("does not expose remote controls without a request id", () => {
-    expect(aiVideoReplicaControls({ status: "failed: local upload" })).toMatchObject({
+    expect(
+      aiVideoReplicaControls({ status: "failed: local upload" }),
+    ).toMatchObject({
       canResume: false,
       canOpenLogs: false,
     });
@@ -73,6 +78,10 @@ describe("aiVideoReplicaControls", () => {
         requestID: "remote-1",
         resuming: true,
       }),
-    ).toMatchObject({ canAnswer: false, canOpenLogs: false, draftLocked: true });
+    ).toMatchObject({
+      canAnswer: false,
+      canOpenLogs: false,
+      draftLocked: true,
+    });
   });
 });
