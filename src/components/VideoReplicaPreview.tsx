@@ -71,6 +71,12 @@ export function VideoReplicaPreview({
 
   return (
     <section className="video-replica-preview">
+      <div className="video-replica-meta">
+        <span className="workflow-badge">
+          {selected ? statusText(selected.status) : "未开始"}
+        </span>
+        <span>时长不限 · 200MB</span>
+      </div>
       <div className="video-replica-panel-head">
         <div>
           <span className="step-kicker">OUTPUT PREVIEW</span>

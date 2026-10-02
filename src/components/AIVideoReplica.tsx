@@ -13,7 +13,13 @@ import {
 import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import type { VideoReplicaJob } from "../types";
-import { failureReason, fileUrl, isPending, statusText, userFacingError } from "../utils/assets";
+import {
+  failureReason,
+  fileUrl,
+  isPending,
+  statusText,
+  userFacingError,
+} from "../utils/assets";
 import { useRequireAiAuth } from "../auth";
 import { Shell } from "./Shell";
 import { SettingsSelect } from "./SettingsSelect";
@@ -312,20 +318,6 @@ export function AIVideoReplica() {
           <span className="eyebrow">AI VIDEO STUDIO / QUICK REPLACE</span>
           <h1>AI 复刻</h1>
           <p>用原视频的节奏和镜头，替换为你的商品并生成新版本。</p>
-        </div>
-        <div className="video-replica-meta">
-          <span className="workflow-badge">
-            {p.selected ? statusText(p.selected.status) : "未开始"}
-          </span>
-          <button
-            className="button secondary"
-            type="button"
-            disabled={controls.draftLocked}
-            onClick={p.openReplica}
-          >
-            <RefreshCw size={15} />
-            分镜复刻
-          </button>
         </div>
       </header>
       <main className="video-replica">
@@ -635,6 +627,12 @@ export function AIVideoReplica() {
             </div>
           </section>
           <section className="video-replica-preview">
+            <div className="video-replica-meta">
+              <span className="workflow-badge">
+                {p.selected ? statusText(p.selected.status) : "未开始"}
+              </span>
+              <span>时长不限 · 200MB</span>
+            </div>
             <div className="video-replica-panel-head">
               <div>
                 <span className="step-kicker">RESULT</span>
@@ -644,6 +642,7 @@ export function AIVideoReplica() {
                 {p.selected ? statusText(p.selected.status) : "等待生成"}
               </span>
             </div>
+            <div  className="video-replica-preview-container">
             {p.selected && (
               <div
                 className="video-generation-progress ai-progress"
@@ -946,6 +945,7 @@ export function AIVideoReplica() {
                 )}
               </div>
             )}
+            </div>
           </section>
         </div>
         <section className="video-replica-history">

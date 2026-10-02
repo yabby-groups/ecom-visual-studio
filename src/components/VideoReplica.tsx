@@ -10,7 +10,6 @@ import type {
 import {
   fileUrl,
   isPending,
-  statusText,
   userFacingError,
 } from "../utils/assets";
 import { Shell } from "./Shell";
@@ -358,12 +357,6 @@ export function VideoReplica() {
           <p>
             选择一条本机视频，复刻它的节奏、镜头和动作，生成属于你的新版本。
           </p>
-        </div>
-        <div className="video-replica-meta">
-          <span className="workflow-badge">
-            {selected ? statusText(selected.status) : "未开始"}
-          </span>
-          <span>时长不限 · 200MB</span>
         </div>
       </header>
       <main className="video-replica">

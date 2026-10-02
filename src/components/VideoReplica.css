@@ -127,12 +127,15 @@
   line-height: 1.55;
 }
 .video-replica-meta {
-  grid-column: 2;
+  /* grid-column: 2; */
   display: flex;
   align-items: center;
   gap: 10px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 14px;
+  position: absolute;
+  top: -64px;
+  right: 0px;
 }
 .workflow-badge {
   padding: 6px 9px;
@@ -194,10 +197,16 @@
 }
 .video-replica-preview {
   position: sticky;
-  top: 20px;
+  top: 132px;
   align-self: start;
   min-width: 0;
-  overflow: hidden;
+  max-height: calc(100vh - 160px);
+  /* overflow: hidden; */
+}
+.video-replica-preview-container {
+    overflow: scroll;
+    height: 100%;
+    max-height: calc(100vh - 180px);
 }
 .video-replica-panel,
 .video-replica-preview,
