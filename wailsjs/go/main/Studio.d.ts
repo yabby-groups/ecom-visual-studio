@@ -114,7 +114,7 @@ export function UpdateTemplate(arg1:string,arg2:main.TemplateInput):Promise<Reco
 
 export function UpdateVideoReplicaStoryboard(arg1:string,arg2:Array<Record<string, any>>):Promise<Record<string, boolean>>;
 
-export function UpdateWorkTitle(arg1:Record<string, string>):Promise<Record<string, string>>;
+export function UpdateWorkTitle(arg1:main.workTitleInput):Promise<Record<string, string>>;
 
 export function Upload(arg1:string,arg2:string,arg3:Array<number>):Promise<Record<string, string>>;
 
