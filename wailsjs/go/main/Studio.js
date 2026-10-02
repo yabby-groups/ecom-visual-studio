@@ -190,6 +190,10 @@ export function StorageLocation() {
   return window['go']['main']['Studio']['StorageLocation']();
 }
 
+export function SuggestWorkTitles(arg1, arg2) {
+  return window['go']['main']['Studio']['SuggestWorkTitles'](arg1, arg2);
+}
+
 export function Templates() {
   return window['go']['main']['Studio']['Templates']();
 }
@@ -220,6 +224,10 @@ export function UpdateTemplate(arg1, arg2) {
 
 export function UpdateVideoReplicaStoryboard(arg1, arg2) {
   return window['go']['main']['Studio']['UpdateVideoReplicaStoryboard'](arg1, arg2);
+}
+
+export function UpdateWorkTitle(arg1) {
+  return window['go']['main']['Studio']['UpdateWorkTitle'](arg1);
 }
 
 export function Upload(arg1, arg2, arg3) {

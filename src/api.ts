@@ -72,6 +72,13 @@ export const client = {
   addAsset: (projectId: string, templateId: string) =>
     call<{ id: string }>("AddAsset", projectId, templateId),
   deleteProject: (id: string) => call("DeleteProject", id),
+  updateWorkTitle: (body: {
+    kind: "project" | "try-on" | "video";
+    id: string;
+    title: string;
+  }) => call<{ title: string }>("UpdateWorkTitle", body),
+  suggestWorkTitles: (kind: "project" | "try-on" | "video", id: string) =>
+    call<{ titles: string[] }>("SuggestWorkTitles", kind, id),
   updateAsset: (id: string, body: Partial<Asset>) =>
     call("UpdateAsset", id, body),
   changeAssetTemplate: (id: string, templateId: string, overwrite: boolean) =>

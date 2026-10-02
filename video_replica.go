@@ -520,7 +520,7 @@ func (s *Studio) VideoReplicaJobs(limit, offset int) (map[string]any, error) {
 	if err := s.db.QueryRow("select count(*) from video_replica_jobs").Scan(&total); err != nil {
 		return nil, err
 	}
-	rows, err := s.db.Query("select id,source_video_path,reference_paths,product_reference_path,task_type,model,prompt,storyboard,storyboard_confirmed,duration,resolution,ratio,status,file_path,generation_started_at,created_at,ai_person_prompt,ai_budget from video_replica_jobs order by created_at desc,id desc limit ? offset ?", limit, offset)
+	rows, err := s.db.Query("select id,title,source_video_path,reference_paths,product_reference_path,task_type,model,prompt,storyboard,storyboard_confirmed,duration,resolution,ratio,status,file_path,generation_started_at,created_at,ai_person_prompt,ai_budget from video_replica_jobs order by created_at desc,id desc limit ? offset ?", limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -551,7 +551,7 @@ func (s *Studio) VideoReplicaJob(id string) (map[string]any, error) {
 	}
 	var job map[string]any
 	for attempt := 0; attempt < 5; attempt++ {
-		row := s.db.QueryRow("select id,source_video_path,reference_paths,product_reference_path,task_type,model,prompt,storyboard,storyboard_confirmed,duration,resolution,ratio,status,file_path,generation_started_at,created_at,ai_person_prompt,ai_budget from video_replica_jobs where id=?", id)
+		row := s.db.QueryRow("select id,title,source_video_path,reference_paths,product_reference_path,task_type,model,prompt,storyboard,storyboard_confirmed,duration,resolution,ratio,status,file_path,generation_started_at,created_at,ai_person_prompt,ai_budget from video_replica_jobs where id=?", id)
 		job, err = scanVideoReplicaRow(row)
 		if err != sql.ErrNoRows {
 			break
@@ -1097,20 +1097,20 @@ func (s *Studio) mediaDataURL(localPath string, video bool) (string, error) {
 }
 
 func scanVideoReplicaRow(row rowScanner) (map[string]any, error) {
-	var id, source, refsJSON, productReferencePath, taskType, model, prompt, storyboardJSON, resolution, ratio, status, personPrompt string
+	var id, title, source, refsJSON, productReferencePath, taskType, model, prompt, storyboardJSON, resolution, ratio, status, personPrompt string
 	var confirmed, duration int
 	var budget float64
 	var path sql.NullString
 	var started sql.NullInt64
 	var created int64
-	if err := row.Scan(&id, &source, &refsJSON, &productReferencePath, &taskType, &model, &prompt, &storyboardJSON, &confirmed, &duration, &resolution, &ratio, &status, &path, &started, &created, &personPrompt, &budget); err != nil {
+	if err := row.Scan(&id, &title, &source, &refsJSON, &productReferencePath, &taskType, &model, &prompt, &storyboardJSON, &confirmed, &duration, &resolution, &ratio, &status, &path, &started, &created, &personPrompt, &budget); err != nil {
 		return nil, err
 	}
 	var refs []string
 	var storyboard []map[string]any
 	_ = json.Unmarshal([]byte(refsJSON), &refs)
 	_ = json.Unmarshal([]byte(storyboardJSON), &storyboard)
-	return map[string]any{"id": id, "source_video_path": source, "reference_paths": refs, "product_reference_path": productReferencePath, "task_type": taskType, "model": model, "prompt": prompt, "storyboard": storyboard, "storyboard_confirmed": confirmed == 1, "duration": duration, "resolution": resolution, "ratio": ratio, "status": status, "file_path": nullableString(path), "generation_started_at": nullableInt(started), "created_at": created, "ai_person_prompt": personPrompt, "ai_budget": budget, "versions": []map[string]any{}}, nil
+	return map[string]any{"id": id, "title": title, "source_video_path": source, "reference_paths": refs, "product_reference_path": productReferencePath, "task_type": taskType, "model": model, "prompt": prompt, "storyboard": storyboard, "storyboard_confirmed": confirmed == 1, "duration": duration, "resolution": resolution, "ratio": ratio, "status": status, "file_path": nullableString(path), "generation_started_at": nullableInt(started), "created_at": created, "ai_person_prompt": personPrompt, "ai_budget": budget, "versions": []map[string]any{}}, nil
 }
 
 func (s *Studio) populateVideoReplicaVersions(job map[string]any) error {

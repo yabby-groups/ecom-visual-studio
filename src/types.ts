@@ -113,6 +113,7 @@ export type StorageLocation = {
 };
 export type TryOnJob = {
   id: string;
+  title: string;
   user_id: string;
   person_path: string;
   garment_path: string;
@@ -176,6 +177,7 @@ export type VideoReplicaProgress = {
 };
 export type VideoReplicaJob = {
   id: string;
+  title: string;
   source_video_path: string;
   reference_paths: string[];
   product_reference_path: string;

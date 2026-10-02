@@ -96,6 +96,8 @@ export function StartHuabotAuthorization():Promise<main.deviceAuthorization>;
 
 export function StorageLocation():Promise<Record<string, any>>;
 
+export function SuggestWorkTitles(arg1:string,arg2:string):Promise<Record<string, Array<string>>>;
+
 export function Templates():Promise<Array<Record<string, any>>>;
 
 export function TerminateAIVideoReplica(arg1:string):Promise<Record<string, any>>;
@@ -111,6 +113,8 @@ export function UpdateAsset(arg1:string,arg2:main.AssetPatch):Promise<Record<str
 export function UpdateTemplate(arg1:string,arg2:main.TemplateInput):Promise<Record<string, boolean>>;
 
 export function UpdateVideoReplicaStoryboard(arg1:string,arg2:Array<Record<string, any>>):Promise<Record<string, boolean>>;
+
+export function UpdateWorkTitle(arg1:Record<string, string>):Promise<Record<string, string>>;
 
 export function Upload(arg1:string,arg2:string,arg3:Array<number>):Promise<Record<string, string>>;
 

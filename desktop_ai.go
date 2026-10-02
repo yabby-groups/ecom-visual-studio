@@ -529,7 +529,7 @@ func (s *Studio) TryOnJobs(limit, offset int) (map[string]any, error) {
 	if err := s.db.QueryRow("select count(*) from try_on_jobs").Scan(&total); err != nil {
 		return nil, err
 	}
-	rows, err := s.db.Query("select id,person_paths,garment_paths,generation_mode,instructions,ratio,status,file_path,generation_started_at,created_at from try_on_jobs order by created_at desc, id desc limit ? offset ?", limit, offset)
+	rows, err := s.db.Query("select id,title,person_paths,garment_paths,generation_mode,instructions,ratio,status,file_path,generation_started_at,created_at from try_on_jobs order by created_at desc, id desc limit ? offset ?", limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -559,17 +559,17 @@ func (s *Studio) TryOnJobs(limit, offset int) (map[string]any, error) {
 type rowScanner interface{ Scan(...any) error }
 
 func scanTryOnRow(row rowScanner) (map[string]any, error) {
-	var id, pp, gg, mode, instructions, ratio, status string
+	var id, title, pp, gg, mode, instructions, ratio, status string
 	var path sql.NullString
 	var started sql.NullInt64
 	var created int64
-	if err := row.Scan(&id, &pp, &gg, &mode, &instructions, &ratio, &status, &path, &started, &created); err != nil {
+	if err := row.Scan(&id, &title, &pp, &gg, &mode, &instructions, &ratio, &status, &path, &started, &created); err != nil {
 		return nil, err
 	}
 	var persons, garments []string
 	_ = json.Unmarshal([]byte(pp), &persons)
 	_ = json.Unmarshal([]byte(gg), &garments)
-	return map[string]any{"id": id, "person_paths": persons, "garment_paths": garments, "person_path": persons[0], "garment_path": garments[0], "generation_mode": mode, "instructions": instructions, "ratio": ratio, "status": status, "file_path": nullableString(path), "generation_started_at": nullableInt(started), "created_at": created, "versions": []map[string]any{}}, nil
+	return map[string]any{"id": id, "title": title, "person_paths": persons, "garment_paths": garments, "person_path": persons[0], "garment_path": garments[0], "generation_mode": mode, "instructions": instructions, "ratio": ratio, "status": status, "file_path": nullableString(path), "generation_started_at": nullableInt(started), "created_at": created, "versions": []map[string]any{}}, nil
 }
 
 func (s *Studio) populateTryOnVersions(job map[string]any) error {
@@ -606,7 +606,7 @@ func (s *Studio) scanTryOn(row rowScanner) (map[string]any, error) {
 	return job, nil
 }
 func (s *Studio) TryOnJob(id string) (map[string]any, error) {
-	row := s.db.QueryRow("select id,person_paths,garment_paths,generation_mode,instructions,ratio,status,file_path,generation_started_at,created_at from try_on_jobs where id=?", id)
+	row := s.db.QueryRow("select id,title,person_paths,garment_paths,generation_mode,instructions,ratio,status,file_path,generation_started_at,created_at from try_on_jobs where id=?", id)
 	return s.scanTryOn(row)
 }
 func (s *Studio) RegenerateTryOn(id string) (map[string]bool, error) {

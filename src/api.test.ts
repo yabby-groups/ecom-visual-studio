@@ -108,6 +108,45 @@ describe("client settings refresh", () => {
   });
 });
 
+describe("client work naming", () => {
+  it("forwards title saves and AI suggestions through Wails", async () => {
+    const updateWorkTitle = vi.fn(async () => ({ title: "秋日通勤穿搭" }));
+    const suggestWorkTitles = vi.fn(async () => ({
+      titles: ["秋日通勤穿搭", "轻盈午后", "都市衣橱"],
+    }));
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: {
+        go: {
+          main: {
+            Studio: {
+              UpdateWorkTitle: updateWorkTitle,
+              SuggestWorkTitles: suggestWorkTitles,
+            },
+          },
+        },
+      },
+    });
+
+    await expect(
+      client.updateWorkTitle({
+        kind: "try-on",
+        id: "try-1",
+        title: "秋日通勤穿搭",
+      }),
+    ).resolves.toEqual({ title: "秋日通勤穿搭" });
+    await expect(client.suggestWorkTitles("try-on", "try-1")).resolves.toEqual({
+      titles: ["秋日通勤穿搭", "轻盈午后", "都市衣橱"],
+    });
+    expect(updateWorkTitle).toHaveBeenCalledWith({
+      kind: "try-on",
+      id: "try-1",
+      title: "秋日通勤穿搭",
+    });
+    expect(suggestWorkTitles).toHaveBeenCalledWith("try-on", "try-1");
+  });
+});
+
 describe("client video prompt review", () => {
   it("forwards the selected mode and current prompt to the Wails binding", async () => {
     const review = vi.fn(async () => ({
