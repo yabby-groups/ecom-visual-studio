@@ -1,61 +1,35 @@
-import {
-  Check,
-  Download,
-  Film,
-  LoaderCircle,
-  Play,
-  RefreshCw,
-  ShieldCheck,
-  Upload,
-  X,
-} from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { Check, Film, LoaderCircle, Play, RefreshCw, ShieldCheck, Upload, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useLocation, useParams } from "react-router-dom";
 import { client } from "../api";
 import { useRequireAiAuth } from "../auth";
 import type {
   VideoReplicaJob,
   VideoReplicaStoryboardItem,
-  VideoReplicaSegment,
 } from "../types";
 import {
-  failureReason,
   fileUrl,
   isPending,
   statusText,
   userFacingError,
 } from "../utils/assets";
-import {
-  defaultVideoPreviewRatio,
-  videoPreviewRatio,
-} from "../utils/videoPreview";
 import { Shell } from "./Shell";
 import { SettingsSelect } from "./SettingsSelect";
-import { AIVideoReplica } from "./AIVideoReplica";
+import { VideoReplicaPreview } from "./VideoReplicaPreview";
 import { VideoWorksList } from "./VideoWorksList";
 import "./VideoReplica.css";
 
 const defaultStoryboard: VideoReplicaStoryboardItem[] = [];
 
-type VideoReplicaProps = {
-  workflow: "replica" | "ai_replica";
-};
-
-export function VideoReplica({ workflow }: VideoReplicaProps) {
+export function VideoReplica() {
   const location = useLocation();
-  const navigate = useNavigate();
   const { id: routeJobID } = useParams<{ id: string }>();
   const requireAiAuth = useRequireAiAuth();
   const [sourcePath, setSourcePath] = useState("");
   const [sourcePreview, setSourcePreview] = useState("");
   const [referencePaths, setReferencePaths] = useState<string[]>([]);
   const [productReferencePath, setProductReferencePath] = useState("");
-  const [mode, setMode] = useState<"replica" | "replace" | "ai_replica">(
-    workflow,
-  );
-  const [personPrompt, setPersonPrompt] = useState("公开的虚拟人像");
-  const [budget, setBudget] = useState(2);
-  const [aiModel, setAiModel] = useState("qwen3.8-flash");
+  const [mode, setMode] = useState<"replica" | "replace">("replica");
   const [jobs, setJobs] = useState<VideoReplicaJob[]>([]);
   const [selected, setSelected] = useState<VideoReplicaJob | null>(null);
   const [storyboard, setStoryboard] =
@@ -74,10 +48,6 @@ export function VideoReplica({ workflow }: VideoReplicaProps) {
     null,
   );
   const [error, setError] = useState("");
-  const [terminatingID, setTerminatingID] = useState("");
-  const [resumingID, setResumingID] = useState("");
-  const [mediaRefreshToken, setMediaRefreshToken] = useState(0);
-  const [previewRatio, setPreviewRatio] = useState(defaultVideoPreviewRatio);
   const [review, setReview] = useState<{
     score: number;
     issues: string[];
@@ -109,14 +79,8 @@ export function VideoReplica({ workflow }: VideoReplicaProps) {
     userFacingError(reason instanceof Error ? reason.message : "", fallback);
 
   function selectJob(job: VideoReplicaJob) {
-    const jobWorkflow =
-      job.task_type === "ai_replica" ? "ai_replica" : "replica";
-    if (jobWorkflow !== workflow) {
-      setError(
-        workflow === "ai_replica"
-          ? "该作品属于普通复刻视频，请从普通复刻视频作品库打开。"
-          : "该作品属于 AI 复刻视频，请从 AI 复刻作品库打开。",
-      );
+    if (job.task_type === "ai_replica") {
+      setError("该作品属于 AI 复刻，请从 AI 复刻页面打开。");
       return;
     }
     setSelected(job);
@@ -132,14 +96,8 @@ export function VideoReplica({ workflow }: VideoReplicaProps) {
         ? "seedance-2.0"
         : "seedance-2.5",
     );
-    if (job.task_type === "ai_replica") {
-      setPersonPrompt(job.ai_person_prompt ?? "");
-      setBudget(job.ai_budget ?? 2);
-      setAiModel(job.model);
-    } else {
-      setTaskType(job.task_type);
-    }
-    setMode(workflow);
+    setTaskType(job.task_type);
+    setMode(job.task_type === "replace" ? "replace" : "replica");
     setDuration(job.duration);
     setSourceDuration(job.duration || null);
     setRatio(job.ratio);
@@ -152,13 +110,13 @@ export function VideoReplica({ workflow }: VideoReplicaProps) {
 
   async function load() {
     try {
-      // The history panel shows both regular and AI replica jobs. Load the
-      // largest supported page so older AI jobs are not hidden by mixed-task
-      // pagination.
       const result = await client.videoReplicaJobs(48, 0);
-      setJobs(result.items);
+      const regularJobs = result.items.filter(
+        (item) => item.task_type !== "ai_replica",
+      );
+      setJobs(regularJobs);
       if (selected) {
-        const fresh = result.items.find((item) => item.id === selected.id);
+        const fresh = regularJobs.find((item) => item.id === selected.id);
         if (fresh)
           selectJob({
             ...fresh,
@@ -176,9 +134,6 @@ export function VideoReplica({ workflow }: VideoReplicaProps) {
     void load();
   }, []);
   useEffect(() => {
-    setMode(workflow);
-  }, [workflow]);
-  useEffect(() => {
     const jobID =
       routeJobID || (location.state as { jobId?: string } | null)?.jobId;
     if (!jobID) return;
@@ -193,110 +148,9 @@ export function VideoReplica({ workflow }: VideoReplicaProps) {
     if (!jobs.some((job) => isPending(job.status))) return;
     const timer = window.setInterval(() => {
       void load();
-      const aiJobs = jobs.filter(
-        (job) => job.task_type === "ai_replica" && isPending(job.status),
-      );
-      for (const job of aiJobs) {
-        if (job.skill2api_request_id) void refreshTask(job.id);
-      }
     }, 5000);
     return () => window.clearInterval(timer);
   }, [jobs.map((job) => `${job.id}:${job.status}`).join("|")]);
-
-  // Hydrate remote stdout/stderr when a historical AI task is selected.
-  useEffect(() => {
-    if (selected?.task_type !== "ai_replica" || !selected.skill2api_request_id)
-      return;
-    void refreshTask(selected.id);
-  }, [selected?.id]);
-
-  async function refreshTask(id: string) {
-    try {
-      const remote = await client.refreshAIVideoReplica(id);
-      setSelected((current) =>
-        current?.id === id
-          ? {
-              ...current,
-              status: remote.status as VideoReplicaJob["status"],
-              skill2api: remote,
-            }
-          : current,
-      );
-      setJobs((items) =>
-        items.map((item) =>
-          item.id === id
-            ? {
-                ...item,
-                status: remote.status as VideoReplicaJob["status"],
-                skill2api: remote,
-              }
-            : item,
-        ),
-      );
-    } catch (reason) {
-      const message = operationError(reason, "远程记录已过期或不可用");
-      setSelected((current) =>
-        current?.id === id
-          ? {
-              ...current,
-              skill2api: {
-                request_id: current.skill2api_request_id || "",
-                status: "unavailable",
-                error: message,
-              },
-            }
-          : current,
-      );
-      setError(message);
-    }
-  }
-  async function resumeTask(id: string, answer: string, instruction: string) {
-    setResumingID(id);
-    setError("");
-    try {
-      await client.resumeAIVideoReplica(id, answer, instruction);
-      await load();
-      return true;
-    } catch (reason) {
-      setError(operationError(reason, "无法继续任务"));
-      return false;
-    } finally {
-      setResumingID("");
-    }
-  }
-  async function terminateTask(id: string) {
-    setTerminatingID(id);
-    setError("");
-    try {
-      const result = await client.terminateAIVideoReplica(id);
-      await load();
-      if (typeof result.remote_error === "string")
-        setError(result.remote_error);
-    } catch (reason) {
-      setError(operationError(reason, "无法终止任务"));
-    } finally {
-      setTerminatingID("");
-    }
-  }
-
-  const [pullingResultID, setPullingResultID] = useState("");
-  async function pullResult(id: string) {
-    setPullingResultID(id);
-    setError("");
-    try {
-      const ok = await client.pullAIVideoReplicaResult(id);
-      const fresh = await client.videoReplicaJob(id);
-      selectJob(fresh);
-      if (ok) setMediaRefreshToken((value) => value + 1);
-      await load();
-      return ok;
-    } catch (reason) {
-      setError(operationError(reason, "无法拉取远程结果"));
-      return false;
-    } finally {
-      setPullingResultID("");
-    }
-  }
 
   async function uploadVideo(file: File) {
     setBusy("upload");
@@ -342,16 +196,13 @@ export function VideoReplica({ workflow }: VideoReplicaProps) {
   }
 
   async function uploadReference(file: File) {
-    if (mode === "ai_replica") setReferencePaths([]);
     if (mode !== "replace" && referencePaths.length >= 4) return;
     setBusy("reference");
     setError("");
     try {
       const result = await client.upload(file);
       setReferencePaths((paths) => [...paths, result.path]);
-      setProductReferencePath((path) =>
-        mode === "ai_replica" || !path ? result.path : path,
-      );
+      setProductReferencePath((path) => (mode === "replace" || !path ? result.path : path));
     } catch (reason) {
       setError(operationError(reason, "添加图片失败"));
     } finally {
@@ -397,10 +248,7 @@ export function VideoReplica({ workflow }: VideoReplicaProps) {
     setBusy("review");
     setError("");
     try {
-      const result = await client.reviewVideoReplicaPrompt(
-        mode === "ai_replica" ? "replica" : mode,
-        prompt,
-      );
+      const result = await client.reviewVideoReplicaPrompt(mode, prompt);
       setReview({ ...result, source: prompt });
     } catch (reason) {
       setError(operationError(reason, "AI 审核失败"));
@@ -418,48 +266,24 @@ export function VideoReplica({ workflow }: VideoReplicaProps) {
   async function create() {
     if (!requireAiAuth()) return;
     if (!sourcePath || !prompt.trim()) {
-      setError(
-        mode === "ai_replica"
-          ? "请先选择视频并填写复刻说明"
-          : "请先选择原视频并确认复刻脚本",
-      );
-      return;
-    }
-    if (mode === "ai_replica" && referencePaths.length !== 1) {
-      setError("请添加一张商品图片");
-      return;
-    }
-    if (mode === "ai_replica" && (!Number.isFinite(budget) || budget <= 0)) {
-      setError("预算必须大于 0");
+      setError("请先选择原视频并确认复刻脚本");
       return;
     }
     setBusy("create");
     setError("");
     try {
-      const result =
-        mode === "ai_replica"
-          ? await client.createAIVideoReplica({
-              source_video_path: sourcePath,
-              product_path: productReferencePath || referencePaths[0],
-              prompt,
-              person_prompt: personPrompt,
-              model: aiModel,
-              resolution,
-              ratio,
-              budget,
-            })
-          : await client.createVideoReplica({
-              source_video_path: sourcePath,
-              reference_paths: referencePaths,
-              product_reference_path: productReferencePath,
-              task_type: taskType,
-              model,
-              prompt,
-              storyboard,
-              duration,
-              resolution,
-              ratio,
-            });
+      const result = await client.createVideoReplica({
+        source_video_path: sourcePath,
+        reference_paths: referencePaths,
+        product_reference_path: productReferencePath,
+        task_type: taskType,
+        model,
+        prompt,
+        storyboard,
+        duration,
+        resolution,
+        ratio,
+      });
       await load();
       const fresh = await client.videoReplicaJob(result.id);
       selectJob(fresh);
@@ -492,25 +316,8 @@ export function VideoReplica({ workflow }: VideoReplicaProps) {
     setBusy(id);
     setError("");
     try {
-      const job = jobs.find((item) => item.id === id);
-      if (job?.task_type === "ai_replica") {
-        const result = await client.createAIVideoReplica({
-          source_video_path: job.source_video_path,
-          product_path: job.product_reference_path || job.reference_paths[0],
-          prompt: job.prompt,
-          person_prompt: job.ai_person_prompt ?? personPrompt,
-          model: job.model,
-          resolution: job.resolution,
-          ratio: job.ratio,
-          budget: job.ai_budget ?? budget,
-        });
-        await load();
-        const fresh = await client.videoReplicaJob(result.id);
-        selectJob(fresh);
-      } else {
-        await client.regenerateVideoReplica(id);
-        await load();
-      }
+      await client.regenerateVideoReplica(id);
+      await load();
       await load();
     } catch (reason) {
       setError(operationError(reason, "重新生成失败"));
@@ -531,25 +338,9 @@ export function VideoReplica({ workflow }: VideoReplicaProps) {
     }
   }
 
-  const displayed = selected?.file_path
-    ? `${fileUrl(selected.file_path)}?refresh=${mediaRefreshToken}`
-    : "";
-  useEffect(() => {
-    setPreviewRatio(defaultVideoPreviewRatio);
-  }, [displayed]);
-  const selectedLabel = useMemo(
-    () =>
-      selected
-        ? `${selected.model} · ${statusText(selected.status)}`
-        : "等待生成结果",
-    [selected],
-  );
-  const selectedFailure = selected?.status.startsWith("failed")
-    ? failureReason(selected.status)
-    : "";
   const sourceReady = Boolean(sourcePath);
   const scriptReady = Boolean(prompt.trim());
-  const replaceReady = mode === "ai_replica" && referencePaths.length === 1;
+  const replaceReady = mode === "replace" && referencePaths.length > 0;
   const maxSegmentDuration = model === "seedance-2.0" ? 15 : 30;
   const durationOptions = [5, 10, 15, 30, 60, 120, 180, 300];
   const stepStatus = (step: number) =>
@@ -558,140 +349,6 @@ export function VideoReplica({ workflow }: VideoReplicaProps) {
     (step === 3 && Boolean(selected))
       ? "done"
       : "";
-  const progress = selected?.progress;
-  const segmentStatus = (segment: VideoReplicaSegment) => {
-    if (segment.status.startsWith("failed")) return "失败";
-    return (
-      (
-        {
-          queued: "排队中",
-          submitting: "提交中",
-          generating: "生成中",
-          downloading: "保存中",
-          ready: "已完成",
-        } as Record<string, string>
-      )[segment.status] || segment.status
-    );
-  };
-  const phaseSteps = [
-    ["preparing", "准备素材"],
-    ["generating", "生成片段"],
-    ["downloading", "保存片段"],
-    ["merging", "合并视频"],
-    ["ready", "完成"],
-  ] as const;
-  const phaseIndex = selected
-    ? phaseSteps.findIndex(([phase]) => phase === selected.status)
-    : -1;
-  const aiControls =
-    mode === "ai_replica" ? (
-      <div className="video-controls ai-replica-controls">
-        <label>
-          人物替换说明
-          <input
-            value={personPrompt}
-            onChange={(event) => setPersonPrompt(event.target.value)}
-          />
-        </label>
-        <label>
-          预算（美元）
-          <input
-            type="number"
-            min="0.01"
-            step="0.01"
-            value={budget}
-            onChange={(event) => setBudget(Number(event.target.value))}
-          />
-        </label>
-        <label>
-          执行模型
-          <input
-            value={aiModel}
-            onChange={(event) => setAiModel(event.target.value)}
-          />
-        </label>
-      </div>
-    ) : null;
-
-  if (mode === "ai_replica")
-    return (
-      <AIVideoReplica
-        sourceReady={sourceReady}
-        sourcePreview={sourcePreview}
-        replaceReady={replaceReady}
-        scriptReady={scriptReady}
-        busy={busy}
-        videoReadProgress={videoReadProgress}
-        sourceDuration={sourceDuration}
-        productReferencePath={productReferencePath}
-        prompt={prompt}
-        personPrompt={personPrompt}
-        budget={budget}
-        aiModel={aiModel}
-        ratio={ratio}
-        resolution={resolution}
-        review={review}
-        selected={selected}
-        displayed={displayed}
-        error={error}
-        jobs={jobs}
-        openReplica={() => navigate("/video-replica")}
-        setPrompt={setPrompt}
-        setReview={setReview}
-        setPersonPrompt={setPersonPrompt}
-        setBudget={setBudget}
-        setAiModel={setAiModel}
-        setRatio={setRatio}
-        setResolution={setResolution}
-        setReferencePaths={setReferencePaths}
-        setProductReferencePath={setProductReferencePath}
-        uploadVideo={uploadVideo}
-        uploadReference={uploadReference}
-        reviewPrompt={reviewPrompt}
-        adoptReview={adoptReview}
-        create={create}
-        regenerate={regenerate}
-        exportVideo={exportVideo}
-        selectJob={selectJob}
-        refreshTask={refreshTask}
-        resumeTask={resumeTask}
-        terminateTask={terminateTask}
-        pullResult={pullResult}
-        refreshJobs={load}
-        clearDeletedJob={clearDeletedJob}
-        pullingResult={pullingResultID === selected?.id}
-        terminating={terminatingID === selected?.id}
-        resuming={resumingID === selected?.id}
-      />
-    );
-
-  /*
-  if (mode === "ai_replica") {
-    const aiPhases = [["queued", "等待提交"], ["preparing", "准备素材"], ["submitting", "提交任务"], ["generating", "模型生成"], ["retrieving", "获取结果"], ["ready", "完成"]] as const;
-    const aiPhaseIndex = selected ? aiPhases.findIndex(([phase]) => phase === selected.status) : -1;
-    const aiFailure = selected?.status.startsWith("failed") ? failureReason(selected.status) : "";
-    return <Shell>
-      <header className="workspace-header video-replica-header">
-        <div className="video-replica-title"><span className="eyebrow">AI VIDEO STUDIO / QUICK REPLACE</span><h1>AI 复刻</h1><p>用原视频的节奏和镜头，替换为你的商品并生成新版本。</p></div>
-        <div className="video-replica-meta"><span className="workflow-badge">{selected ? statusText(selected.status) : "未开始"}</span><button className="button secondary" type="button" onClick={() => setMode("replica")}><RefreshCw size={15} />分镜复刻</button></div>
-      </header>
-      <main className="video-replica">
-        <div className="video-replica-workbench">
-          <section className="video-replica-editor">
-            <div className="video-replica-panel ai-workflow-intro"><span className="step-kicker">QUICK WORKFLOW</span><h2>三步完成一次 AI 复刻</h2><p>选择视频、添加商品图、描述你要替换的内容，然后开始生成。</p></div>
-            <div className={`video-replica-panel workflow-panel ${sourceReady ? "done" : ""}`}><div className="workflow-step-head"><div className="step-number">1</div><div><span className="step-kicker">素材 01</span><h2>选择原视频</h2><p>添加要保留镜头节奏和动作的本机视频。</p></div><span className="step-state">{busy === "upload" ? "正在添加" : sourceReady ? "已添加" : "待选择"}</span></div><div className={`video-upload-box ${sourceReady && busy !== "upload" ? "has-video" : ""}`}>{busy === "upload" ? <div className="video-upload-status" role="status"><LoaderCircle className="spin" size={30} /><strong>{videoReadProgress === null ? "正在保存并校验视频…" : `正在读取视频 ${videoReadProgress}%`}</strong>{videoReadProgress !== null && <progress value={videoReadProgress} max={100} aria-label="读取视频进度" />}</div> : sourcePreview ? <><video src={sourcePreview} controls /><label className="video-replace-action"><Upload size={15} />重新选择<input type="file" accept="video/mp4,video/webm,video/quicktime" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void uploadVideo(file); }} /></label></> : <label className="video-upload-prompt"><Film size={30} /><strong>点击选择本机视频</strong><span>支持 MP4 / WebM / MOV，具体限制由所选模型决定</span><input type="file" accept="video/mp4,video/webm,video/quicktime" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void uploadVideo(file); }} /></label>}</div></div>
-            <div className={`video-replica-panel workflow-panel ${replaceReady ? "done" : ""}`}><div className="workflow-step-head"><div className="step-number">2</div><div><span className="step-kicker">素材 02</span><h2>添加商品图片</h2><p>这张图片会作为生成视频中的目标商品外观依据。</p></div><span className="step-state">{replaceReady ? "已添加" : "待添加"}</span></div><div className="reference-thumbs ai-product-thumb">{productReferencePath ? <div className="reference-thumb"><div className="product-reference active"><img src={fileUrl(productReferencePath)} alt="商品参考图" /></div><button type="button" className="reference-remove" aria-label="移除商品图片" onClick={() => { setReferencePaths([]); setProductReferencePath(""); }}><X size={13} /></button></div> : <label className="reference-add"><Upload size={17} /><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadReference(file); }} />添加商品图</label>}</div></div>
-            <div className={`video-replica-panel workflow-panel ${scriptReady ? "done" : ""}`}><div className="workflow-step-head"><div className="step-number">3</div><div><span className="step-kicker">描述与生成</span><h2>描述替换目标</h2><p>写清楚替换对象，以及需要保留的动作、镜头、光线和背景。</p></div><span className="step-state">{prompt.length}/2000</span></div><textarea className="video-script" value={prompt} onChange={(event) => { setPrompt(event.target.value); setReview(null); }} placeholder="例如：将视频中的旧款水杯替换为商品图中的保温杯，保留原视频的手部动作、镜头运动、背景和光线。" /><div className="prompt-review-actions"><button className="button secondary" type="button" disabled={!!busy || !prompt.trim()} onClick={() => void reviewPrompt()}>{busy === "review" ? <LoaderCircle className="spin" size={16} /> : <ShieldCheck size={16} />}检查描述</button><span>可选：让 AI 检查描述是否完整</span></div>{review && <div className="prompt-review" role="status"><div className="prompt-review-head"><strong>描述评分 {review.score}/100</strong><span>请确认是否采用优化稿</span></div>{review.issues.length > 0 && <ul>{review.issues.map((issue) => <li key={issue}>{issue}</li>)}</ul>}<div className="prompt-review-copy"><small>优化稿</small><p>{review.optimized_prompt}</p></div><div className="prompt-review-actions"><button className="button primary" type="button" disabled={review.source !== prompt} onClick={adoptReview}><Check size={16} />采用优化稿</button><button className="button secondary" type="button" onClick={() => setReview(null)}>保留当前内容</button></div></div>}<details className="ai-advanced-settings"><summary>高级设置</summary><div className="video-controls"><label>模型<SettingsSelect name="ai-video-model" value={aiModel} options={[{ value: "qwen3.8-flash", label: "Qwen 3.8 Flash" }, { value: "qwen3.8", label: "Qwen 3.8" }]} onChange={setAiModel} /></label><label>画面比例<SettingsSelect name="ai-video-ratio" value={ratio} options={["16:9", "9:16", "1:1"].map((value) => ({ value, label: value }))} onChange={setRatio} /></label><label>清晰度<SettingsSelect name="ai-video-resolution" value={resolution} options={["480p", "720p"].map((value) => ({ value, label: value }))} onChange={setResolution} /></label><label>人物说明<input value={personPrompt} onChange={(event) => setPersonPrompt(event.target.value)} placeholder="可选" /></label><label>预算（美元）<input type="number" min="0.01" step="0.01" value={budget} onChange={(event) => setBudget(Number(event.target.value))} /></label></div></details><button className="button primary workflow-action" type="button" disabled={!!busy || !sourceReady || !replaceReady || !scriptReady} onClick={() => void create()}>{busy === "create" ? <LoaderCircle className="spin" size={16} /> : <Play size={16} />}开始 AI 复刻</button></div>
-          </section>
-          <section className="video-replica-preview"><div className="video-replica-panel-head"><div><span className="step-kicker">RESULT</span><h2>生成结果</h2></div><span className="preview-status">{selected ? statusText(selected.status) : "等待生成"}</span></div>{selected && <div className="video-generation-progress ai-progress" aria-live="polite"><div className="generation-progress-head"><strong>{statusText(selected.status)}</strong><span>{selected.progress?.completed_segments ?? 0}/{selected.progress?.total_segments ?? 1} 完成</span></div><div className="generation-phase-list ai-generation-phase-list">{aiPhases.map(([phase, label], index) => <div className={`generation-phase ${selected.status === "ready" || (aiPhaseIndex >= 0 && index < aiPhaseIndex) ? "done" : ""} ${selected.status === phase ? "active" : ""}`} key={phase}><span className="generation-phase-dot" /><span>{label}</span></div>)}</div>{isPending(selected.status) && <div className="generation-indeterminate" role="progressbar" aria-label="AI 复刻生成进行中" />}{selected.status === "interrupted" && <p className="generation-progress-detail">应用退出后任务被中断，可以重新生成。</p>}</div>}<div className="video-stage">{displayed ? <video src={displayed} controls /> : <><Film size={38} /><strong>{aiFailure ? "生成失败" : "等待生成结果"}</strong><p>{aiFailure || "提交任务后，生成视频会显示在这里"}</p></>}</div>{aiFailure && <p className="notice notice-error video-generation-error" role="alert">{aiFailure}</p>}<div className="preview-meta"><span><small>原视频</small><b>{sourceReady ? "已选择" : "未选择"}</b></span><span><small>商品参考图</small><b>{replaceReady ? "已添加" : "未添加"}</b></span></div>{selected && <div className="video-result-actions"><button className="button secondary" type="button" onClick={() => void regenerate(selected.id)} disabled={!!busy || isPending(selected.status)}><RefreshCw size={16} />再次生成</button>{selected.file_path && <button className="button secondary" type="button" onClick={() => void exportVideo(selected.file_path!)}><Download size={16} />导出视频</button>}</div>}</section>
-        </div>
-        <section className="video-replica-history"><div className="video-replica-panel-head"><h2>AI 复刻历史</h2><span>{jobs.filter((job) => job.task_type === "ai_replica").length} 条</span></div>{jobs.filter((job) => job.task_type === "ai_replica").map((job) => <div className={`video-history-item ${selected?.id === job.id ? "active" : ""}`} key={job.id}><button type="button" className="video-history-select" onClick={() => selectJob(job)}><span>AI 复刻</span><strong>{job.model}</strong><small>{statusText(job.status)} · {job.versions.length} 个版本</small><time>{new Date(job.created_at * 1000).toLocaleString()}</time></button></div>)}</section>
-        {error && <p className="notice notice-error" role="alert">{error}</p>}
-      </main>
-    </Shell>;
-  }
-  */
-
   return (
     <Shell>
       <header className="workspace-header video-replica-header">
@@ -712,7 +369,6 @@ export function VideoReplica({ workflow }: VideoReplicaProps) {
       <main className="video-replica">
         <div className="video-replica-workbench">
           <section className="video-replica-editor">
-            {aiControls}
             <div
               className={`video-replica-panel workflow-panel ${stepStatus(1)}`}
             >
@@ -1150,154 +806,14 @@ export function VideoReplica({ workflow }: VideoReplicaProps) {
               </button>
             </div>
           </section>
-          <section className="video-replica-preview">
-            <div className="video-replica-panel-head">
-              <div>
-                <span className="step-kicker">OUTPUT PREVIEW</span>
-                <h2>生成预览</h2>
-              </div>
-              <span className="preview-status">{selectedLabel}</span>
-            </div>
-            {selected && (
-              <div className="video-generation-progress" aria-live="polite">
-                <div className="generation-progress-head">
-                  <strong>{statusText(selected.status)}</strong>
-                  <span>
-                    {progress?.completed_segments ?? 0}/
-                    {progress?.total_segments ?? 0} 段完成
-                  </span>
-                </div>
-                <div className="generation-phase-list">
-                  {phaseSteps.map(([phase, label], index) => {
-                    const activeIndex =
-                      selected.status === "queued" ? 0 : phaseIndex;
-                    const done =
-                      selected.status === "ready" ||
-                      (activeIndex >= 0 && index < activeIndex);
-                    const active =
-                      selected.status === phase ||
-                      (selected.status === "queued" && index === 0);
-                    return (
-                      <div
-                        className={`generation-phase ${done ? "done" : ""} ${active ? "active" : ""}`}
-                        key={phase}
-                      >
-                        <span className="generation-phase-dot" />
-                        <span>{label}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-                {isPending(selected.status) && (
-                  <div
-                    className="generation-indeterminate"
-                    role="progressbar"
-                    aria-label="视频生成进行中"
-                  />
-                )}
-                {progress?.current_segment !== undefined &&
-                  progress.current_segment >= 0 &&
-                  progress.total_segments > 0 && (
-                    <p className="generation-progress-detail">
-                      当前第 {progress.current_segment + 1} /{" "}
-                      {progress.total_segments} 段 ·{" "}
-                      {selected.segments[progress.current_segment]
-                        ? segmentStatus(
-                            selected.segments[progress.current_segment],
-                          )
-                        : "处理中"}
-                    </p>
-                  )}
-                {selected.segments.length > 0 && (
-                  <div className="generation-segments">
-                    {selected.segments.map((segment) => (
-                      <div
-                        className={`generation-segment ${segment.status.startsWith("failed") ? "failed" : ""}`}
-                        key={segment.id}
-                      >
-                        <span>第 {segment.index + 1} 段</span>
-                        <small>{segmentStatus(segment)}</small>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {selected.status === "interrupted" && (
-                  <p className="generation-progress-detail">
-                    应用曾在生成期间退出，已保留片段进度，可重新生成。
-                  </p>
-                )}
-              </div>
-            )}
-            <div className="video-stage" style={{ aspectRatio: previewRatio }}>
-              {displayed ? (
-                <video
-                  src={displayed}
-                  controls
-                  onLoadedMetadata={(event) =>
-                    setPreviewRatio(
-                      videoPreviewRatio(
-                        event.currentTarget.videoWidth,
-                        event.currentTarget.videoHeight,
-                      ),
-                    )
-                  }
-                />
-              ) : (
-                <>
-                  <Film size={38} />
-                  <strong>
-                    {selectedFailure ? "生成失败" : "等待生成结果"}
-                  </strong>
-                  <p>{selectedFailure || "确认脚本后，视频会在这里出现"}</p>
-                </>
-              )}
-            </div>
-            {selectedFailure && (
-              <p
-                className="notice notice-error video-generation-error"
-                role="alert"
-              >
-                {selectedFailure}
-              </p>
-            )}
-            <div className="preview-meta">
-              <span>
-                <small>参考风格</small>
-                <b>{selected ? "已选参考视频" : "等待开始"}</b>
-              </span>
-              <span>
-                <small>预计时长</small>
-                <b>{duration} 秒</b>
-              </span>
-            </div>
-            <p className="privacy-note">
-              <ShieldCheck size={16} />
-              选择的本机内容仅用于本次生成，不会公开展示。
-            </p>
-            {selected && (
-              <div className="video-result-actions">
-                <button
-                  className="button secondary"
-                  type="button"
-                  onClick={() => void regenerate(selected.id)}
-                  disabled={!!busy || isPending(selected.status)}
-                >
-                  <RefreshCw size={16} />
-                  重新生成
-                </button>
-                {selected.file_path && (
-                  <button
-                    className="button secondary"
-                    type="button"
-                    onClick={() => void exportVideo(selected.file_path!)}
-                  >
-                    <Download size={16} />
-                    导出视频
-                  </button>
-                )}
-              </div>
-            )}
-          </section>
+          <VideoReplicaPreview
+            selected={selected}
+            duration={duration}
+            busy={busy}
+            mediaRefreshToken={0}
+            regenerate={regenerate}
+            exportVideo={exportVideo}
+          />
         </div>
         <section className="video-template-section">
           <div className="template-section-heading">
@@ -1325,7 +841,7 @@ export function VideoReplica({ workflow }: VideoReplicaProps) {
           <div className="video-replica-panel-head">
             <h2>历史任务</h2>
             <span>
-              {jobs.filter((job) => job.task_type !== "ai_replica").length} 条
+              {jobs.length} 条
             </span>
           </div>
           <VideoWorksList

@@ -10,9 +10,11 @@ import {
   X,
   Terminal,
 } from "lucide-react";
-import { useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import type { VideoReplicaJob } from "../types";
-import { failureReason, fileUrl, isPending, statusText } from "../utils/assets";
+import { failureReason, fileUrl, isPending, statusText, userFacingError } from "../utils/assets";
+import { useRequireAiAuth } from "../auth";
 import { Shell } from "./Shell";
 import { SettingsSelect } from "./SettingsSelect";
 import { client } from "../api";
@@ -78,8 +80,32 @@ type Props = {
   resuming: boolean;
 };
 
-export function AIVideoReplica(props: Props) {
-  const p = props;
+export function AIVideoReplica() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { id: routeJobID } = useParams<{ id: string }>();
+  const requireAiAuth = useRequireAiAuth();
+  const [sourcePath, setSourcePath] = useState("");
+  const [sourcePreview, setSourcePreview] = useState("");
+  const [referencePaths, setReferencePaths] = useState<string[]>([]);
+  const [productReferencePath, setProductReferencePath] = useState("");
+  const [prompt, setPrompt] = useState("");
+  const [personPrompt, setPersonPrompt] = useState("公开的虚拟人像");
+  const [budget, setBudget] = useState(2);
+  const [aiModel, setAiModel] = useState("qwen3.8-flash");
+  const [ratio, setRatio] = useState("16:9");
+  const [resolution, setResolution] = useState("480p");
+  const [sourceDuration, setSourceDuration] = useState<number | null>(null);
+  const [jobs, setJobs] = useState<VideoReplicaJob[]>([]);
+  const [selected, setSelected] = useState<VideoReplicaJob | null>(null);
+  const [busy, setBusy] = useState("");
+  const [videoReadProgress, setVideoReadProgress] = useState<number | null>(null);
+  const [error, setError] = useState("");
+  const [terminatingID, setTerminatingID] = useState("");
+  const [resumingID, setResumingID] = useState("");
+  const [pullingResultID, setPullingResultID] = useState("");
+  const [mediaRefreshToken, setMediaRefreshToken] = useState(0);
+  const [review, setReview] = useState<Review | null>(null);
   const [answer, setAnswer] = useState("");
   const [instruction, setInstruction] = useState("");
   const [logsOpen, setLogsOpen] = useState(false);
@@ -87,30 +113,170 @@ export function AIVideoReplica(props: Props) {
   const [logTab, setLogTab] = useState<"stdout" | "stderr" | "files">("stdout");
   const [fileBusy, setFileBusy] = useState("");
   const [fileError, setFileError] = useState("");
-  async function downloadFile(path: string) {
-    if (!p.selected) return;
-    setFileBusy(path);
-    setFileError("");
-    try {
-      const id = p.selected.id;
-      if (!(await client.downloadAIVideoReplicaFile(id, path)))
-        throw new Error("文件未保存");
-    } catch (reason) {
-      setFileError(String(reason));
-    } finally {
-      setFileBusy("");
+  const operationError = (reason: unknown, fallback: string) =>
+    userFacingError(reason instanceof Error ? reason.message : "", fallback);
+  function selectJob(job: VideoReplicaJob) {
+    if (job.task_type !== "ai_replica") {
+      setError("该作品属于普通复刻，请从普通视频复刻页面打开。");
+      return;
     }
+    setSelected(job);
+    setSourcePath(job.source_video_path);
+    setSourcePreview(fileUrl(job.source_video_path));
+    setReferencePaths(job.reference_paths);
+    setProductReferencePath(job.product_reference_path);
+    setPrompt(job.prompt);
+    setPersonPrompt(job.ai_person_prompt ?? "公开的虚拟人像");
+    setBudget(job.ai_budget ?? 2);
+    setAiModel(job.model);
+    setRatio(job.ratio);
+    setResolution(job.resolution);
+    setSourceDuration(job.duration || null);
+    setReview(null);
+  }
+  function clearDeletedJob(job: VideoReplicaJob) {
+    if (selected?.id === job.id) setSelected(null);
+  }
+  async function load() {
+    try {
+      const result = await client.videoReplicaJobs(48, 0);
+      const aiJobs = result.items.filter((job) => job.task_type === "ai_replica");
+      setJobs(aiJobs);
+      if (selected) {
+        const fresh = aiJobs.find((job) => job.id === selected.id);
+        if (fresh) selectJob({ ...fresh, skill2api: selected.skill2api });
+      }
+    } catch (reason) {
+      setError(operationError(reason, "无法加载 AI 复刻任务"));
+    }
+  }
+  useEffect(() => void load(), []);
+  useEffect(() => {
+    const jobID = routeJobID || (location.state as { jobId?: string } | null)?.jobId;
+    if (!jobID) return;
+    void client.videoReplicaJob(jobID).then(selectJob).catch((reason) =>
+      setError(operationError(reason, "无法打开视频作品")),
+    );
+  }, [location.state, routeJobID]);
+  useEffect(() => {
+    if (!jobs.some((job) => isPending(job.status))) return;
+    const timer = window.setInterval(() => {
+      void load();
+      jobs.forEach((job) => {
+        if (isPending(job.status) && job.skill2api_request_id) void refreshTask(job.id);
+      });
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [jobs.map((job) => `${job.id}:${job.status}`).join("|")]);
+  useEffect(() => {
+    if (selected?.skill2api_request_id) void refreshTask(selected.id);
+  }, [selected?.id]);
+  async function refreshTask(id: string) {
+    try {
+      const remote = await client.refreshAIVideoReplica(id);
+      const update = (job: VideoReplicaJob) =>
+        job.id === id ? { ...job, status: remote.status as VideoReplicaJob["status"], skill2api: remote } : job;
+      setSelected((current) => (current ? update(current) : current));
+      setJobs((items) => items.map(update));
+    } catch (reason) {
+      setError(operationError(reason, "远程记录已过期或不可用"));
+    }
+  }
+  async function uploadVideo(file: File) {
+    setBusy("upload"); setVideoReadProgress(0); setSourceDuration(null); setError("");
+    try {
+      const buffer = await new Promise<ArrayBuffer>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onprogress = (event) => event.lengthComputable && setVideoReadProgress(Math.round((event.loaded / event.total) * 100));
+        reader.onload = () => reader.result instanceof ArrayBuffer ? resolve(reader.result) : reject(new Error("无法读取视频文件"));
+        reader.onerror = () => reject(reader.error || new Error("无法读取视频文件"));
+        reader.readAsArrayBuffer(file);
+      });
+      const result = await client.uploadVideoReplicaVideo(file.name, file.type, Array.from(new Uint8Array(buffer)));
+      setSourcePath(result.path); setSourcePreview(fileUrl(result.path)); setSourceDuration(Number(result.duration_seconds));
+    } catch (reason) { setError(operationError(reason, "添加视频失败")); }
+    finally { setBusy(""); setVideoReadProgress(null); }
+  }
+  async function uploadReference(file: File) {
+    setBusy("reference"); setError("");
+    try { const result = await client.upload(file); setReferencePaths([result.path]); setProductReferencePath(result.path); }
+    catch (reason) { setError(operationError(reason, "添加图片失败")); }
+    finally { setBusy(""); }
+  }
+  async function reviewPrompt() {
+    if (!prompt.trim()) return setError("请先填写要审核的描述");
+    if (!requireAiAuth()) return;
+    setBusy("review"); setError("");
+    try { const result = await client.reviewVideoReplicaPrompt("replica", prompt); setReview({ ...result, source: prompt }); }
+    catch (reason) { setError(operationError(reason, "AI 审核失败")); }
+    finally { setBusy(""); }
+  }
+  function adoptReview() {
+    if (!review || review.source !== prompt) return;
+    setPrompt(review.optimized_prompt); setReview(null);
+  }
+  async function create() {
+    if (!requireAiAuth()) return;
+    if (!sourcePath || !prompt.trim()) return setError("请先选择视频并填写复刻说明");
+    if (referencePaths.length !== 1) return setError("请添加一张商品图片");
+    if (!Number.isFinite(budget) || budget <= 0) return setError("预算必须大于 0");
+    setBusy("create"); setError("");
+    try {
+      const result = await client.createAIVideoReplica({ source_video_path: sourcePath, product_path: productReferencePath || referencePaths[0], prompt, person_prompt: personPrompt, model: aiModel, resolution, ratio, budget });
+      await load(); selectJob(await client.videoReplicaJob(result.id));
+    } catch (reason) { setError(operationError(reason, "创建 AI 复刻任务失败")); }
+    finally { setBusy(""); }
+  }
+  async function regenerate(id: string) {
+    const job = jobs.find((item) => item.id === id); if (!job) return;
+    setBusy(id); setError("");
+    try {
+      const result = await client.createAIVideoReplica({ source_video_path: job.source_video_path, product_path: job.product_reference_path || job.reference_paths[0], prompt: job.prompt, person_prompt: job.ai_person_prompt ?? personPrompt, model: job.model, resolution: job.resolution, ratio: job.ratio, budget: job.ai_budget ?? budget });
+      await load(); selectJob(await client.videoReplicaJob(result.id));
+    } catch (reason) { setError(operationError(reason, "重新生成失败")); }
+    finally { setBusy(""); }
+  }
+  async function resumeTask(id: string, answerValue: string, instructionValue: string) {
+    setResumingID(id); setError("");
+    try { await client.resumeAIVideoReplica(id, answerValue, instructionValue); await load(); return true; }
+    catch (reason) { setError(operationError(reason, "无法继续任务")); return false; }
+    finally { setResumingID(""); }
+  }
+  async function terminateTask(id: string) {
+    setTerminatingID(id); setError("");
+    try { const result = await client.terminateAIVideoReplica(id); await load(); if (typeof result.remote_error === "string") setError(result.remote_error); }
+    catch (reason) { setError(operationError(reason, "无法终止任务")); }
+    finally { setTerminatingID(""); }
+  }
+  async function pullResult(id: string) {
+    setPullingResultID(id); setError("");
+    try { const ok = await client.pullAIVideoReplicaResult(id); selectJob(await client.videoReplicaJob(id)); if (ok) setMediaRefreshToken((value) => value + 1); await load(); return ok; }
+    catch (reason) { setError(operationError(reason, "无法拉取远程结果")); return false; }
+    finally { setPullingResultID(""); }
+  }
+  async function exportVideo(path: string) {
+    setBusy("export"); setError("");
+    try { await client.downloadAsset(path); }
+    catch (reason) { setError(operationError(reason, "导出视频失败")); }
+    finally { setBusy(""); }
+  }
+  async function downloadFile(path: string) {
+    if (!selected) return;
+    setFileBusy(path); setFileError("");
+    try { if (!(await client.downloadAIVideoReplicaFile(selected.id, path))) throw new Error("文件未保存"); }
+    catch (reason) { setFileError(String(reason)); }
+    finally { setFileBusy(""); }
   }
   async function openLogs() {
-    if (!p.selected) return;
+    if (!selected) return;
     setLogsLoading(true);
-    try {
-      await p.refreshTask(p.selected.id);
-      setLogsOpen(true);
-    } finally {
-      setLogsLoading(false);
-    }
+    try { await refreshTask(selected.id); setLogsOpen(true); }
+    finally { setLogsLoading(false); }
   }
+  const p: Props = {
+    sourceReady: Boolean(sourcePath), sourcePreview, replaceReady: referencePaths.length === 1, scriptReady: Boolean(prompt.trim()), busy, videoReadProgress, sourceDuration, productReferencePath, prompt, personPrompt, budget, aiModel, ratio, resolution, review, selected, displayed: selected?.file_path ? `${fileUrl(selected.file_path)}?refresh=${mediaRefreshToken}` : "", error, jobs,
+    openReplica: () => navigate("/video-replica"), setPrompt, setReview, setPersonPrompt, setBudget, setAiModel, setRatio, setResolution, setReferencePaths, setProductReferencePath, uploadVideo, uploadReference, reviewPrompt, adoptReview, create, regenerate, exportVideo, selectJob, refreshTask, resumeTask, terminateTask, pullResult, refreshJobs: load, clearDeletedJob, pullingResult: pullingResultID === selected?.id, terminating: terminatingID === selected?.id, resuming: resumingID === selected?.id,
+  };
   const phases = [
     ["queued", "等待提交"],
     ["preparing", "准备素材"],
