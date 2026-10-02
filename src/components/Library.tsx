@@ -12,6 +12,7 @@ import {
   type LibraryTabID,
   videoReplicaPath,
 } from "../utils/libraryWorks";
+import { defaultVideoPreviewRatio, videoPreviewRatio } from "../utils/videoPreview";
 import { Notice } from "./Notice";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { ProjectCard } from "./ProjectCard";
@@ -454,6 +455,12 @@ function LibraryPreview({
   onEdit: () => void;
 }) {
   const playable = preview.kind === "video" && Boolean(preview.path);
+  const [previewRatio, setPreviewRatio] = useState(defaultVideoPreviewRatio);
+
+  useEffect(() => {
+    setPreviewRatio(defaultVideoPreviewRatio);
+  }, [preview.path]);
+
   return (
     <div className="library-preview-backdrop" role="presentation" onClick={onClose}>
       <section
@@ -463,22 +470,8 @@ function LibraryPreview({
         aria-label={`${preview.title}预览`}
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="library-preview-media">
-          {preview.path ? (
-            playable ? (
-              <video controls preload="metadata" src={fileUrl(preview.path)} />
-            ) : (
-              <img src={fileUrl(preview.path)} alt={preview.title} />
-            )
-          ) : (
-            <div className="library-preview-unavailable">
-              {preview.kind === "video" ? <Film size={36} /> : <ImagePlus size={36} />}
-              <span>该作品暂时没有可预览的成品</span>
-            </div>
-          )}
-        </div>
-        <div className="library-preview-footer">
-          <div>
+        <div className="library-preview-toolbar">
+          <div className="library-preview-heading">
             <h2>{preview.title}</h2>
             <p>{preview.detail}</p>
           </div>
@@ -495,6 +488,35 @@ function LibraryPreview({
               <X size={20} />
             </button>
           </div>
+        </div>
+        <div className="library-preview-media">
+          {preview.path ? (
+            playable ? (
+              <video
+                key={preview.path}
+                controls
+                playsInline
+                preload="metadata"
+                src={fileUrl(preview.path)}
+                style={{ aspectRatio: previewRatio }}
+                onLoadedMetadata={(event) => {
+                  setPreviewRatio(
+                    videoPreviewRatio(
+                      event.currentTarget.videoWidth,
+                      event.currentTarget.videoHeight,
+                    ),
+                  );
+                }}
+              />
+            ) : (
+              <img src={fileUrl(preview.path)} alt={preview.title} />
+            )
+          ) : (
+            <div className="library-preview-unavailable">
+              {preview.kind === "video" ? <Film size={36} /> : <ImagePlus size={36} />}
+              <span>该作品暂时没有可预览的成品</span>
+            </div>
+          )}
         </div>
       </section>
     </div>
