@@ -17,6 +17,7 @@ import { Shell } from "./Shell";
 import { SettingsSelect } from "./SettingsSelect";
 import { client } from "../api";
 import { aiVideoReplicaControls } from "../utils/aiVideoReplicaState";
+import { VideoWorksList } from "./VideoWorksList";
 
 type Review = {
   score: number;
@@ -63,9 +64,15 @@ type Props = {
   exportVideo: (path: string) => void;
   selectJob: (job: VideoReplicaJob) => void;
   refreshTask: (id: string) => Promise<void>;
-  resumeTask: (id: string, answer: string, instruction: string) => Promise<boolean>;
+  resumeTask: (
+    id: string,
+    answer: string,
+    instruction: string,
+  ) => Promise<boolean>;
   terminateTask: (id: string) => Promise<void>;
   pullResult: (id: string) => Promise<boolean>;
+  refreshJobs: () => Promise<void>;
+  clearDeletedJob: (job: VideoReplicaJob) => void;
   pullingResult: boolean;
   terminating: boolean;
   resuming: boolean;
@@ -227,10 +234,10 @@ export function AIVideoReplica(props: Props) {
                     <Film size={30} />
                     <strong>点击选择本机视频</strong>
                     <span>支持 MP4 / WebM / MOV，具体限制由所选模型决定</span>
-                      <input
-                        type="file"
-                        accept="video/mp4,video/webm,video/quicktime"
-                        disabled={controls.draftLocked}
+                    <input
+                      type="file"
+                      accept="video/mp4,video/webm,video/quicktime"
+                      disabled={controls.draftLocked}
                       onChange={(e) => {
                         const f = e.target.files?.[0];
                         e.target.value = "";
@@ -356,7 +363,9 @@ export function AIVideoReplica(props: Props) {
                     <button
                       className="button primary"
                       type="button"
-                      disabled={controls.draftLocked || p.review.source !== p.prompt}
+                      disabled={
+                        controls.draftLocked || p.review.source !== p.prompt
+                      }
                       onClick={p.adoptReview}
                     >
                       <Check size={16} />
@@ -479,7 +488,9 @@ export function AIVideoReplica(props: Props) {
                   <span>
                     {p.selected.status === "generating"
                       ? "远端进度不可量化"
-                      : phases.find(([phase]) => phase === p.selected?.status)?.[1]}
+                      : phases.find(
+                          ([phase]) => phase === p.selected?.status,
+                        )?.[1]}
                   </span>
                 </div>
                 <div className="generation-phase-list ai-generation-phase-list">
@@ -501,7 +512,9 @@ export function AIVideoReplica(props: Props) {
                       aria-label="AI 复刻生成进行中"
                     />
                     {p.selected.status === "generating" && (
-                      <p className="generation-progress-detail">远端进度不可量化</p>
+                      <p className="generation-progress-detail">
+                        远端进度不可量化
+                      </p>
                     )}
                   </>
                 )}
@@ -548,7 +561,9 @@ export function AIVideoReplica(props: Props) {
                         type="button"
                         disabled={!controls.canResume}
                         onClick={async () => {
-                          if (await p.resumeTask(p.selected!.id, "", instruction))
+                          if (
+                            await p.resumeTask(p.selected!.id, "", instruction)
+                          )
                             setInstruction("");
                         }}
                       >
@@ -743,9 +758,9 @@ export function AIVideoReplica(props: Props) {
                 </button>
                 {p.selected.file_path && (
                   <button
-                  className="button secondary"
-                  type="button"
-                  disabled={!!p.busy || controls.draftLocked}
+                    className="button secondary"
+                    type="button"
+                    disabled={!!p.busy || controls.draftLocked}
                     onClick={() => p.exportVideo(p.selected!.file_path!)}
                   >
                     <Download size={16} />
@@ -774,30 +789,22 @@ export function AIVideoReplica(props: Props) {
               {p.jobs.filter((job) => job.task_type === "ai_replica").length} 条
             </span>
           </div>
-          {p.jobs
-            .filter((job) => job.task_type === "ai_replica")
-            .map((job) => (
-              <div
-                className={`video-history-item ${p.selected?.id === job.id ? "active" : ""}`}
-                key={job.id}
-              >
-                <button
-                  type="button"
-                  className="video-history-select"
-                  disabled={controls.draftLocked}
-                  onClick={() => p.selectJob(job)}
-                >
-                  <span>AI 复刻</span>
-                  <strong>{job.model}</strong>
-                  <small>
-                    {statusText(job.status)} · {job.versions.length} 个版本
-                  </small>
-                  <time>
-                    {new Date(job.created_at * 1000).toLocaleString()}
-                  </time>
-                </button>
+          <VideoWorksList
+            jobs={p.jobs}
+            tab="ai-video-replica"
+            selectedID={p.selected?.id}
+            disabled={controls.draftLocked}
+            empty={
+              <div className="video-history-empty">
+                还没有 AI 复刻作品，完成一次生成后会自动保存在这里。
               </div>
-            ))}
+            }
+            onSelect={p.selectJob}
+            management={{
+              onRefresh: p.refreshJobs,
+              onDeleted: p.clearDeletedJob,
+            }}
+          />
         </section>
         {p.error && (
           <p className="notice notice-error" role="alert">

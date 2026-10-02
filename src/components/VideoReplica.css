@@ -869,37 +869,6 @@
   color: var(--muted);
   line-height: 1.45;
 }
-.video-history-item {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 12px;
-  padding: 0 12px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: transparent;
-  color: inherit;
-}
-.video-history-select {
-  display: grid;
-  grid-template-columns: 90px minmax(0, 1fr) 100px 180px;
-  align-items: center;
-  text-align: left;
-  gap: 12px;
-  padding: 13px 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-}
-.video-history-item.active {
-  border-color: var(--accent);
-  background: var(--surface);
-}
-.video-history-item small,
-.video-history-item time {
-  color: var(--muted);
-}
 @media (max-width: 900px) {
   .video-replica-header {
     grid-template-columns: 1fr;
@@ -931,9 +900,6 @@
   }
   .video-controls {
     grid-template-columns: repeat(2, 1fr);
-  }
-  .video-history-select {
-    grid-template-columns: 1fr 1fr;
   }
   .generation-phase-list,
   .ai-generation-phase-list {

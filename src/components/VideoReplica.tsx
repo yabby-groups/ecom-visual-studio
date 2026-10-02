@@ -32,6 +32,7 @@ import {
 import { Shell } from "./Shell";
 import { SettingsSelect } from "./SettingsSelect";
 import { AIVideoReplica } from "./AIVideoReplica";
+import { VideoWorksList } from "./VideoWorksList";
 import "./VideoReplica.css";
 
 const defaultStoryboard: VideoReplicaStoryboardItem[] = [];
@@ -49,7 +50,9 @@ export function VideoReplica({ workflow }: VideoReplicaProps) {
   const [sourcePreview, setSourcePreview] = useState("");
   const [referencePaths, setReferencePaths] = useState<string[]>([]);
   const [productReferencePath, setProductReferencePath] = useState("");
-  const [mode, setMode] = useState<"replica" | "replace" | "ai_replica">(workflow);
+  const [mode, setMode] = useState<"replica" | "replace" | "ai_replica">(
+    workflow,
+  );
   const [personPrompt, setPersonPrompt] = useState("公开的虚拟人像");
   const [budget, setBudget] = useState(2);
   const [aiModel, setAiModel] = useState("qwen3.8-flash");
@@ -106,7 +109,8 @@ export function VideoReplica({ workflow }: VideoReplicaProps) {
     userFacingError(reason instanceof Error ? reason.message : "", fallback);
 
   function selectJob(job: VideoReplicaJob) {
-    const jobWorkflow = job.task_type === "ai_replica" ? "ai_replica" : "replica";
+    const jobWorkflow =
+      job.task_type === "ai_replica" ? "ai_replica" : "replica";
     if (jobWorkflow !== workflow) {
       setError(
         workflow === "ai_replica"
@@ -140,6 +144,10 @@ export function VideoReplica({ workflow }: VideoReplicaProps) {
     setSourceDuration(job.duration || null);
     setRatio(job.ratio);
     setResolution(job.resolution);
+  }
+
+  function clearDeletedJob(job: VideoReplicaJob) {
+    if (selected?.id === job.id) setSelected(null);
   }
 
   async function load() {
@@ -262,7 +270,8 @@ export function VideoReplica({ workflow }: VideoReplicaProps) {
     try {
       const result = await client.terminateAIVideoReplica(id);
       await load();
-      if (typeof result.remote_error === "string") setError(result.remote_error);
+      if (typeof result.remote_error === "string")
+        setError(result.remote_error);
     } catch (reason) {
       setError(operationError(reason, "无法终止任务"));
     } finally {
@@ -648,6 +657,8 @@ export function VideoReplica({ workflow }: VideoReplicaProps) {
         resumeTask={resumeTask}
         terminateTask={terminateTask}
         pullResult={pullResult}
+        refreshJobs={load}
+        clearDeletedJob={clearDeletedJob}
         pullingResult={pullingResultID === selected?.id}
         terminating={terminatingID === selected?.id}
         resuming={resumingID === selected?.id}
@@ -1313,60 +1324,40 @@ export function VideoReplica({ workflow }: VideoReplicaProps) {
         <section className="video-replica-history">
           <div className="video-replica-panel-head">
             <h2>历史任务</h2>
-            <span>{jobs.length} 条</span>
+            <span>
+              {jobs.filter((job) => job.task_type !== "ai_replica").length} 条
+            </span>
           </div>
-          {jobs.length ? (
-            jobs.map((job) => (
-              <div
-                className={`video-history-item ${selected?.id === job.id ? "active" : ""}`}
-                key={job.id}
-              >
+          <VideoWorksList
+            jobs={jobs}
+            tab="video-replica"
+            selectedID={selected?.id}
+            empty={
+              <div className="video-history-empty">
+                还没有视频作品，完成一次生成后会自动保存在这里。
+              </div>
+            }
+            onSelect={selectJob}
+            management={{ onRefresh: load, onDeleted: clearDeletedJob }}
+            renderActions={(job) =>
+              job.file_path ? (
                 <button
                   type="button"
-                  className="video-history-select"
-                  onClick={() => selectJob(job)}
+                  className="button secondary video-use-result"
+                  onClick={() => {
+                    setMode("replica");
+                    setTaskType("extend");
+                    setSourcePath(job.file_path!);
+                    setSourcePreview(fileUrl(job.file_path));
+                    setSelected(job);
+                    setPrompt(job.prompt);
+                  }}
                 >
-                  <span>
-                    {job.task_type === "extend"
-                      ? "延长"
-                      : job.task_type === "replace"
-                        ? "AI 替换"
-                        : "复刻"}
-                  </span>
-                  <strong>{job.model}</strong>
-                  <small>
-                    {statusText(job.status)} ·{" "}
-                    {job.progress?.completed_segments ?? 0}/
-                    {job.progress?.total_segments ?? 0} 段 ·{" "}
-                    {job.versions.length} 个版本
-                  </small>
-                  <time>
-                    {new Date(job.created_at * 1000).toLocaleString()}
-                  </time>
+                  继续延长
                 </button>
-                {job.file_path && (
-                  <button
-                    type="button"
-                    className="button secondary video-use-result"
-                    onClick={() => {
-                      setMode("replica");
-                      setTaskType("extend");
-                      setSourcePath(job.file_path!);
-                      setSourcePreview(fileUrl(job.file_path));
-                      setSelected(job);
-                      setPrompt(job.prompt);
-                    }}
-                  >
-                    继续延长
-                  </button>
-                )}
-              </div>
-            ))
-          ) : (
-            <div className="video-history-empty">
-              还没有视频作品，完成一次生成后会自动保存在这里。
-            </div>
-          )}
+              ) : null
+            }
+          />
         </section>
         {error && (
           <p className="notice notice-error" role="alert">

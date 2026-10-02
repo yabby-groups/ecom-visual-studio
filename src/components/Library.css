@@ -93,7 +93,9 @@
   object-fit: cover;
 }
 .library-work-card:hover > .library-work-actions,
-.library-work-card:focus-within > .library-work-actions {
+.library-work-card:focus-within > .library-work-actions,
+.video-works-card:hover > .library-work-actions,
+.video-works-card:focus-within > .library-work-actions {
   opacity: 1;
 }
 .library-rename-backdrop {
