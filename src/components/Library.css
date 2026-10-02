@@ -28,26 +28,34 @@
   font-size: 15px;
   line-height: 1.75;
 }
-.filter-row {
+.library-tabs {
   display: flex;
   gap: 8px;
   margin-bottom: 22px;
 }
-.filter {
+.library-tab {
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 6px;
   padding: 8px 12px;
-  background: rgba(255, 255, 255, 0.1);
-  color: #d5ddef;
+  background: var(--panel);
+  color: var(--muted);
   font-size: 12px;
 }
-.filter.active {
+.library-tab:hover {
   border-color: var(--accent);
-  background: rgba(68, 221, 183, 0.15);
-  color: #c2ffeb;
+  color: var(--ink);
 }
-.library-video-section {
-  margin: 30px 0 34px;
+.library-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.library-tab.active {
+  border-color: var(--accent);
+  background: var(--soft);
+  color: var(--ink);
+}
+.library-works-section {
+  margin-bottom: 34px;
 }
 .library-section-heading {
   display: flex;
@@ -87,6 +95,11 @@
   color: var(--video-stage-muted);
 }
 .library-video-preview video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.library-video-preview img {
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -179,13 +192,13 @@
   .library-heading p:last-child {
     font-size: 14px;
   }
-  .filter-row {
+  .library-tabs {
     overflow-x: auto;
     margin-right: -18px;
     padding-right: 18px;
     white-space: nowrap;
   }
-  .filter {
+  .library-tab {
     flex: 0 0 auto;
   }
   .library-art-grid {

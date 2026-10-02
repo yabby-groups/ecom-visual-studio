@@ -663,7 +663,6 @@
   max-width: 100%;
   min-width: 0;
   aspect-ratio: 16 / 9;
-  min-height: 250px;
   background: var(--video-stage);
   color: var(--video-stage-muted);
   display: grid;

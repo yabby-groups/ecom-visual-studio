@@ -1,49 +1,79 @@
-import { useEffect, useState } from "react";
-import { Film, Trash2, Video } from "lucide-react";
+import { Film, Shirt, Trash2, Video } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { client } from "../api";
+import { useAiInteraction } from "../aiInteraction";
+import { useAppStore } from "../store";
+import type { TryOnJob, VideoReplicaJob } from "../types";
+import { fileUrl, userFacingError } from "../utils/assets";
+import {
+  filterVideoWorks,
+  libraryTabs,
+  type LibraryTabID,
+  videoReplicaPath,
+} from "../utils/libraryWorks";
 import { Notice } from "./Notice";
 import { ProjectCard } from "./ProjectCard";
 import { Shell } from "./Shell";
-import { useAppStore } from "../store";
-import { useAiInteraction } from "../aiInteraction";
-import { filterProjects, projectFilters } from "../utils/projectFilters";
-import type { VideoReplicaJob } from "../types";
-import { fileUrl, userFacingError } from "../utils/assets";
 import "./Library.css";
+
+const VIDEO_WORKS_PAGE_SIZE = 48;
+const TRY_ON_WORKS_PAGE_SIZE = 48;
+
+const tabCopy: Record<LibraryTabID, { title: string; empty: string }> = {
+  images: { title: "图片作品", empty: "还没有图片作品" },
+  "try-on": { title: "换装作品", empty: "还没有换装作品" },
+  "video-replica": { title: "普通复刻视频", empty: "还没有普通复刻视频" },
+  "ai-video-replica": { title: "AI 复刻视频", empty: "还没有 AI 复刻视频" },
+};
 
 export function Library() {
   const projects = useAppStore((state) => state.projects);
   const refresh = useAppStore((state) => state.refreshProjects);
   const navigate = useNavigate();
   const { registerPage } = useAiInteraction();
-  const [filter, setFilter] = useState("全部作品");
+  const [tab, setTab] = useState<LibraryTabID>("images");
   const [notice, setNotice] = useState<{
     text: string;
     tone: "success" | "error";
   } | null>(null);
   const [videoJobs, setVideoJobs] = useState<VideoReplicaJob[]>([]);
-  const [videoError, setVideoError] = useState("");
-  const visibleProjects = filterProjects(projects, filter);
+  const [tryOnJobs, setTryOnJobs] = useState<TryOnJob[]>([]);
+  const [worksError, setWorksError] = useState("");
+  const activeTab = libraryTabs.find((item) => item.id === tab)!;
+  const visibleVideos = useMemo(
+    () =>
+      tab === "video-replica" || tab === "ai-video-replica"
+        ? filterVideoWorks(videoJobs, tab)
+        : [],
+    [tab, videoJobs],
+  );
+
   useEffect(() => {
-    void client
-      .videoReplicaJobs(48, 0)
-      .then((result) => setVideoJobs(result.items))
+    void Promise.all([
+      client.videoReplicaJobs(VIDEO_WORKS_PAGE_SIZE, 0),
+      client.tryOnJobs(TRY_ON_WORKS_PAGE_SIZE, 0),
+    ])
+      .then(([videos, tryOns]) => {
+        setVideoJobs(videos.items);
+        setTryOnJobs(tryOns.items);
+      })
       .catch((reason) => {
-        setVideoError(
+        setWorksError(
           userFacingError(
             reason instanceof Error ? reason.message : "",
-            "无法加载视频作品",
+            "无法加载作品",
           ),
         );
       });
   }, []);
+
   useEffect(
     () =>
       registerPage({
         screen: "作品库",
         data: () => ({
-          filter,
+          tab,
           projects: projects.map((project) => ({
             id: project.id,
             name: project.name,
@@ -52,8 +82,9 @@ export function Library() {
           })),
         }),
       }),
-    [filter, projects, registerPage],
+    [projects, registerPage, tab],
   );
+
   async function remove(id: string) {
     if (!window.confirm("确定删除这个项目及其生成图片吗？")) return;
     try {
@@ -67,6 +98,80 @@ export function Library() {
       });
     }
   }
+
+  function renderVideoWorks() {
+    if (!visibleVideos.length)
+      return <EmptyWorks tab={tab} onCreate={() => navigate(activeTab.createPath)} />;
+    return (
+      <div className="library-video-grid">
+        {visibleVideos.map((job) => (
+          <article className="library-video-item" key={job.id}>
+            <button
+              type="button"
+              className="library-video-preview"
+              onClick={() => navigate(videoReplicaPath(job))}
+              aria-label={`打开 ${tabCopy[tab].title}详情`}
+            >
+              {job.file_path ? (
+                <video src={fileUrl(job.file_path)} preload="metadata" />
+              ) : (
+                <Film size={28} />
+              )}
+            </button>
+            <div className="library-video-copy">
+              <strong>{job.model}</strong>
+              <span>
+                {job.status.startsWith("failed")
+                  ? "生成失败"
+                  : job.status === "ready"
+                    ? "已完成"
+                    : "处理中"}{" "}
+                · {job.duration} 秒
+              </span>
+              <time>{new Date(job.created_at * 1000).toLocaleString()}</time>
+            </div>
+          </article>
+        ))}
+      </div>
+    );
+  }
+
+  function renderTryOnWorks() {
+    if (!tryOnJobs.length)
+      return <EmptyWorks tab={tab} onCreate={() => navigate(activeTab.createPath)} />;
+    return (
+      <div className="library-video-grid">
+        {tryOnJobs.map((job) => (
+          <article className="library-video-item" key={job.id}>
+            <button
+              type="button"
+              className="library-video-preview"
+              onClick={() => navigate(`/try-on/${job.id}`)}
+              aria-label="打开换装详情"
+            >
+              {job.file_path ? (
+                <img src={fileUrl(job.file_path)} alt="已生成的换装图片" />
+              ) : (
+                <Shirt size={28} />
+              )}
+            </button>
+            <div className="library-video-copy">
+              <strong>换装任务 · {job.ratio}</strong>
+              <span>
+                {job.status.startsWith("failed")
+                  ? "生成失败"
+                  : job.status === "ready"
+                    ? "已完成"
+                    : "处理中"}
+              </span>
+              <time>{new Date(job.created_at * 1000).toLocaleString()}</time>
+            </div>
+          </article>
+        ))}
+      </div>
+    );
+  }
+
   return (
     <Shell>
       <div className="topbar">
@@ -74,126 +179,69 @@ export function Library() {
       </div>
       <div className="page library-page">
         <div className="library-heading">
-          <span className="eyebrow">本地项目</span>
+          <span className="eyebrow">本地作品</span>
           <h1>作品库</h1>
-          <p>查看和管理已创建的项目与画面。</p>
+          <p>按创作类型查看作品，并继续编辑对应工作台。</p>
         </div>
-        <div className="filter-row">
-          {projectFilters.map((item) => (
+        <div className="library-tabs" role="tablist" aria-label="作品类型">
+          {libraryTabs.map((item) => (
             <button
-              className={`filter ${filter === item.label ? "active" : ""}`}
-              aria-pressed={filter === item.label}
-              onClick={() => setFilter(item.label)}
-              key={item.label}
+              className={`library-tab ${tab === item.id ? "active" : ""}`}
+              aria-selected={tab === item.id}
+              role="tab"
+              type="button"
+              onClick={() => setTab(item.id)}
+              key={item.id}
             >
               {item.label}
             </button>
           ))}
         </div>
-        <section
-          className="library-video-section"
-          aria-labelledby="video-works-heading"
-        >
+        <section className="library-works-section" aria-labelledby="works-heading">
           <div className="library-section-heading">
             <div>
-              <span className="eyebrow">视频作品</span>
-              <h2 id="video-works-heading">视频重制</h2>
+              <span className="eyebrow">{activeTab.label}</span>
+              <h2 id="works-heading">{tabCopy[tab].title}</h2>
             </div>
             <button
               className="button secondary"
               type="button"
-              onClick={() => navigate("/video-replica")}
+              onClick={() => navigate(activeTab.createPath)}
             >
-              新建视频
+              新建{activeTab.label}
             </button>
           </div>
-          {videoError && (
+          {worksError && tab !== "images" && (
             <p className="notice notice-error" role="alert">
-              {videoError}
+              {worksError}
             </p>
           )}
-          {videoJobs.length ? (
-            <div className="library-video-grid">
-              {videoJobs.map((job) => (
-                <article className="library-video-item" key={job.id}>
-                  <button
-                    type="button"
-                    className="library-video-preview"
-                    onClick={() =>
-                      navigate("/video-replica", { state: { jobId: job.id } })
-                    }
-                  >
-                    {job.file_path ? (
-                      <video src={fileUrl(job.file_path)} preload="metadata" />
-                    ) : (
-                      <Film size={28} />
-                    )}
-                  </button>
-                  <div className="library-video-copy">
-                    <strong>{job.model}</strong>
-                    <span>
-                      {job.status.startsWith("failed")
-                        ? "生成失败"
-                        : job.status === "ready"
-                          ? "已完成"
-                          : "处理中"}{" "}
-                      · {job.duration} 秒
-                    </span>
-                    <time>
-                      {new Date(job.created_at * 1000).toLocaleString()}
-                    </time>
-                  </div>
-                </article>
-              ))}
-            </div>
+          {tab === "images" ? (
+            projects.length ? (
+              <div className="art-grid library-art-grid">
+                {projects.map((project) => (
+                  <article className="library-item" key={project.id}>
+                    <ProjectCard project={project} />
+                    <button
+                      className="icon-button destructive"
+                      type="button"
+                      onClick={() => void remove(project.id)}
+                      aria-label={`删除 ${project.name}`}
+                    >
+                      <Trash2 size={17} />
+                    </button>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <EmptyWorks tab={tab} onCreate={() => navigate(activeTab.createPath)} />
+            )
+          ) : tab === "try-on" ? (
+            renderTryOnWorks()
           ) : (
-            <div className="library-video-empty">
-              <Video size={20} />
-              <span>还没有视频作品</span>
-              <button
-                className="text-button"
-                type="button"
-                onClick={() => navigate("/video-replica")}
-              >
-                开始重制
-              </button>
-            </div>
+            renderVideoWorks()
           )}
         </section>
-        {visibleProjects.length ? (
-          <div className="art-grid library-art-grid">
-            {visibleProjects.map((project) => (
-              <article className="library-item" key={project.id}>
-                <ProjectCard project={project} />
-                <button
-                  className="icon-button destructive"
-                  onClick={() => void remove(project.id)}
-                  aria-label={`删除 ${project.name}`}
-                >
-                  <Trash2 size={17} />
-                </button>
-              </article>
-            ))}
-          </div>
-        ) : (
-          <div className="first-empty library-empty">
-            <div>+</div>
-            <b>{projects.length ? `没有${filter}项目` : "还没有项目"}</b>
-            <p>
-              {projects.length
-                ? "试试其他分类，或查看全部作品。"
-                : "创建项目后，可在这里管理画面。"}
-            </p>
-            <button
-              className="create-button"
-              onClick={() =>
-                projects.length ? setFilter("全部作品") : navigate("/new")
-              }
-            >
-              {projects.length ? "查看全部作品" : "开始创作"}
-            </button>
-          </div>
-        )}
         {notice && (
           <Notice
             text={notice.text}
@@ -203,5 +251,17 @@ export function Library() {
         )}
       </div>
     </Shell>
+  );
+}
+
+function EmptyWorks({ tab, onCreate }: { tab: LibraryTabID; onCreate: () => void }) {
+  return (
+    <div className="library-video-empty">
+      <Video size={20} />
+      <span>{tabCopy[tab].empty}</span>
+      <button className="text-button" type="button" onClick={onCreate}>
+        开始创作
+      </button>
+    </div>
   );
 }

@@ -10,7 +10,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { client } from "../api";
 import { useRequireAiAuth } from "../auth";
 import type {
@@ -25,6 +25,10 @@ import {
   statusText,
   userFacingError,
 } from "../utils/assets";
+import {
+  defaultVideoPreviewRatio,
+  videoPreviewRatio,
+} from "../utils/videoPreview";
 import { Shell } from "./Shell";
 import { SettingsSelect } from "./SettingsSelect";
 import { AIVideoReplica } from "./AIVideoReplica";
@@ -32,16 +36,20 @@ import "./VideoReplica.css";
 
 const defaultStoryboard: VideoReplicaStoryboardItem[] = [];
 
-export function VideoReplica() {
+type VideoReplicaProps = {
+  workflow: "replica" | "ai_replica";
+};
+
+export function VideoReplica({ workflow }: VideoReplicaProps) {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { id: routeJobID } = useParams<{ id: string }>();
   const requireAiAuth = useRequireAiAuth();
   const [sourcePath, setSourcePath] = useState("");
   const [sourcePreview, setSourcePreview] = useState("");
   const [referencePaths, setReferencePaths] = useState<string[]>([]);
   const [productReferencePath, setProductReferencePath] = useState("");
-  const [mode, setMode] = useState<"replica" | "replace" | "ai_replica">(
-    "replica",
-  );
+  const [mode, setMode] = useState<"replica" | "replace" | "ai_replica">(workflow);
   const [personPrompt, setPersonPrompt] = useState("公开的虚拟人像");
   const [budget, setBudget] = useState(2);
   const [aiModel, setAiModel] = useState("qwen3.8-flash");
@@ -66,6 +74,7 @@ export function VideoReplica() {
   const [terminatingID, setTerminatingID] = useState("");
   const [resumingID, setResumingID] = useState("");
   const [mediaRefreshToken, setMediaRefreshToken] = useState(0);
+  const [previewRatio, setPreviewRatio] = useState(defaultVideoPreviewRatio);
   const [review, setReview] = useState<{
     score: number;
     issues: string[];
@@ -97,6 +106,15 @@ export function VideoReplica() {
     userFacingError(reason instanceof Error ? reason.message : "", fallback);
 
   function selectJob(job: VideoReplicaJob) {
+    const jobWorkflow = job.task_type === "ai_replica" ? "ai_replica" : "replica";
+    if (jobWorkflow !== workflow) {
+      setError(
+        workflow === "ai_replica"
+          ? "该作品属于普通复刻视频，请从普通复刻视频作品库打开。"
+          : "该作品属于 AI 复刻视频，请从 AI 复刻作品库打开。",
+      );
+      return;
+    }
     setSelected(job);
     setSourcePath(job.source_video_path);
     setSourcePreview(fileUrl(job.source_video_path));
@@ -117,7 +135,7 @@ export function VideoReplica() {
     } else {
       setTaskType(job.task_type);
     }
-    setMode(job.task_type === "ai_replica" ? "ai_replica" : "replica");
+    setMode(workflow);
     setDuration(job.duration);
     setSourceDuration(job.duration || null);
     setRatio(job.ratio);
@@ -150,7 +168,11 @@ export function VideoReplica() {
     void load();
   }, []);
   useEffect(() => {
-    const jobID = (location.state as { jobId?: string } | null)?.jobId;
+    setMode(workflow);
+  }, [workflow]);
+  useEffect(() => {
+    const jobID =
+      routeJobID || (location.state as { jobId?: string } | null)?.jobId;
     if (!jobID) return;
     void client
       .videoReplicaJob(jobID)
@@ -158,7 +180,7 @@ export function VideoReplica() {
         selectJob(job);
       })
       .catch((reason) => setError(operationError(reason, "无法打开视频作品")));
-  }, [location.state]);
+  }, [location.state, routeJobID]);
   useEffect(() => {
     if (!jobs.some((job) => isPending(job.status))) return;
     const timer = window.setInterval(() => {
@@ -503,6 +525,9 @@ export function VideoReplica() {
   const displayed = selected?.file_path
     ? `${fileUrl(selected.file_path)}?refresh=${mediaRefreshToken}`
     : "";
+  useEffect(() => {
+    setPreviewRatio(defaultVideoPreviewRatio);
+  }, [displayed]);
   const selectedLabel = useMemo(
     () =>
       selected
@@ -601,7 +626,7 @@ export function VideoReplica() {
         displayed={displayed}
         error={error}
         jobs={jobs}
-        setMode={setMode}
+        openReplica={() => navigate("/video-replica")}
         setPrompt={setPrompt}
         setReview={setReview}
         setPersonPrompt={setPersonPrompt}
@@ -677,34 +702,6 @@ export function VideoReplica() {
         <div className="video-replica-workbench">
           <section className="video-replica-editor">
             {aiControls}
-            <div
-              className="video-mode-switch"
-              role="tablist"
-              aria-label="视频工作模式"
-            >
-              <button
-                type="button"
-                className={mode === "replica" ? "active" : ""}
-                onClick={() => {
-                  setMode("replica");
-                  setTaskType("reference");
-                  setReview(null);
-                }}
-              >
-                视频复刻
-              </button>
-              <button
-                type="button"
-                className={(mode as string) === "ai_replica" ? "active" : ""}
-                onClick={() => {
-                  setMode("ai_replica");
-                  setStoryboard([]);
-                  setReview(null);
-                }}
-              >
-                AI 复刻
-              </button>
-            </div>
             <div
               className={`video-replica-panel workflow-panel ${stepStatus(1)}`}
             >
@@ -1220,9 +1217,20 @@ export function VideoReplica() {
                 )}
               </div>
             )}
-            <div className="video-stage">
+            <div className="video-stage" style={{ aspectRatio: previewRatio }}>
               {displayed ? (
-                <video src={displayed} controls />
+                <video
+                  src={displayed}
+                  controls
+                  onLoadedMetadata={(event) =>
+                    setPreviewRatio(
+                      videoPreviewRatio(
+                        event.currentTarget.videoWidth,
+                        event.currentTarget.videoHeight,
+                      ),
+                    )
+                  }
+                />
               ) : (
                 <>
                   <Film size={38} />

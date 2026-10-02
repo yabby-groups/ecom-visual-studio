@@ -44,7 +44,7 @@ type Props = {
   displayed: string;
   error: string;
   jobs: VideoReplicaJob[];
-  setMode: (mode: "replica") => void;
+  openReplica: () => void;
   setPrompt: Dispatch<SetStateAction<string>>;
   setReview: Dispatch<SetStateAction<Review | null>>;
   setPersonPrompt: Dispatch<SetStateAction<string>>;
@@ -148,7 +148,7 @@ export function AIVideoReplica(props: Props) {
             className="button secondary"
             type="button"
             disabled={controls.draftLocked}
-            onClick={() => p.setMode("replica")}
+            onClick={p.openReplica}
           >
             <RefreshCw size={15} />
             分镜复刻

@@ -39,7 +39,22 @@ export function App() {
         <Route path="/templates" element={<Templates />} />
         <Route path="/try-on" element={<TryOn />} />
         <Route path="/try-on/:id" element={<TryOn />} />
-        <Route path="/video-replica" element={<VideoReplica />} />
+        <Route
+          path="/video-replica"
+          element={<VideoReplica workflow="replica" />}
+        />
+        <Route
+          path="/video-replica/:id"
+          element={<VideoReplica workflow="replica" />}
+        />
+        <Route
+          path="/ai-video-replica"
+          element={<VideoReplica workflow="ai_replica" />}
+        />
+        <Route
+          path="/ai-video-replica/:id"
+          element={<VideoReplica workflow="ai_replica" />}
+        />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/login" element={<Login />} />
         <Route path="*" element={<Navigate to="/" replace />} />
