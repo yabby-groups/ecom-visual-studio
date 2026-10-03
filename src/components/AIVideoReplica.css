@@ -129,6 +129,11 @@
 .ai-advanced-settings .video-controls {
   margin-top: 12px;
 }
+.ai-advanced-settings .video-controls > label > input {
+  box-sizing: border-box;
+  height: 48px;
+  padding: 9px 10px;
+}
 .ai-generation-phase-list {
   grid-template-columns: repeat(6, 1fr);
 }

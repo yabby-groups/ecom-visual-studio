@@ -919,7 +919,7 @@ export function AIVideoReplica() {
                   </div>
                 </div>
               )}
-              <details className="ai-advanced-settings">
+              <details className="ai-advanced-settings" open>
                 <summary>高级设置</summary>
                 <div className="video-controls">
                   <label>
