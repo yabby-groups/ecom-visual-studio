@@ -19,6 +19,7 @@ import { SettingsSelect } from "./SettingsSelect";
 import { VideoReplicaPreview } from "./VideoReplicaPreview";
 import { VideoWorksList } from "./VideoWorksList";
 import "./VideoReplica.css";
+import "./VideoReplicaShared.css";
 
 const defaultStoryboard: VideoReplicaStoryboardItem[] = [];
 

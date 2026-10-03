@@ -12,6 +12,7 @@ import {
   defaultVideoPreviewRatio,
   videoPreviewRatio,
 } from "../utils/videoPreview";
+import "./VideoReplicaPreview.css";
 
 type Props = {
   selected: VideoReplicaJob | null;

@@ -1,0 +1,147 @@
+.skill2api-console {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  margin-bottom: 16px;
+}
+.skill2api-console > * {
+  min-width: 0;
+}
+.skill2api-log-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.skill2api-log-tabs [aria-selected="true"] {
+  background: var(--accent);
+  color: var(--accent-contrast, #fff);
+  border-color: var(--accent);
+}
+.skill2api-log-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(20, 18, 15, 0.48);
+}
+.skill2api-log-dialog {
+  width: min(900px, 100%);
+  max-height: min(720px, 90vh);
+  overflow: auto;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #ded8ce);
+  border-radius: 8px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.24);
+  padding: 22px;
+}
+.skill2api-log-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+.skill2api-log-header h2 {
+  margin: 4px 0 0;
+}
+.skill2api-log-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+  min-width: 0;
+}
+.skill2api-log-grid > div {
+  min-width: 0;
+}
+.skill2api-file-list {
+  display: grid;
+  gap: 8px;
+  max-height: 430px;
+  overflow: auto;
+}
+.skill2api-file-list button {
+  justify-content: flex-start;
+  text-align: left;
+  min-width: 0;
+}
+.skill2api-file-list span {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.skill2api-file-list + .skill2api-log-grid {
+  display: none;
+}
+.skill2api-log-grid h3 {
+  font-size: 13px;
+  margin: 0 0 8px;
+  color: var(--text-muted, #716b63);
+}
+.skill2api-log-grid pre {
+  min-height: 220px;
+  max-height: 430px;
+  overflow: auto;
+  margin: 0;
+  padding: 14px;
+  border: 1px solid var(--border, #ded8ce);
+  border-radius: 6px;
+  background: var(--surface-muted, #f7f4ef);
+  color: var(--text, #292722);
+  font:
+    12px/1.55 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.skill2api-log-grid pre.error {
+  color: #9c3f32;
+}
+.ai-workflow-intro {
+  background: var(--surface);
+}
+.ai-workflow-intro h2 {
+  margin: 0;
+  font-size: 19px;
+}
+.ai-workflow-intro p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.ai-product-thumb {
+  min-height: 90px;
+  align-items: center;
+}
+.ai-advanced-settings {
+  margin-top: 14px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+.ai-advanced-settings summary {
+  cursor: pointer;
+  color: var(--accent-dark);
+  font-size: 12px;
+  font-weight: 700;
+}
+.ai-advanced-settings .video-controls {
+  margin-top: 12px;
+}
+.ai-generation-phase-list {
+  grid-template-columns: repeat(6, 1fr);
+}
+@media (max-width: 900px) {
+  .ai-generation-phase-list {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 720px) {
+  .skill2api-log-grid {
+    grid-template-columns: 1fr;
+  }
+  .skill2api-log-dialog {
+    padding: 16px;
+  }
+}

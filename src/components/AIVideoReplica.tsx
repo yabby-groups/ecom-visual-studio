@@ -26,6 +26,8 @@ import { client } from "../api";
 import { aiVideoReplicaControls } from "../utils/aiVideoReplicaState";
 import { VideoReplicaPreview } from "./VideoReplicaPreview";
 import { VideoWorksList } from "./VideoWorksList";
+import "./AIVideoReplica.css";
+import "./VideoReplicaShared.css";
 
 type Review = {
   score: number;
