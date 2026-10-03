@@ -129,7 +129,7 @@ func TestDeleteVideoReplicaRejectsActiveJob(t *testing.T) {
 	}
 }
 
-func TestAIVideoReplicaJobReturnsSavedPersonSettings(t *testing.T) {
+func TestAIVideoReplicaJobReturnsSavedBudget(t *testing.T) {
 	studio := newAIVideoReplicaTestStudio(t)
 	insertAIVideoReplicaTestJob(t, studio, "job-person-settings", "ready", "")
 	if _, err := studio.db.Exec("update video_replica_jobs set ai_person_prompt=?,ai_budget=? where id=?", "短发女性模特，微笑展示商品", 3.5, "job-person-settings"); err != nil {
@@ -140,8 +140,8 @@ func TestAIVideoReplicaJobReturnsSavedPersonSettings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := job["ai_person_prompt"]; got != "短发女性模特，微笑展示商品" {
-		t.Fatalf("person prompt = %q", got)
+	if _, ok := job["ai_person_prompt"]; ok {
+		t.Fatal("person prompt must not be returned")
 	}
 	if got := job["ai_budget"]; got != 3.5 {
 		t.Fatalf("budget = %v", got)
@@ -152,8 +152,8 @@ func TestAIVideoReplicaJobReturnsSavedPersonSettings(t *testing.T) {
 		t.Fatal(err)
 	}
 	items := page["items"].([]map[string]any)
-	if got := items[0]["ai_person_prompt"]; got != "短发女性模特，微笑展示商品" {
-		t.Fatalf("list person prompt = %q", got)
+	if _, ok := items[0]["ai_person_prompt"]; ok {
+		t.Fatal("list person prompt must not be returned")
 	}
 	if got := items[0]["ai_budget"]; got != 3.5 {
 		t.Fatalf("list budget = %v", got)

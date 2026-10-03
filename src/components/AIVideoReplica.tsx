@@ -55,7 +55,6 @@ type Props = {
   productReferencePath: string;
   avatarAssets: AvatarAssetSelection[];
   prompt: string;
-  personPrompt: string;
   budget: number;
   aiModel: string;
   ratio: string;
@@ -68,7 +67,6 @@ type Props = {
   openReplica: () => void;
   setPrompt: Dispatch<SetStateAction<string>>;
   setReview: Dispatch<SetStateAction<Review | null>>;
-  setPersonPrompt: Dispatch<SetStateAction<string>>;
   setBudget: Dispatch<SetStateAction<number>>;
   setAiModel: Dispatch<SetStateAction<string>>;
   setRatio: Dispatch<SetStateAction<string>>;
@@ -110,7 +108,6 @@ export function AIVideoReplica() {
   const [productReferencePath, setProductReferencePath] = useState("");
   const [avatarAssets, setAvatarAssets] = useState<AvatarAssetSelection[]>([]);
   const [prompt, setPrompt] = useState("");
-  const [personPrompt, setPersonPrompt] = useState("公开的虚拟人像");
   const [budget, setBudget] = useState(2);
   const [aiModel, setAiModel] = useState("qwen3.8-flash");
   const [ratio, setRatio] = useState("16:9");
@@ -170,7 +167,6 @@ export function AIVideoReplica() {
     setProductReferencePath(job.product_reference_path);
     setAvatarAssets(job.avatar_assets ?? []);
     setPrompt(job.prompt);
-    setPersonPrompt(job.ai_person_prompt ?? "公开的虚拟人像");
     setBudget(job.ai_budget ?? 2);
     setAiModel(job.model);
     setRatio(job.ratio);
@@ -329,7 +325,6 @@ export function AIVideoReplica() {
         source_video_path: sourcePath,
         product_path: productReferencePath || referencePaths[0],
         prompt,
-        person_prompt: personPrompt,
         model: aiModel,
         resolution,
         ratio,
@@ -355,7 +350,6 @@ export function AIVideoReplica() {
         source_video_path: job.source_video_path,
         product_path: job.product_reference_path || job.reference_paths[0],
         prompt: job.prompt,
-        person_prompt: job.ai_person_prompt ?? personPrompt,
         model: job.model,
         resolution: job.resolution,
         ratio: job.ratio,
@@ -468,7 +462,6 @@ export function AIVideoReplica() {
     productReferencePath,
     avatarAssets,
     prompt,
-    personPrompt,
     budget,
     aiModel,
     ratio,
@@ -483,7 +476,6 @@ export function AIVideoReplica() {
     openReplica: () => navigate("/video-replica"),
     setPrompt,
     setReview,
-    setPersonPrompt,
     setBudget,
     setAiModel,
     setRatio,
@@ -944,10 +936,33 @@ export function AIVideoReplica() {
               </div>
             </div>
             <div
-              className={`video-replica-panel workflow-panel ${p.scriptReady ? "done" : ""}`}
+              className={`video-replica-panel workflow-panel ${p.avatarAssets.length > 0 ? "done" : ""}`}
             >
               <div className="workflow-step-head">
                 <div className="step-number">3</div>
+                <div>
+                  <span className="step-kicker">素材 03</span>
+                  <h2>选择虚拟人</h2>
+                  <p>可选，作为生成视频中的人物一致性参考。</p>
+                </div>
+                <span className="step-state">
+                  {p.avatarAssets.length > 0
+                    ? `已选择 ${p.avatarAssets.length} 张`
+                    : "可选"}
+                </span>
+              </div>
+              <AvatarPicker
+                value={p.avatarAssets}
+                onChange={p.setAvatarAssets}
+                disabled={controls.draftLocked}
+                embedded
+              />
+            </div>
+            <div
+              className={`video-replica-panel workflow-panel ${p.scriptReady ? "done" : ""}`}
+            >
+              <div className="workflow-step-head">
+                <div className="step-number">4</div>
                 <div>
                   <span className="step-kicker">描述与生成</span>
                   <h2>描述替换目标</h2>
@@ -1066,15 +1081,6 @@ export function AIVideoReplica() {
                     />
                   </label>
                   <label>
-                    人物说明
-                    <input
-                      value={p.personPrompt}
-                      disabled={controls.draftLocked}
-                      onChange={(e) => p.setPersonPrompt(e.target.value)}
-                      placeholder="可选"
-                    />
-                  </label>
-                  <label>
                     预算（美元）
                     <input
                       type="number"
@@ -1087,11 +1093,6 @@ export function AIVideoReplica() {
                   </label>
                 </div>
               </details>
-              <AvatarPicker
-                value={p.avatarAssets}
-                onChange={p.setAvatarAssets}
-                disabled={controls.draftLocked}
-              />
               <button
                 className="button primary workflow-action"
                 type="button"

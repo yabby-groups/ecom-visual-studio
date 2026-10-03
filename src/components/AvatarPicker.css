@@ -3,6 +3,11 @@
   border-top: 1px solid var(--line);
   padding-top: 16px;
 }
+.avatar-picker.embedded {
+  margin-top: 0;
+  border-top: 0;
+  padding-top: 0;
+}
 .avatar-picker-head {
   display: flex;
   justify-content: space-between;

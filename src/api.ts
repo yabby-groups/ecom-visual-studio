@@ -182,7 +182,6 @@ export const client = {
     source_video_path: string;
     product_path: string;
     prompt: string;
-    person_prompt: string;
     model: string;
     resolution: string;
     ratio: string;

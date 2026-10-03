@@ -14,6 +14,7 @@ type Props = {
   value: AvatarAssetSelection[];
   onChange: (next: AvatarAssetSelection[]) => void;
   disabled?: boolean;
+  embedded?: boolean;
 };
 type Detail = {
   source: "public" | "personal";
@@ -22,7 +23,7 @@ type Detail = {
 };
 const keyOf = (source: string, id: string) => `${source}:${id}`;
 
-export function AvatarPicker({ value, onChange, disabled }: Props) {
+export function AvatarPicker({ value, onChange, disabled, embedded = false }: Props) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<"public" | "personal">("public");
   const [catalog, setCatalog] = useState<AvatarAssetCatalog | null>(null);
@@ -89,12 +90,25 @@ export function AvatarPicker({ value, onChange, disabled }: Props) {
   }, [open]);
 
   return (
-    <section className="avatar-picker">
-      <div className="avatar-picker-head">
-        <div>
-          <strong>虚拟人</strong>
-          <span>可选，作为人物一致性参考</span>
+    <section className={`avatar-picker${embedded ? " embedded" : ""}`}>
+      {!embedded && (
+        <div className="avatar-picker-head">
+          <div>
+            <strong>虚拟人</strong>
+            <span>可选，作为人物一致性参考</span>
+          </div>
+          <button
+            type="button"
+            className="button secondary"
+            disabled={disabled}
+            onClick={() => void show()}
+          >
+            <Plus size={16} />
+            选择虚拟人
+          </button>
         </div>
+      )}
+      {embedded && (
         <button
           type="button"
           className="button secondary"
@@ -104,7 +118,7 @@ export function AvatarPicker({ value, onChange, disabled }: Props) {
           <Plus size={16} />
           选择虚拟人
         </button>
-      </div>
+      )}
       {value.length > 0 && catalog && (
         <div className="avatar-selected">
           {value.map((item) => {
@@ -337,6 +351,7 @@ export function AvatarPicker({ value, onChange, disabled }: Props) {
                       onClick={() => {
                         toggle(detail.source, detail.asset.id);
                         setDetail(null);
+                        setOpen(false);
                       }}
                     >
                       <Check size={17} />

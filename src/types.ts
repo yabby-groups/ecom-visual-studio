@@ -224,7 +224,6 @@ export type VideoReplicaJob = {
   segments: VideoReplicaSegment[];
   progress: VideoReplicaProgress;
   workflow_kind?: "storyboard" | "ai_replace";
-  ai_person_prompt?: string;
   ai_budget?: number;
   avatar_assets?: AvatarAssetSelection[];
   skill2api_request_id?: string;
