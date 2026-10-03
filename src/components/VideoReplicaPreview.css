@@ -7,7 +7,7 @@
   top: 132px;
   align-self: start;
   min-width: 0;
-  max-height: calc(100vh - 160px);
+  max-height: calc(100vh - 152px);
   border: 1px solid var(--line);
   background: var(--panel);
   padding: 20px;
@@ -16,7 +16,7 @@
 .video-replica-preview-container {
   min-height: 0;
   flex: none;
-  max-height: calc(100vh - 300px);
+  max-height: calc(100vh - 260px);
   overflow-x: hidden;
   overflow-y: auto;
 }
