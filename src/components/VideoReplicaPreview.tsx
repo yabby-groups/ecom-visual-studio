@@ -1,5 +1,5 @@
 import { Download, Film, RefreshCw, ShieldCheck } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import type { VideoReplicaJob, VideoReplicaSegment } from "../types";
 import { failureReason, fileUrl, isPending, statusText } from "../utils/assets";
 import {
@@ -25,6 +25,7 @@ export function VideoReplicaPreview({
   exportVideo,
 }: Props) {
   const [previewRatio, setPreviewRatio] = useState(defaultVideoPreviewRatio);
+  const [previewScale, setPreviewScale] = useState(16 / 9);
   const displayed = selected?.file_path
     ? `${fileUrl(selected.file_path)}?refresh=${mediaRefreshToken}`
     : "";
@@ -52,6 +53,7 @@ export function VideoReplicaPreview({
 
   useEffect(() => {
     setPreviewRatio(defaultVideoPreviewRatio);
+    setPreviewScale(16 / 9);
   }, [displayed]);
 
   function segmentStatus(segment: VideoReplicaSegment) {
@@ -70,7 +72,9 @@ export function VideoReplicaPreview({
   }
 
   return (
-    <section className="video-replica-preview">
+    <section
+      className={`video-replica-preview ${selected ? "" : "is-empty"}`}
+    >
       <div className="video-replica-meta">
         <span className="workflow-badge">
           {selected ? statusText(selected.status) : "未开始"}
@@ -153,19 +157,32 @@ export function VideoReplicaPreview({
             )}
           </div>
         )}
-        <div className="video-stage" style={{ aspectRatio: previewRatio }}>
+        <div
+          className="video-stage"
+          style={
+            {
+              aspectRatio: previewRatio,
+              "--preview-scale": previewScale,
+            } as CSSProperties
+          }
+        >
           {displayed ? (
             <video
               src={displayed}
               controls
-              onLoadedMetadata={(event) =>
+              playsInline
+              onLoadedMetadata={(event) => {
                 setPreviewRatio(
                   videoPreviewRatio(
                     event.currentTarget.videoWidth,
                     event.currentTarget.videoHeight,
                   ),
-                )
-              }
+                );
+                setPreviewScale(
+                  event.currentTarget.videoWidth /
+                    event.currentTarget.videoHeight,
+                );
+              }}
             />
           ) : (
             <>

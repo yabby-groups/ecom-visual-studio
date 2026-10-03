@@ -8,6 +8,7 @@
   display: grid;
   gap: 12px;
   min-width: 0;
+  margin-bottom: 16px;
 }
 .skill2api-console > * {
   min-width: 0;
@@ -201,12 +202,21 @@
   align-self: start;
   min-width: 0;
   max-height: calc(100vh - 160px);
-  /* overflow: hidden; */
+  display: flex;
+  flex-direction: column;
 }
 .video-replica-preview-container {
-  overflow: scroll;
-  height: 100%;
-  max-height: calc(100vh - 180px);
+  min-height: 0;
+  flex: none;
+  max-height: calc(100vh - 300px);
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+.video-replica-preview.is-empty {
+  height: auto;
+}
+.video-replica-preview.is-empty .video-replica-preview-container {
+  max-height: none;
 }
 .video-replica-panel,
 .video-replica-preview,
@@ -668,9 +678,11 @@
   margin-bottom: 14px;
 }
 .video-stage {
-  width: 100%;
+  width: min(100%, calc((100vh - 300px) * var(--preview-scale, 1.7778)));
   max-width: 100%;
+  max-height: calc(100vh - 300px);
   min-width: 0;
+  margin-inline: auto;
   aspect-ratio: 16 / 9;
   background: var(--video-stage);
   color: var(--video-stage-muted);
@@ -798,6 +810,7 @@
 .video-result-actions {
   display: flex;
   gap: 8px;
+  margin-top: 14px;
 }
 .video-result-actions .button {
   flex: 1;
@@ -806,7 +819,7 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
-  padding: 4px 2px 0;
+  padding: 10px 2px 0;
 }
 .preview-meta span {
   display: grid;
@@ -822,12 +835,15 @@
 }
 .privacy-note {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  margin: 0;
+  margin: 10px 0 0;
   color: var(--muted);
   font-size: 11px;
+  line-height: 1.5;
+  text-align: center;
 }
 .privacy-note svg {
   color: var(--accent);
@@ -906,6 +922,15 @@
   .video-replica-preview {
     position: static;
     order: -1;
+    height: auto;
+    max-height: none;
+  }
+  .video-replica-preview-container {
+    max-height: none;
+  }
+  .video-stage {
+    width: min(100%, calc((100dvh - 260px) * var(--preview-scale, 1.7778)));
+    max-height: calc(100dvh - 260px);
   }
   .video-controls {
     grid-template-columns: repeat(2, 1fr);

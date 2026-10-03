@@ -10,7 +10,13 @@ import {
   X,
   Terminal,
 } from "lucide-react";
-import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
+import {
+  useEffect,
+  useState,
+  type CSSProperties,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import type { VideoReplicaJob } from "../types";
 import {
@@ -25,6 +31,10 @@ import { Shell } from "./Shell";
 import { SettingsSelect } from "./SettingsSelect";
 import { client } from "../api";
 import { aiVideoReplicaControls } from "../utils/aiVideoReplicaState";
+import {
+  defaultVideoPreviewRatio,
+  videoPreviewRatio,
+} from "../utils/videoPreview";
 import { VideoWorksList } from "./VideoWorksList";
 
 type Review = {
@@ -113,6 +123,8 @@ export function AIVideoReplica() {
   const [resumingID, setResumingID] = useState("");
   const [pullingResultID, setPullingResultID] = useState("");
   const [mediaRefreshToken, setMediaRefreshToken] = useState(0);
+  const [previewRatio, setPreviewRatio] = useState(defaultVideoPreviewRatio);
+  const [previewScale, setPreviewScale] = useState(16 / 9);
   const [review, setReview] = useState<Review | null>(null);
   const [answer, setAnswer] = useState("");
   const [instruction, setInstruction] = useState("");
@@ -451,6 +463,10 @@ export function AIVideoReplica() {
     terminating: terminatingID === selected?.id,
     resuming: resumingID === selected?.id,
   };
+  useEffect(() => {
+    setPreviewRatio(defaultVideoPreviewRatio);
+    setPreviewScale(16 / 9);
+  }, [p.displayed]);
   const phases = [
     ["queued", "等待提交"],
     ["preparing", "准备素材"],
@@ -794,7 +810,9 @@ export function AIVideoReplica() {
               )}
             </div>
           </section>
-          <section className="video-replica-preview">
+          <section
+            className={`video-replica-preview ${p.selected ? "" : "is-empty"}`}
+          >
             <div className="video-replica-meta">
               <span className="workflow-badge">
                 {p.selected ? statusText(p.selected.status) : "未开始"}
@@ -1045,9 +1063,34 @@ export function AIVideoReplica() {
                   </section>
                 </div>
               )}
-              <div className="video-stage">
+              <div
+                className="video-stage"
+                style={
+                  {
+                    aspectRatio: previewRatio,
+                    "--preview-scale": previewScale,
+                  } as CSSProperties
+                }
+              >
                 {p.displayed ? (
-                  <video key={p.displayed} src={p.displayed} controls />
+                  <video
+                    key={p.displayed}
+                    src={p.displayed}
+                    controls
+                    playsInline
+                    onLoadedMetadata={(event) => {
+                      setPreviewRatio(
+                        videoPreviewRatio(
+                          event.currentTarget.videoWidth,
+                          event.currentTarget.videoHeight,
+                        ),
+                      );
+                      setPreviewScale(
+                        event.currentTarget.videoWidth /
+                          event.currentTarget.videoHeight,
+                      );
+                    }}
+                  />
                 ) : (
                   <>
                     <Film size={38} />
