@@ -211,7 +211,7 @@ func (s *Studio) resolveAvatarAssetIDs(userID string, selections []AvatarAssetSe
 		if providerID == "" {
 			return nil, fmt.Errorf("所选虚拟人素材不可用")
 		}
-		result = append(result, providerID)
+		result = append(result, "asset://" + providerID)
 	}
 	return result, nil
 }

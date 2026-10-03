@@ -244,14 +244,14 @@ func (s *Studio) runAIVideoReplica(id, userID string, input AIVideoReplicaInput)
 		for index, imageURL := range imageURLs {
 			productReferences = append(productReferences, fmt.Sprintf("商品参考图 %d：%s", index+1, imageURL))
 		}
-		prompt := fmt.Sprintf("克隆参考视频的镜头节奏、动作和构图，将目标商品替换为参考商品。参考视频：%s ；%s。", videoURL, strings.Join(productReferences, "；"))
+		prompt := fmt.Sprintf("克隆参考视频的镜头节奏、动作和构图，将目标商品替换为参考商品。参考视频：%s ；%s 。", videoURL, strings.Join(productReferences, "；"))
 		avatarIDs, resolveErr := s.resolveAvatarAssetIDs(userID, input.AvatarAssets)
 		if resolveErr != nil {
 			fail(resolveErr)
 			return
 		}
 		if len(avatarIDs) > 0 {
-			prompt += " 人物素材：" + strings.Join(avatarIDs, "、") + "。"
+			prompt += " 人物素材：" + strings.Join(avatarIDs, " 、") + " 。"
 		}
 		prompt += fmt.Sprintf("\n%s\n尺寸 %s %s\n预算 %s 美元", input.Prompt, input.Resolution, input.Ratio, strconv.FormatFloat(input.Budget, 'f', -1, 64))
 		var submitted struct {
