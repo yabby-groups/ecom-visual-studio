@@ -11,6 +11,7 @@ import {
   Terminal,
 } from "lucide-react";
 import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
+import { createPortal } from "react-dom";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import type { VideoReplicaJob } from "../types";
 import {
@@ -26,6 +27,7 @@ import { client } from "../api";
 import { aiVideoReplicaControls } from "../utils/aiVideoReplicaState";
 import { VideoReplicaPreview } from "./VideoReplicaPreview";
 import { VideoWorksList } from "./VideoWorksList";
+import { ConfirmDialog } from "./ConfirmDialog";
 import "./AIVideoReplica.css";
 import "./VideoReplicaShared.css";
 
@@ -34,6 +36,12 @@ type Review = {
   issues: string[];
   optimized_prompt: string;
   source: string;
+};
+type PendingConfirmation = {
+  title: string;
+  message: string;
+  confirmLabel: string;
+  run: () => Promise<void>;
 };
 type Props = {
   sourceReady: boolean;
@@ -123,8 +131,29 @@ export function AIVideoReplica() {
   const [logTab, setLogTab] = useState<"stdout" | "stderr" | "files">("stdout");
   const [fileBusy, setFileBusy] = useState("");
   const [fileError, setFileError] = useState("");
+  const [pendingConfirmation, setPendingConfirmation] =
+    useState<PendingConfirmation | null>(null);
+  const [confirmationError, setConfirmationError] = useState("");
+  const [confirmationLoading, setConfirmationLoading] = useState(false);
   const operationError = (reason: unknown, fallback: string) =>
     userFacingError(reason instanceof Error ? reason.message : "", fallback);
+  function askConfirmation(confirmation: PendingConfirmation) {
+    setConfirmationError("");
+    setPendingConfirmation(confirmation);
+  }
+  async function confirmPendingAction() {
+    if (!pendingConfirmation || confirmationLoading) return;
+    setConfirmationLoading(true);
+    setConfirmationError("");
+    try {
+      await pendingConfirmation.run();
+      setPendingConfirmation(null);
+    } catch (reason) {
+      setConfirmationError(operationError(reason, "操作失败，请重试"));
+    } finally {
+      setConfirmationLoading(false);
+    }
+  }
   function selectJob(job: VideoReplicaJob) {
     if (job.task_type !== "ai_replica") {
       setError("该作品属于普通复刻，请从普通视频复刻页面打开。");
@@ -186,6 +215,18 @@ export function AIVideoReplica() {
   useEffect(() => {
     if (selected?.skill2api_request_id) void refreshTask(selected.id);
   }, [selected?.id]);
+  useEffect(() => {
+    if (!logsOpen) return;
+    const { body, documentElement } = document;
+    const bodyOverflow = body.style.overflow;
+    const rootOverflow = documentElement.style.overflow;
+    body.style.overflow = "hidden";
+    documentElement.style.overflow = "hidden";
+    return () => {
+      body.style.overflow = bodyOverflow;
+      documentElement.style.overflow = rootOverflow;
+    };
+  }, [logsOpen]);
   async function refreshTask(id: string) {
     try {
       const remote = await client.refreshAIVideoReplica(id);
@@ -293,6 +334,7 @@ export function AIVideoReplica() {
       selectJob(await client.videoReplicaJob(result.id));
     } catch (reason) {
       setError(operationError(reason, "创建 AI 复刻任务失败"));
+      throw reason;
     } finally {
       setBusy("");
     }
@@ -317,6 +359,7 @@ export function AIVideoReplica() {
       selectJob(await client.videoReplicaJob(result.id));
     } catch (reason) {
       setError(operationError(reason, "重新生成失败"));
+      throw reason;
     } finally {
       setBusy("");
     }
@@ -334,7 +377,7 @@ export function AIVideoReplica() {
       return true;
     } catch (reason) {
       setError(operationError(reason, "无法继续任务"));
-      return false;
+      throw reason;
     } finally {
       setResumingID("");
     }
@@ -346,9 +389,10 @@ export function AIVideoReplica() {
       const result = await client.terminateAIVideoReplica(id);
       await load();
       if (typeof result.remote_error === "string")
-        setError(result.remote_error);
+        throw new Error(result.remote_error);
     } catch (reason) {
       setError(operationError(reason, "无法终止任务"));
+      throw reason;
     } finally {
       setTerminatingID("");
     }
@@ -358,13 +402,14 @@ export function AIVideoReplica() {
     setError("");
     try {
       const ok = await client.pullAIVideoReplicaResult(id);
+      if (!ok) throw new Error("远端结果尚未保存");
       selectJob(await client.videoReplicaJob(id));
       if (ok) setMediaRefreshToken((value) => value + 1);
       await load();
       return ok;
     } catch (reason) {
       setError(operationError(reason, "无法拉取远程结果"));
-      return false;
+      throw reason;
     } finally {
       setPullingResultID("");
     }
@@ -376,6 +421,7 @@ export function AIVideoReplica() {
       await client.downloadAsset(path);
     } catch (reason) {
       setError(operationError(reason, "导出视频失败"));
+      throw reason;
     } finally {
       setBusy("");
     }
@@ -389,6 +435,7 @@ export function AIVideoReplica() {
         throw new Error("文件未保存");
     } catch (reason) {
       setFileError(String(reason));
+      throw reason;
     } finally {
       setFileBusy("");
     }
@@ -530,9 +577,17 @@ export function AIVideoReplica() {
                 className="button primary"
                 type="button"
                 disabled={!answer.trim() || !controls.canAnswer}
-                onClick={async () => {
-                  if (await p.resumeTask(p.selected!.id, answer, ""))
-                    setAnswer("");
+                onClick={() => {
+                  const answerValue = answer;
+                  askConfirmation({
+                    title: "确认提交回答？",
+                    message: "提交后将把当前回答发送给远端 AI 复刻任务。",
+                    confirmLabel: "确认提交",
+                    run: async () => {
+                      if (await p.resumeTask(p.selected!.id, answerValue, ""))
+                        setAnswer("");
+                    },
+                  });
                 }}
               >
                 {p.resuming ? "正在提交" : "提交"}
@@ -549,9 +604,21 @@ export function AIVideoReplica() {
                 className="button secondary"
                 type="button"
                 disabled={!controls.canResume}
-                onClick={async () => {
-                  if (await p.resumeTask(p.selected!.id, "", instruction))
-                    setInstruction("");
+                onClick={() => {
+                  const instructionValue = instruction;
+                  askConfirmation({
+                    title: "确认追加题词并恢复？",
+                    message: instructionValue.trim()
+                      ? `将追加“${instructionValue.trim()}”并继续远端任务。`
+                      : "将继续执行当前远端任务。",
+                    confirmLabel: "确认恢复",
+                    run: async () => {
+                      if (
+                        await p.resumeTask(p.selected!.id, "", instructionValue)
+                      )
+                        setInstruction("");
+                    },
+                  });
                 }}
               >
                 {p.resuming ? "正在恢复" : "恢复任务"}
@@ -568,7 +635,15 @@ export function AIVideoReplica() {
               className="button secondary"
               type="button"
               disabled={!controls.canTerminate}
-              onClick={() => void p.terminateTask(p.selected!.id)}
+              onClick={() =>
+                askConfirmation({
+                  title: "确认终止任务？",
+                  message:
+                    "终止后任务将停止执行，后续只能通过恢复或再次生成继续。",
+                  confirmLabel: "确认终止",
+                  run: () => p.terminateTask(p.selected!.id),
+                })
+              }
             >
               <X size={16} />
               {p.terminating ? "正在终止" : "终止"}
@@ -579,7 +654,16 @@ export function AIVideoReplica() {
               className="button primary"
               type="button"
               disabled={p.pullingResult}
-              onClick={() => void p.pullResult(p.selected!.id)}
+              onClick={() =>
+                askConfirmation({
+                  title: "确认重新拉取结果？",
+                  message: "将从远端重新获取生成结果并保存到本机。",
+                  confirmLabel: "确认拉取",
+                  run: async () => {
+                    await p.pullResult(p.selected!.id);
+                  },
+                })
+              }
             >
               <Download size={16} />
               {p.pullingResult
@@ -603,91 +687,100 @@ export function AIVideoReplica() {
           <small>该历史任务尚未关联远程请求，请使用“再次生成”恢复。</small>
         )}
       </div>
-      {logsOpen && (
-        <div
-          className="skill2api-log-backdrop"
-          role="presentation"
-          onClick={() => setLogsOpen(false)}
-        >
-          <section
-            className="skill2api-log-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="skill2api-log-title"
-            onClick={(e) => e.stopPropagation()}
+      {logsOpen &&
+        createPortal(
+          <div
+            className="skill2api-log-backdrop"
+            role="presentation"
+            onClick={() => setLogsOpen(false)}
           >
-            <div className="skill2api-log-header">
-              <div>
-                <span className="step-kicker">SKILL2API</span>
-                <h2 id="skill2api-log-title">运行日志</h2>
-              </div>
-              <button
-                className="icon-button"
-                type="button"
-                aria-label="关闭日志"
-                onClick={() => setLogsOpen(false)}
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <div
-              className="skill2api-log-tabs"
-              role="tablist"
-              aria-label="远程任务记录"
+            <section
+              className="skill2api-log-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="skill2api-log-title"
+              onClick={(e) => e.stopPropagation()}
             >
-              {(["stdout", "stderr", "files"] as const).map((tab) => (
+              <div className="skill2api-log-header">
+                <div>
+                  <span className="step-kicker">SKILL2API</span>
+                  <h2 id="skill2api-log-title">运行日志</h2>
+                </div>
                 <button
-                  key={tab}
-                  className="button secondary"
+                  className="icon-button"
                   type="button"
-                  role="tab"
-                  aria-selected={logTab === tab}
-                  onClick={() => setLogTab(tab)}
+                  aria-label="关闭日志"
+                  onClick={() => setLogsOpen(false)}
                 >
-                  {tab === "files" ? "文件" : tab}
+                  <X size={18} />
                 </button>
-              ))}
-            </div>
-            {p.selected.skill2api?.remote_error && (
-              <p className="generation-progress-detail" role="status">
-                远端记录不可用，正在显示本地日志快照。
-              </p>
-            )}
-            {logTab === "files" && (
-              <div className="skill2api-file-list">
-                {p.selected.skill2api?.files?.map((path) => (
+              </div>
+              <div
+                className="skill2api-log-tabs"
+                role="tablist"
+                aria-label="远程任务记录"
+              >
+                {(["stdout", "stderr", "files"] as const).map((tab) => (
                   <button
+                    key={tab}
                     className="button secondary"
-                    key={path}
                     type="button"
-                    disabled={!!fileBusy}
-                    onClick={() => void downloadFile(path)}
+                    role="tab"
+                    aria-selected={logTab === tab}
+                    onClick={() => setLogTab(tab)}
                   >
-                    <Download size={16} />
-                    <span>
-                      {fileBusy === path ? "正在获取：" : ""}
-                      {path}
-                    </span>
+                    {tab === "files" ? "文件" : tab}
                   </button>
                 ))}
-                {fileError && <p role="alert">{fileError}</p>}
               </div>
-            )}
-            <div className="skill2api-log-grid" role="tabpanel">
-              <div>
-                <pre className={logTab === "stderr" ? "error" : ""}>
-                  {logTab === "stdout"
-                    ? p.selected.skill2api?.stdout || "暂无标准输出"
-                    : logTab === "stderr"
-                      ? p.selected.skill2api?.stderr || "远程错误输出不可用"
-                      : p.selected.skill2api?.files?.join("\n") ||
-                        "远程文件列表不可用"}
-                </pre>
+              {p.selected.skill2api?.remote_error && (
+                <p className="generation-progress-detail" role="status">
+                  远端记录不可用，正在显示本地日志快照。
+                </p>
+              )}
+              {logTab === "files" && (
+                <div className="skill2api-file-list">
+                  {p.selected.skill2api?.files?.map((path) => (
+                    <button
+                      className="button secondary"
+                      key={path}
+                      type="button"
+                      disabled={!!fileBusy}
+                      onClick={() =>
+                        askConfirmation({
+                          title: "确认下载远程文件？",
+                          message: `将把“${path}”下载并保存到本机。`,
+                          confirmLabel: "确认下载",
+                          run: () => downloadFile(path),
+                        })
+                      }
+                    >
+                      <Download size={16} />
+                      <span>
+                        {fileBusy === path ? "正在获取：" : ""}
+                        {path}
+                      </span>
+                    </button>
+                  ))}
+                  {fileError && <p role="alert">{fileError}</p>}
+                </div>
+              )}
+              <div className="skill2api-log-grid" role="tabpanel">
+                <div>
+                  <pre className={logTab === "stderr" ? "error" : ""}>
+                    {logTab === "stdout"
+                      ? p.selected.skill2api?.stdout || "暂无标准输出"
+                      : logTab === "stderr"
+                        ? p.selected.skill2api?.stderr || "远程错误输出不可用"
+                        : p.selected.skill2api?.files?.join("\n") ||
+                          "远程文件列表不可用"}
+                  </pre>
+                </div>
               </div>
-            </div>
-          </section>
-        </div>
-      )}
+            </section>
+          </div>,
+          document.body,
+        )}
     </>
   );
   return (
@@ -989,7 +1082,14 @@ export function AIVideoReplica() {
                 className="button primary workflow-action"
                 type="button"
                 disabled={createDisabled}
-                onClick={p.create}
+                onClick={() =>
+                  askConfirmation({
+                    title: "确认开始 AI 复刻？",
+                    message: `将使用 ${p.aiModel}、${p.resolution}、${p.ratio} 和 ${p.budget} 美元预算创建远端任务。`,
+                    confirmLabel: "确认开始",
+                    run: async () => p.create(),
+                  })
+                }
               >
                 {p.busy === "create" ? (
                   <LoaderCircle className="spin" size={16} />
@@ -1039,7 +1139,14 @@ export function AIVideoReplica() {
                   <button
                     className="button secondary"
                     type="button"
-                    onClick={() => p.regenerate(p.selected!.id)}
+                    onClick={() =>
+                      askConfirmation({
+                        title: "确认再次生成？",
+                        message: "将根据当前作品设置创建一个新的 AI 复刻任务。",
+                        confirmLabel: "确认生成",
+                        run: async () => p.regenerate(p.selected!.id),
+                      })
+                    }
                     disabled={!controls.canRegenerate}
                   >
                     <RefreshCw size={16} />
@@ -1050,7 +1157,16 @@ export function AIVideoReplica() {
                       className="button secondary"
                       type="button"
                       disabled={!!p.busy || controls.draftLocked}
-                      onClick={() => p.exportVideo(p.selected!.file_path!)}
+                      onClick={() =>
+                        askConfirmation({
+                          title: "确认导出视频？",
+                          message: "将把生成视频下载并保存到本机。",
+                          confirmLabel: "确认导出",
+                          run: async () => {
+                            p.exportVideo(p.selected!.file_path!);
+                          },
+                        })
+                      }
                     >
                       <Download size={16} />
                       导出视频
@@ -1061,7 +1177,16 @@ export function AIVideoReplica() {
                       className="button primary"
                       type="button"
                       disabled={p.pullingResult}
-                      onClick={() => void p.pullResult(p.selected!.id)}
+                      onClick={() =>
+                        askConfirmation({
+                          title: "确认重新拉取结果？",
+                          message: "将从远端重新获取生成结果并保存到本机。",
+                          confirmLabel: "确认拉取",
+                          run: async () => {
+                            await p.pullResult(p.selected!.id);
+                          },
+                        })
+                      }
                     >
                       <Download size={16} />
                       {p.pullingResult ? "正在拉取结果" : "手动拉取结果"}
@@ -1102,6 +1227,17 @@ export function AIVideoReplica() {
           </p>
         )}
       </main>
+      {pendingConfirmation && (
+        <ConfirmDialog
+          title={pendingConfirmation.title}
+          message={pendingConfirmation.message}
+          confirmLabel={pendingConfirmation.confirmLabel}
+          error={confirmationError}
+          loading={confirmationLoading}
+          onCancel={() => setPendingConfirmation(null)}
+          onConfirm={() => void confirmPendingAction()}
+        />
+      )}
     </Shell>
   );
 }

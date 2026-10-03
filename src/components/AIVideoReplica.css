@@ -20,7 +20,8 @@
 .skill2api-log-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 20;
+  /* Keep the console above media previews and other route-local overlays. */
+  z-index: 50;
   display: grid;
   place-items: center;
   padding: 20px;
@@ -31,6 +32,7 @@
   max-height: min(720px, 90vh);
   overflow: auto;
   background: var(--surface, #fff);
+  color: var(--ink);
   border: 1px solid var(--border, #ded8ce);
   border-radius: 8px;
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.24);
@@ -87,7 +89,7 @@
   border: 1px solid var(--border, #ded8ce);
   border-radius: 6px;
   background: var(--surface-muted, #f7f4ef);
-  color: var(--text, #292722);
+  color: var(--ink);
   font:
     12px/1.55 ui-monospace,
     SFMono-Regular,
@@ -97,7 +99,7 @@
   overflow-wrap: anywhere;
 }
 .skill2api-log-grid pre.error {
-  color: #9c3f32;
+  color: #c85045;
 }
 .ai-workflow-intro {
   background: var(--surface);
