@@ -175,6 +175,32 @@ export type VideoReplicaProgress = {
   current_segment: number;
   message?: string;
 };
+export type AvatarAssetSelection = {
+  source: "personal" | "public";
+  id: string;
+};
+export type AvatarAsset = {
+  id: string;
+  name: string;
+  status: string;
+  preview_url: string;
+  preview_url_512: string;
+  preview_url_64: string;
+  asset_uri?: string;
+};
+export type AvatarPersona = {
+  id: string;
+  name: string;
+  tags: string;
+  group_id?: string;
+  description?: string;
+  status: string;
+  assets: AvatarAsset[];
+};
+export type AvatarAssetCatalog = {
+  personas: AvatarPersona[];
+  assets: AvatarAsset[];
+};
 export type VideoReplicaJob = {
   id: string;
   title: string;
@@ -200,6 +226,7 @@ export type VideoReplicaJob = {
   workflow_kind?: "storyboard" | "ai_replace";
   ai_person_prompt?: string;
   ai_budget?: number;
+  avatar_assets?: AvatarAssetSelection[];
   skill2api_request_id?: string;
   skill2api_delivery_id?: string;
   skill2api?: Skill2APIStatus;

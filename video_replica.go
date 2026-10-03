@@ -26,16 +26,24 @@ import (
 )
 
 type VideoReplicaInput struct {
-	SourceVideoPath      string           `json:"source_video_path"`
-	ReferencePaths       []string         `json:"reference_paths"`
-	ProductReferencePath string           `json:"product_reference_path"`
-	TaskType             string           `json:"task_type"`
-	Model                string           `json:"model"`
-	Prompt               string           `json:"prompt"`
-	Storyboard           []map[string]any `json:"storyboard"`
-	Duration             int              `json:"duration"`
-	Resolution           string           `json:"resolution"`
-	Ratio                string           `json:"ratio"`
+	SourceVideoPath      string                 `json:"source_video_path"`
+	ReferencePaths       []string               `json:"reference_paths"`
+	ProductReferencePath string                 `json:"product_reference_path"`
+	TaskType             string                 `json:"task_type"`
+	Model                string                 `json:"model"`
+	Prompt               string                 `json:"prompt"`
+	Storyboard           []map[string]any       `json:"storyboard"`
+	Duration             int                    `json:"duration"`
+	Resolution           string                 `json:"resolution"`
+	Ratio                string                 `json:"ratio"`
+	AvatarAssets         []AvatarAssetSelection `json:"avatar_assets"`
+}
+
+// AvatarAssetSelection keeps only the local Myna asset record. Provider asset
+// IDs are resolved immediately before a request and are never persisted here.
+type AvatarAssetSelection struct {
+	Source string `json:"source"`
+	ID     string `json:"id"`
 }
 
 type videoSegmentPlan struct {
@@ -369,8 +377,9 @@ func (s *Studio) CreateVideoReplica(input VideoReplicaInput) (map[string]string,
 		return nil, err
 	}
 	refs, _ := json.Marshal(input.ReferencePaths)
+	avatarAssets, _ := json.Marshal(input.AvatarAssets)
 	if err := s.writeTransaction(func(tx *sql.Tx) error {
-		if _, err := tx.Exec("insert into video_replica_jobs(id,user_id,source_video_path,reference_paths,product_reference_path,task_type,model,prompt,storyboard,storyboard_confirmed,duration,resolution,ratio,status,current_run_id,created_at) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", id, localWorkspaceID, persistedSourcePath, string(refs), input.ProductReferencePath, input.TaskType, seedanceModels[input.Model], input.Prompt, string(storyboard), 1, effectiveDuration, input.Resolution, input.Ratio, "queued", runID, time.Now().Unix()); err != nil {
+		if _, err := tx.Exec("insert into video_replica_jobs(id,user_id,source_video_path,reference_paths,product_reference_path,task_type,model,prompt,storyboard,storyboard_confirmed,duration,resolution,ratio,status,current_run_id,created_at,avatar_assets) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", id, localWorkspaceID, persistedSourcePath, string(refs), input.ProductReferencePath, input.TaskType, seedanceModels[input.Model], input.Prompt, string(storyboard), 1, effectiveDuration, input.Resolution, input.Ratio, "queued", runID, time.Now().Unix(), string(avatarAssets)); err != nil {
 			return err
 		}
 		return insertVideoSegments(tx, id, runID, plans)
@@ -520,7 +529,7 @@ func (s *Studio) VideoReplicaJobs(limit, offset int) (map[string]any, error) {
 	if err := s.db.QueryRow("select count(*) from video_replica_jobs").Scan(&total); err != nil {
 		return nil, err
 	}
-	rows, err := s.db.Query("select id,title,source_video_path,reference_paths,product_reference_path,task_type,model,prompt,storyboard,storyboard_confirmed,duration,resolution,ratio,status,file_path,generation_started_at,created_at,ai_person_prompt,ai_budget from video_replica_jobs order by created_at desc,id desc limit ? offset ?", limit, offset)
+	rows, err := s.db.Query("select id,title,source_video_path,reference_paths,product_reference_path,task_type,model,prompt,storyboard,storyboard_confirmed,duration,resolution,ratio,status,file_path,generation_started_at,created_at,ai_person_prompt,ai_budget,avatar_assets from video_replica_jobs order by created_at desc,id desc limit ? offset ?", limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -551,7 +560,7 @@ func (s *Studio) VideoReplicaJob(id string) (map[string]any, error) {
 	}
 	var job map[string]any
 	for attempt := 0; attempt < 5; attempt++ {
-		row := s.db.QueryRow("select id,title,source_video_path,reference_paths,product_reference_path,task_type,model,prompt,storyboard,storyboard_confirmed,duration,resolution,ratio,status,file_path,generation_started_at,created_at,ai_person_prompt,ai_budget from video_replica_jobs where id=?", id)
+		row := s.db.QueryRow("select id,title,source_video_path,reference_paths,product_reference_path,task_type,model,prompt,storyboard,storyboard_confirmed,duration,resolution,ratio,status,file_path,generation_started_at,created_at,ai_person_prompt,ai_budget,avatar_assets from video_replica_jobs where id=?", id)
 		job, err = scanVideoReplicaRow(row)
 		if err != sql.ErrNoRows {
 			break
@@ -744,6 +753,14 @@ func (s *Studio) runVideoSegments(id, runID, providerUserID, source, refsJSON, p
 		return err
 	}
 	config := s.huabotConfig()
+	avatarSelections, err := s.videoReplicaAvatarSelections(id)
+	if err != nil {
+		return err
+	}
+	avatarAssets, err := s.resolveAvatarAssetIDs(providerUserID, avatarSelections)
+	if err != nil {
+		return err
+	}
 	inputRefs := make([]map[string]any, 0, len(refs)+1)
 	if taskType == "extend" || taskType == "replace" {
 		videoURL, err := s.uploadVideoReplicaSource(config, bearer, source)
@@ -758,6 +775,9 @@ func (s *Studio) runVideoSegments(id, runID, providerUserID, source, refsJSON, p
 			return err
 		}
 		inputRefs = append(inputRefs, map[string]any{"type": "image_url", "image_url": map[string]string{"url": refURL}})
+	}
+	for _, assetURL := range avatarAssets {
+		inputRefs = append(inputRefs, map[string]any{"type": "image_url", "image_url": map[string]string{"url": assetURL}})
 	}
 	rows, err := s.db.Query("select id,segment_index,start_second,duration,prompt,status,coalesce(file_path,'') from video_replica_segments where job_id=? and run_id=? order by segment_index", id, runID)
 	if err != nil {
@@ -1097,20 +1117,22 @@ func (s *Studio) mediaDataURL(localPath string, video bool) (string, error) {
 }
 
 func scanVideoReplicaRow(row rowScanner) (map[string]any, error) {
-	var id, title, source, refsJSON, productReferencePath, taskType, model, prompt, storyboardJSON, resolution, ratio, status, personPrompt string
+	var id, title, source, refsJSON, productReferencePath, taskType, model, prompt, storyboardJSON, resolution, ratio, status, personPrompt, avatarAssetsJSON string
 	var confirmed, duration int
 	var budget float64
 	var path sql.NullString
 	var started sql.NullInt64
 	var created int64
-	if err := row.Scan(&id, &title, &source, &refsJSON, &productReferencePath, &taskType, &model, &prompt, &storyboardJSON, &confirmed, &duration, &resolution, &ratio, &status, &path, &started, &created, &personPrompt, &budget); err != nil {
+	if err := row.Scan(&id, &title, &source, &refsJSON, &productReferencePath, &taskType, &model, &prompt, &storyboardJSON, &confirmed, &duration, &resolution, &ratio, &status, &path, &started, &created, &personPrompt, &budget, &avatarAssetsJSON); err != nil {
 		return nil, err
 	}
 	var refs []string
 	var storyboard []map[string]any
+	var avatarAssets []AvatarAssetSelection
 	_ = json.Unmarshal([]byte(refsJSON), &refs)
 	_ = json.Unmarshal([]byte(storyboardJSON), &storyboard)
-	return map[string]any{"id": id, "title": title, "source_video_path": source, "reference_paths": refs, "product_reference_path": productReferencePath, "task_type": taskType, "model": model, "prompt": prompt, "storyboard": storyboard, "storyboard_confirmed": confirmed == 1, "duration": duration, "resolution": resolution, "ratio": ratio, "status": status, "file_path": nullableString(path), "generation_started_at": nullableInt(started), "created_at": created, "ai_person_prompt": personPrompt, "ai_budget": budget, "versions": []map[string]any{}}, nil
+	_ = json.Unmarshal([]byte(avatarAssetsJSON), &avatarAssets)
+	return map[string]any{"id": id, "title": title, "source_video_path": source, "reference_paths": refs, "product_reference_path": productReferencePath, "task_type": taskType, "model": model, "prompt": prompt, "storyboard": storyboard, "storyboard_confirmed": confirmed == 1, "duration": duration, "resolution": resolution, "ratio": ratio, "status": status, "file_path": nullableString(path), "generation_started_at": nullableInt(started), "created_at": created, "ai_person_prompt": personPrompt, "ai_budget": budget, "avatar_assets": avatarAssets, "versions": []map[string]any{}}, nil
 }
 
 func (s *Studio) populateVideoReplicaVersions(job map[string]any) error {
@@ -1212,7 +1234,29 @@ func validateVideoReplicaInput(input VideoReplicaInput) error {
 	if len(input.ReferencePaths) > 4 {
 		return errors.New("参考图片最多 4 张")
 	}
-	return validateProductReference(input.ReferencePaths, input.ProductReferencePath)
+	if err := validateProductReference(input.ReferencePaths, input.ProductReferencePath); err != nil {
+		return err
+	}
+	return validateAvatarAssetSelections(input.AvatarAssets)
+}
+
+func validateAvatarAssetSelections(items []AvatarAssetSelection) error {
+	if len(items) > 4 {
+		return errors.New("虚拟人素材最多 4 张")
+	}
+	seen := map[string]bool{}
+	for _, item := range items {
+		item.Source, item.ID = strings.TrimSpace(item.Source), strings.TrimSpace(item.ID)
+		if (item.Source != "personal" && item.Source != "public") || item.ID == "" || len(item.ID) > 128 {
+			return errors.New("虚拟人素材无效")
+		}
+		key := item.Source + ":" + item.ID
+		if seen[key] {
+			return errors.New("虚拟人素材不能重复")
+		}
+		seen[key] = true
+	}
+	return nil
 }
 
 func validateProductReference(referencePaths []string, productReferencePath string) error {

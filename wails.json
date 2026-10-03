@@ -3,7 +3,7 @@
   "name": "Ecom Visual Studio",
   "outputfilename": "EcomVisualStudio",
   "info": {
-    "productVersion": "1.1.2"
+    "productVersion": "1.1.3"
   },
   "frontend:dir": ".",
   "frontend:install": "npm install",

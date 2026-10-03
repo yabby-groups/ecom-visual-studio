@@ -174,7 +174,10 @@ export const client = {
     duration: number;
     resolution: string;
     ratio: string;
+    avatar_assets: import("./types").AvatarAssetSelection[];
   }) => call<{ id: string }>("CreateVideoReplica", body),
+  avatarAssets: () =>
+    call<import("./types").AvatarAssetCatalog>("AvatarAssets"),
   createAIVideoReplica: (body: {
     source_video_path: string;
     product_path: string;
@@ -184,6 +187,7 @@ export const client = {
     resolution: string;
     ratio: string;
     budget: number;
+    avatar_assets: import("./types").AvatarAssetSelection[];
   }) => call<{ id: string }>("CreateAIVideoReplica", body),
   refreshAIVideoReplica: (id: string) =>
     call<Skill2APIStatus>("RefreshAIVideoReplica", id),

@@ -1,13 +1,13 @@
 package main
 
 import (
-	"log"
 	"bytes"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -348,7 +348,7 @@ func (s *Studio) startHuabotAuthorization() (deviceAuthorization, error) {
 	config := s.huabotConfig()
 	form := url.Values{
 		"client_id": {s.oauthClientID()},
-		"scope":     {"profile:read token_base:read token_base:write wallet:read files:upload skill2api offline_access"},
+		"scope":     {"profile:read token_base:read token_base:write wallet:read files:upload skill2api avatar_assets:read offline_access"},
 	}
 	var authorization deviceAuthorization
 	if err := s.webRequest(http.MethodPost, config.WebBase+"/oauth/device/code", "", form, &authorization); err != nil {

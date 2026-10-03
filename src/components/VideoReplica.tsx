@@ -12,12 +12,17 @@ import { useEffect, useState } from "react";
 import { useLocation, useParams } from "react-router-dom";
 import { client } from "../api";
 import { useRequireAiAuth } from "../auth";
-import type { VideoReplicaJob, VideoReplicaStoryboardItem } from "../types";
+import type {
+  AvatarAssetSelection,
+  VideoReplicaJob,
+  VideoReplicaStoryboardItem,
+} from "../types";
 import { fileUrl, isPending, userFacingError } from "../utils/assets";
 import { Shell } from "./Shell";
 import { SettingsSelect } from "./SettingsSelect";
 import { VideoReplicaPreview } from "./VideoReplicaPreview";
 import { VideoWorksList } from "./VideoWorksList";
+import { AvatarPicker } from "./AvatarPicker";
 import "./VideoReplica.css";
 import "./VideoReplicaShared.css";
 
@@ -31,6 +36,7 @@ export function VideoReplica() {
   const [sourcePreview, setSourcePreview] = useState("");
   const [referencePaths, setReferencePaths] = useState<string[]>([]);
   const [productReferencePath, setProductReferencePath] = useState("");
+  const [avatarAssets, setAvatarAssets] = useState<AvatarAssetSelection[]>([]);
   const [mode, setMode] = useState<"replica" | "replace">("replica");
   const [jobs, setJobs] = useState<VideoReplicaJob[]>([]);
   const [selected, setSelected] = useState<VideoReplicaJob | null>(null);
@@ -90,6 +96,7 @@ export function VideoReplica() {
     setSourcePreview(fileUrl(job.source_video_path));
     setReferencePaths(job.reference_paths);
     setProductReferencePath(job.product_reference_path);
+    setAvatarAssets(job.avatar_assets ?? []);
     setStoryboard(job.storyboard);
     setPrompt(job.prompt);
     setReview(null);
@@ -287,6 +294,7 @@ export function VideoReplica() {
         duration,
         resolution,
         ratio,
+        avatar_assets: avatarAssets,
       });
       await load();
       const fresh = await client.videoReplicaJob(result.id);
@@ -538,6 +546,11 @@ export function VideoReplica() {
                   )}
                 </div>
               </div>
+              <AvatarPicker
+                value={avatarAssets}
+                onChange={setAvatarAssets}
+                disabled={!!busy || isPending(selected?.status || "")}
+              />
               {mode === "replica" && (
                 <button
                   className="button secondary workflow-action"

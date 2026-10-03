@@ -22,6 +22,10 @@ export function AnalyzeVideoReplica(arg1, arg2, arg3) {
   return window['go']['main']['Studio']['AnalyzeVideoReplica'](arg1, arg2, arg3);
 }
 
+export function AvatarAssets() {
+  return window['go']['main']['Studio']['AvatarAssets']();
+}
+
 export function ChangeAssetTemplate(arg1, arg2, arg3) {
   return window['go']['main']['Studio']['ChangeAssetTemplate'](arg1, arg2, arg3);
 }

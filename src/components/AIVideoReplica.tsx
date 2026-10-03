@@ -13,7 +13,7 @@ import {
 import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { createPortal } from "react-dom";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import type { VideoReplicaJob } from "../types";
+import type { AvatarAssetSelection, VideoReplicaJob } from "../types";
 import {
   fileUrl,
   isPending,
@@ -28,6 +28,7 @@ import { aiVideoReplicaControls } from "../utils/aiVideoReplicaState";
 import { VideoReplicaPreview } from "./VideoReplicaPreview";
 import { VideoWorksList } from "./VideoWorksList";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { AvatarPicker } from "./AvatarPicker";
 import "./AIVideoReplica.css";
 import "./VideoReplicaShared.css";
 
@@ -52,6 +53,7 @@ type Props = {
   videoReadProgress: number | null;
   sourceDuration: number | null;
   productReferencePath: string;
+  avatarAssets: AvatarAssetSelection[];
   prompt: string;
   personPrompt: string;
   budget: number;
@@ -73,6 +75,7 @@ type Props = {
   setResolution: Dispatch<SetStateAction<string>>;
   setReferencePaths: Dispatch<SetStateAction<string[]>>;
   setProductReferencePath: Dispatch<SetStateAction<string>>;
+  setAvatarAssets: Dispatch<SetStateAction<AvatarAssetSelection[]>>;
   uploadVideo: (file: File) => void;
   uploadReference: (file: File) => void;
   reviewPrompt: () => void;
@@ -105,6 +108,7 @@ export function AIVideoReplica() {
   const [sourcePreview, setSourcePreview] = useState("");
   const [referencePaths, setReferencePaths] = useState<string[]>([]);
   const [productReferencePath, setProductReferencePath] = useState("");
+  const [avatarAssets, setAvatarAssets] = useState<AvatarAssetSelection[]>([]);
   const [prompt, setPrompt] = useState("");
   const [personPrompt, setPersonPrompt] = useState("公开的虚拟人像");
   const [budget, setBudget] = useState(2);
@@ -164,6 +168,7 @@ export function AIVideoReplica() {
     setSourcePreview(fileUrl(job.source_video_path));
     setReferencePaths(job.reference_paths);
     setProductReferencePath(job.product_reference_path);
+    setAvatarAssets(job.avatar_assets ?? []);
     setPrompt(job.prompt);
     setPersonPrompt(job.ai_person_prompt ?? "公开的虚拟人像");
     setBudget(job.ai_budget ?? 2);
@@ -329,6 +334,7 @@ export function AIVideoReplica() {
         resolution,
         ratio,
         budget,
+        avatar_assets: avatarAssets,
       });
       await load();
       selectJob(await client.videoReplicaJob(result.id));
@@ -354,6 +360,7 @@ export function AIVideoReplica() {
         resolution: job.resolution,
         ratio: job.ratio,
         budget: job.ai_budget ?? budget,
+        avatar_assets: job.avatar_assets ?? [],
       });
       await load();
       selectJob(await client.videoReplicaJob(result.id));
@@ -459,6 +466,7 @@ export function AIVideoReplica() {
     videoReadProgress,
     sourceDuration,
     productReferencePath,
+    avatarAssets,
     prompt,
     personPrompt,
     budget,
@@ -482,6 +490,7 @@ export function AIVideoReplica() {
     setResolution,
     setReferencePaths,
     setProductReferencePath,
+    setAvatarAssets,
     uploadVideo,
     uploadReference,
     reviewPrompt,
@@ -1078,6 +1087,11 @@ export function AIVideoReplica() {
                   </label>
                 </div>
               </details>
+              <AvatarPicker
+                value={p.avatarAssets}
+                onChange={p.setAvatarAssets}
+                disabled={controls.draftLocked}
+              />
               <button
                 className="button primary workflow-action"
                 type="button"

@@ -160,6 +160,38 @@ func TestAIVideoReplicaJobReturnsSavedPersonSettings(t *testing.T) {
 	}
 }
 
+func TestAvatarAssetSelectionsRejectInvalidAndDuplicateValues(t *testing.T) {
+	valid := []AvatarAssetSelection{{Source: "personal", ID: "12"}, {Source: "public", ID: "7"}}
+	if err := validateAvatarAssetSelections(valid); err != nil {
+		t.Fatalf("valid selections rejected: %v", err)
+	}
+	if err := validateAvatarAssetSelections([]AvatarAssetSelection{{Source: "public", ID: "7"}, {Source: "public", ID: "7"}}); err == nil {
+		t.Fatal("duplicate avatar selection accepted")
+	}
+	if err := validateAvatarAssetSelections([]AvatarAssetSelection{{Source: "unknown", ID: "7"}}); err == nil {
+		t.Fatal("unknown source accepted")
+	}
+	if err := validateAvatarAssetSelections([]AvatarAssetSelection{{Source: "public", ID: "1"}, {Source: "public", ID: "2"}, {Source: "public", ID: "3"}, {Source: "public", ID: "4"}, {Source: "public", ID: "5"}}); err == nil {
+		t.Fatal("more than four avatar selections accepted")
+	}
+}
+
+func TestVideoReplicaJobReturnsSavedAvatarSelections(t *testing.T) {
+	studio := newAIVideoReplicaTestStudio(t)
+	insertAIVideoReplicaTestJob(t, studio, "job-avatar-settings", "ready", "")
+	if _, err := studio.db.Exec("update video_replica_jobs set avatar_assets=? where id=?", `[{"source":"public","id":"31"},{"source":"personal","id":"9"}]`, "job-avatar-settings"); err != nil {
+		t.Fatal(err)
+	}
+	job, err := studio.VideoReplicaJob("job-avatar-settings")
+	if err != nil {
+		t.Fatal(err)
+	}
+	items, ok := job["avatar_assets"].([]AvatarAssetSelection)
+	if !ok || len(items) != 2 || items[0].Source != "public" || items[1].ID != "9" {
+		t.Fatalf("avatar selections = %#v", job["avatar_assets"])
+	}
+}
+
 func TestTerminateAIVideoReplicaPersistsBeforeRemoteSubmission(t *testing.T) {
 	studio := newAIVideoReplicaTestStudio(t)
 	insertAIVideoReplicaTestJob(t, studio, "job-preparing", "preparing", "")

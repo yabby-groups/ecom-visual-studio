@@ -22,14 +22,15 @@ import (
 )
 
 type AIVideoReplicaInput struct {
-	SourceVideoPath string  `json:"source_video_path"`
-	ProductPath     string  `json:"product_path"`
-	Prompt          string  `json:"prompt"`
-	PersonPrompt    string  `json:"person_prompt"`
-	Model           string  `json:"model"`
-	Resolution      string  `json:"resolution"`
-	Ratio           string  `json:"ratio"`
-	Budget          float64 `json:"budget"`
+	SourceVideoPath string                 `json:"source_video_path"`
+	ProductPath     string                 `json:"product_path"`
+	Prompt          string                 `json:"prompt"`
+	PersonPrompt    string                 `json:"person_prompt"`
+	Model           string                 `json:"model"`
+	Resolution      string                 `json:"resolution"`
+	Ratio           string                 `json:"ratio"`
+	Budget          float64                `json:"budget"`
+	AvatarAssets    []AvatarAssetSelection `json:"avatar_assets"`
 }
 
 func aiVideoReplicaPendingStatus(status string) bool {
@@ -57,6 +58,9 @@ func (s *Studio) CreateAIVideoReplica(input AIVideoReplicaInput) (map[string]str
 	if strings.TrimSpace(input.Prompt) == "" {
 		return nil, errors.New("请填写复刻说明")
 	}
+	if err := validateAvatarAssetSelections(input.AvatarAssets); err != nil {
+		return nil, err
+	}
 	if math.IsNaN(input.Budget) || math.IsInf(input.Budget, 0) || input.Budget <= 0 {
 		return nil, errors.New("预算必须大于 0")
 	}
@@ -82,8 +86,9 @@ func (s *Studio) CreateAIVideoReplica(input AIVideoReplicaInput) (map[string]str
 	}
 	id := newID("video-ai-replica")
 	refs, _ := json.Marshal([]string{input.ProductPath})
+	avatarAssets, _ := json.Marshal(input.AvatarAssets)
 	if err = s.writeTransaction(func(tx *sql.Tx) error {
-		_, e := tx.Exec("insert into video_replica_jobs(id,user_id,source_video_path,reference_paths,product_reference_path,task_type,model,prompt,storyboard,storyboard_confirmed,duration,resolution,ratio,status,current_run_id,created_at,ai_person_prompt,ai_budget) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", id, localWorkspaceID, input.SourceVideoPath, string(refs), input.ProductPath, "ai_replica", input.Model, input.Prompt, "[]", 1, int(math.Ceil(seconds)), input.Resolution, input.Ratio, "queued", "", time.Now().Unix(), input.PersonPrompt, input.Budget)
+		_, e := tx.Exec("insert into video_replica_jobs(id,user_id,source_video_path,reference_paths,product_reference_path,task_type,model,prompt,storyboard,storyboard_confirmed,duration,resolution,ratio,status,current_run_id,created_at,ai_person_prompt,ai_budget,avatar_assets) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", id, localWorkspaceID, input.SourceVideoPath, string(refs), input.ProductPath, "ai_replica", input.Model, input.Prompt, "[]", 1, int(math.Ceil(seconds)), input.Resolution, input.Ratio, "queued", "", time.Now().Unix(), input.PersonPrompt, input.Budget, string(avatarAssets))
 		return e
 	}); err != nil {
 		return nil, err
@@ -100,19 +105,21 @@ func (s *Studio) resumeAIVideoReplicaJobs() {
 	if err != nil {
 		return
 	}
-	rows, err := s.db.Query(`select id,source_video_path,product_reference_path,prompt,ai_person_prompt,model,resolution,ratio,ai_budget
+	rows, err := s.db.Query(`select id,source_video_path,product_reference_path,prompt,ai_person_prompt,model,resolution,ratio,ai_budget,avatar_assets
 		from video_replica_jobs where user_id=? and task_type='ai_replica' and status in ('interrupted','queued','preparing','submitting','generating','retrieving')`, localWorkspaceID)
 	if err != nil {
 		return
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var id, source, product, prompt, person, model, resolution, ratio string
+		var id, source, product, prompt, person, model, resolution, ratio, avatarAssetsJSON string
 		var budget float64
-		if err := rows.Scan(&id, &source, &product, &prompt, &person, &model, &resolution, &ratio, &budget); err != nil {
+		if err := rows.Scan(&id, &source, &product, &prompt, &person, &model, &resolution, &ratio, &budget, &avatarAssetsJSON); err != nil {
 			continue
 		}
-		go s.runAIVideoReplica(id, user.ID, AIVideoReplicaInput{SourceVideoPath: source, ProductPath: product, Prompt: prompt, PersonPrompt: person, Model: model, Resolution: resolution, Ratio: ratio, Budget: budget})
+		var avatarAssets []AvatarAssetSelection
+		_ = json.Unmarshal([]byte(avatarAssetsJSON), &avatarAssets)
+		go s.runAIVideoReplica(id, user.ID, AIVideoReplicaInput{SourceVideoPath: source, ProductPath: product, Prompt: prompt, PersonPrompt: person, Model: model, Resolution: resolution, Ratio: ratio, Budget: budget, AvatarAssets: avatarAssets})
 	}
 }
 
@@ -192,6 +199,14 @@ func (s *Studio) runAIVideoReplica(id, userID string, input AIVideoReplicaInput)
 		}
 		setStatus("submitting")
 		prompt := fmt.Sprintf("克隆参考视频的镜头节奏、动作和构图，将目标商品替换为参考商品。参考视频：%s ；商品参考图：%s 。", videoURL, imageURL)
+		avatarIDs, resolveErr := s.resolveAvatarAssetIDs(userID, input.AvatarAssets)
+		if resolveErr != nil {
+			fail(resolveErr)
+			return
+		}
+		if len(avatarIDs) > 0 {
+			prompt += " 人物素材：" + strings.Join(avatarIDs, "、") + "。"
+		}
 		if strings.TrimSpace(input.PersonPrompt) != "" {
 			prompt += " 替换人物为: " + strings.TrimSpace(input.PersonPrompt)
 		}
@@ -635,9 +650,11 @@ func (s *Studio) ResumeAIVideoReplica(id, answer, instruction string) (map[strin
 		return nil, err
 	}
 	var input AIVideoReplicaInput
-	if err = s.db.QueryRow("select source_video_path,product_reference_path,prompt,ai_person_prompt,model,resolution,ratio,ai_budget from video_replica_jobs where id=?", id).Scan(&input.SourceVideoPath, &input.ProductPath, &input.Prompt, &input.PersonPrompt, &input.Model, &input.Resolution, &input.Ratio, &input.Budget); err != nil {
+	var avatarAssetsJSON string
+	if err = s.db.QueryRow("select source_video_path,product_reference_path,prompt,ai_person_prompt,model,resolution,ratio,ai_budget,avatar_assets from video_replica_jobs where id=?", id).Scan(&input.SourceVideoPath, &input.ProductPath, &input.Prompt, &input.PersonPrompt, &input.Model, &input.Resolution, &input.Ratio, &input.Budget, &avatarAssetsJSON); err != nil {
 		return nil, err
 	}
+	_ = json.Unmarshal([]byte(avatarAssetsJSON), &input.AvatarAssets)
 	result["status"] = "generating"
 	go s.runAIVideoReplica(id, user.ID, input)
 	return result, err

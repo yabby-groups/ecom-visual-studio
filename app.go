@@ -255,6 +255,7 @@ func (s *Studio) migrate() error {
 		"alter table video_replica_jobs add column skill2api_status_snapshot text not null default '{}'",
 		"alter table video_replica_jobs add column ai_person_prompt text not null default ''",
 		"alter table video_replica_jobs add column ai_budget real not null default 2",
+		"alter table video_replica_jobs add column avatar_assets text not null default '[]'",
 	} {
 		if _, err := s.db.Exec(statement); err != nil && !strings.Contains(err.Error(), "duplicate column") {
 			return err
