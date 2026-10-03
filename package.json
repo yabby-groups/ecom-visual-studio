@@ -29,10 +29,11 @@
     "@tailwindcss/vite": "latest",
     "@types/react": "latest",
     "@types/react-dom": "latest",
-    "typescript": "latest",
+    "@types/node": "^26.6.4",
     "prettier": "^3.6.2",
+    "typescript": "latest",
+    "tailwindcss": "latest",
     "vite": "latest",
-    "vitest": "latest",
-    "tailwindcss": "latest"
+    "vitest": "latest"
   }
 }
