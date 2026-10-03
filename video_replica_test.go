@@ -176,6 +176,37 @@ func TestAvatarAssetSelectionsRejectInvalidAndDuplicateValues(t *testing.T) {
 	}
 }
 
+func TestAIVideoReplicaProductPathsValidateAndPreserveOrder(t *testing.T) {
+	studio := newAIVideoReplicaTestStudio(t)
+	uploads := filepath.Join(studio.dataDir, "storage", "uploads")
+	if err := os.MkdirAll(uploads, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"front.png", "detail.png", "side.png", "back.png"} {
+		if err := os.WriteFile(filepath.Join(uploads, name), []byte("image"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	paths := []string{"uploads/front.png", "uploads/detail.png", "uploads/side.png", "uploads/back.png"}
+	got, err := studio.aiVideoReplicaProductPaths(paths, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(got, ",") != strings.Join(paths, ",") {
+		t.Fatalf("paths = %v, want %v", got, paths)
+	}
+	legacy, err := studio.aiVideoReplicaProductPaths(nil, paths[0])
+	if err != nil || len(legacy) != 1 || legacy[0] != paths[0] {
+		t.Fatalf("legacy path = %v, %v", legacy, err)
+	}
+	if _, err := studio.aiVideoReplicaProductPaths(append(paths, paths[0]), ""); err == nil {
+		t.Fatal("more than four product images accepted")
+	}
+	if _, err := studio.aiVideoReplicaProductPaths([]string{"uploads/missing.png"}, ""); err == nil {
+		t.Fatal("missing product image accepted")
+	}
+}
+
 func TestVideoReplicaJobReturnsSavedAvatarSelections(t *testing.T) {
 	studio := newAIVideoReplicaTestStudio(t)
 	insertAIVideoReplicaTestJob(t, studio, "job-avatar-settings", "ready", "")

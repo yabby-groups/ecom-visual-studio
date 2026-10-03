@@ -4,6 +4,10 @@
   padding-top: 16px;
 }
 .avatar-picker.embedded {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
   margin-top: 0;
   border-top: 0;
   padding-top: 0;
@@ -28,6 +32,29 @@
   gap: 8px;
   flex-wrap: wrap;
   margin-top: 12px;
+}
+.avatar-picker.embedded .avatar-picker-action {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 3px;
+  width: 68px;
+  height: 68px;
+  min-height: 0;
+  margin-top: 0;
+  padding: 4px;
+  font-size: 11px;
+  line-height: 1.15;
+}
+.avatar-picker.embedded .avatar-selected {
+  margin-top: 0;
+}
+.avatar-preview-placeholder {
+  position: static !important;
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--surface-muted);
 }
 .avatar-chip {
   display: flex;
@@ -313,6 +340,9 @@
 }
 .avatar-reference-list button.active {
   border-color: var(--accent);
+}
+.avatar-reference-list button.selected {
+  box-shadow: inset 0 0 0 2px var(--accent);
 }
 .avatar-reference-list img {
   width: 100%;

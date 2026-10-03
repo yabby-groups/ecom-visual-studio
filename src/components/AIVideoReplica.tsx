@@ -52,7 +52,7 @@ type Props = {
   busy: string;
   videoReadProgress: number | null;
   sourceDuration: number | null;
-  productReferencePath: string;
+  productReferencePaths: string[];
   avatarAssets: AvatarAssetSelection[];
   prompt: string;
   budget: number;
@@ -72,7 +72,6 @@ type Props = {
   setRatio: Dispatch<SetStateAction<string>>;
   setResolution: Dispatch<SetStateAction<string>>;
   setReferencePaths: Dispatch<SetStateAction<string[]>>;
-  setProductReferencePath: Dispatch<SetStateAction<string>>;
   setAvatarAssets: Dispatch<SetStateAction<AvatarAssetSelection[]>>;
   uploadVideo: (file: File) => void;
   uploadReference: (file: File) => void;
@@ -105,7 +104,6 @@ export function AIVideoReplica() {
   const [sourcePath, setSourcePath] = useState("");
   const [sourcePreview, setSourcePreview] = useState("");
   const [referencePaths, setReferencePaths] = useState<string[]>([]);
-  const [productReferencePath, setProductReferencePath] = useState("");
   const [avatarAssets, setAvatarAssets] = useState<AvatarAssetSelection[]>([]);
   const [prompt, setPrompt] = useState("");
   const [budget, setBudget] = useState(2);
@@ -163,8 +161,13 @@ export function AIVideoReplica() {
     setSelected(job);
     setSourcePath(job.source_video_path);
     setSourcePreview(fileUrl(job.source_video_path));
-    setReferencePaths(job.reference_paths);
-    setProductReferencePath(job.product_reference_path);
+    const productPaths =
+      job.reference_paths.length > 0
+        ? job.reference_paths
+        : job.product_reference_path
+          ? [job.product_reference_path]
+          : [];
+    setReferencePaths(productPaths);
     setAvatarAssets(job.avatar_assets ?? []);
     setPrompt(job.prompt);
     setBudget(job.ai_budget ?? 2);
@@ -284,8 +287,9 @@ export function AIVideoReplica() {
     setError("");
     try {
       const result = await client.upload(file);
-      setReferencePaths([result.path]);
-      setProductReferencePath(result.path);
+      setReferencePaths((paths) => {
+        return [...paths, result.path];
+      });
     } catch (reason) {
       setError(operationError(reason, "添加图片失败"));
     } finally {
@@ -315,7 +319,7 @@ export function AIVideoReplica() {
     if (!requireAiAuth()) return;
     if (!sourcePath || !prompt.trim())
       return setError("请先选择视频并填写复刻说明");
-    if (referencePaths.length !== 1) return setError("请添加一张商品图片");
+    if (referencePaths.length === 0) return setError("请至少添加一张商品图片");
     if (!Number.isFinite(budget) || budget <= 0)
       return setError("预算必须大于 0");
     setBusy("create");
@@ -323,7 +327,7 @@ export function AIVideoReplica() {
     try {
       const result = await client.createAIVideoReplica({
         source_video_path: sourcePath,
-        product_path: productReferencePath || referencePaths[0],
+        product_paths: referencePaths,
         prompt,
         model: aiModel,
         resolution,
@@ -348,7 +352,10 @@ export function AIVideoReplica() {
     try {
       const result = await client.createAIVideoReplica({
         source_video_path: job.source_video_path,
-        product_path: job.product_reference_path || job.reference_paths[0],
+        product_paths:
+          job.reference_paths.length > 0
+            ? job.reference_paths
+            : [job.product_reference_path].filter(Boolean),
         prompt: job.prompt,
         model: job.model,
         resolution: job.resolution,
@@ -454,12 +461,12 @@ export function AIVideoReplica() {
   const p: Props = {
     sourceReady: Boolean(sourcePath),
     sourcePreview,
-    replaceReady: referencePaths.length === 1,
+    replaceReady: referencePaths.length > 0,
     scriptReady: Boolean(prompt.trim()),
     busy,
     videoReadProgress,
     sourceDuration,
-    productReferencePath,
+    productReferencePaths: referencePaths,
     avatarAssets,
     prompt,
     budget,
@@ -481,7 +488,6 @@ export function AIVideoReplica() {
     setRatio,
     setResolution,
     setReferencePaths,
-    setProductReferencePath,
     setAvatarAssets,
     uploadVideo,
     uploadReference,
@@ -887,35 +893,40 @@ export function AIVideoReplica() {
                 <div>
                   <span className="step-kicker">素材 02</span>
                   <h2>添加商品图片</h2>
-                  <p>这张图片会作为生成视频中的目标商品外观依据。</p>
+                  <p>可添加同一商品的多个角度或细节，第一张作为主参考图。</p>
                 </div>
                 <span className="step-state">
-                  {p.replaceReady ? "已添加" : "待添加"}
+                  {p.replaceReady
+                    ? `已添加 ${p.productReferencePaths.length} 张`
+                    : "待添加"}
                 </span>
               </div>
               <div className="reference-thumbs ai-product-thumb">
-                {p.productReferencePath ? (
-                  <div className="reference-thumb">
+                {p.productReferencePaths.map((path, index) => (
+                  <div className="reference-thumb" key={path}>
                     <div className="product-reference active">
                       <img
-                        src={fileUrl(p.productReferencePath)}
-                        alt="商品参考图"
+                        src={fileUrl(path)}
+                        alt={`商品参考图 ${index + 1}`}
                       />
                     </div>
                     <button
                       type="button"
                       className="reference-remove"
-                      aria-label="移除商品图片"
+                      aria-label={`移除商品图片 ${index + 1}`}
                       disabled={controls.draftLocked}
                       onClick={() => {
-                        p.setReferencePaths([]);
-                        p.setProductReferencePath("");
+                        const next = p.productReferencePaths.filter(
+                          (_, itemIndex) => itemIndex !== index,
+                        );
+                        p.setReferencePaths(next);
                       }}
                     >
                       <X size={13} />
                     </button>
                   </div>
-                ) : (
+                ))}
+                {p.productReferencePaths.length < 4 && (
                   <label
                     className={`reference-add ${controls.draftLocked ? "is-disabled" : ""}`}
                   >

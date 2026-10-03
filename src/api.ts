@@ -180,7 +180,7 @@ export const client = {
     call<import("./types").AvatarAssetCatalog>("AvatarAssets"),
   createAIVideoReplica: (body: {
     source_video_path: string;
-    product_path: string;
+    product_paths: string[];
     prompt: string;
     model: string;
     resolution: string;

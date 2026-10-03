@@ -1,5 +1,5 @@
 import { ArrowLeft, Check, Clipboard, Eye, Plus, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { client } from "../api";
 import type {
   AvatarAsset,
@@ -12,7 +12,7 @@ import "./AvatarPicker.css";
 
 type Props = {
   value: AvatarAssetSelection[];
-  onChange: (next: AvatarAssetSelection[]) => void;
+  onChange: Dispatch<SetStateAction<AvatarAssetSelection[]>>;
   disabled?: boolean;
   embedded?: boolean;
 };
@@ -23,7 +23,12 @@ type Detail = {
 };
 const keyOf = (source: string, id: string) => `${source}:${id}`;
 
-export function AvatarPicker({ value, onChange, disabled, embedded = false }: Props) {
+export function AvatarPicker({
+  value,
+  onChange,
+  disabled,
+  embedded = false,
+}: Props) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<"public" | "personal">("public");
   const [catalog, setCatalog] = useState<AvatarAssetCatalog | null>(null);
@@ -37,19 +42,34 @@ export function AvatarPicker({ value, onChange, disabled, embedded = false }: Pr
   const assetURI = (source: "public" | "personal", asset: AvatarAsset) =>
     asset.asset_uri || `avatar://${source}/${asset.id}`;
 
+  const addSelection = (source: "public" | "personal", id: string) => {
+    const key = keyOf(source, id);
+    onChange((current) => {
+      if (current.some((item) => keyOf(item.source, item.id) === key))
+        return current;
+      if (current.length >= 4) {
+        setError("每个任务最多选择 4 张虚拟人素材");
+        return current;
+      }
+      setError("");
+      return [...current, { source, id }];
+    });
+  };
   const toggle = (source: "public" | "personal", id: string) => {
     const key = keyOf(source, id);
-    if (selected.has(key))
-      return onChange(
-        value.filter((item) => keyOf(item.source, item.id) !== key),
-      );
-    if (value.length >= 4) return setError("每个任务最多选择 4 张虚拟人素材");
-    setError("");
-    onChange([...value, { source, id }]);
+    onChange((current) => {
+      if (current.some((item) => keyOf(item.source, item.id) === key)) {
+        return current.filter((item) => keyOf(item.source, item.id) !== key);
+      }
+      if (current.length >= 4) {
+        setError("每个任务最多选择 4 张虚拟人素材");
+        return current;
+      }
+      setError("");
+      return [...current, { source, id }];
+    });
   };
-  async function show() {
-    setOpen(true);
-    setError("");
+  async function loadCatalog() {
     if (catalog || loading) return;
     setLoading(true);
     try {
@@ -64,6 +84,11 @@ export function AvatarPicker({ value, onChange, disabled, embedded = false }: Pr
     } finally {
       setLoading(false);
     }
+  }
+  async function show() {
+    setOpen(true);
+    setError("");
+    await loadCatalog();
   }
   async function copyURI() {
     if (!detail) return;
@@ -80,6 +105,9 @@ export function AvatarPicker({ value, onChange, disabled, embedded = false }: Pr
   useEffect(() => {
     if (!open) setDetail(null);
   }, [open]);
+  useEffect(() => {
+    if (value.length > 0) void loadCatalog();
+  }, [value.map((item) => keyOf(item.source, item.id)).join("|")]);
   useEffect(() => {
     if (!open) return;
     const previousOverflow = document.body.style.overflow;
@@ -108,19 +136,8 @@ export function AvatarPicker({ value, onChange, disabled, embedded = false }: Pr
           </button>
         </div>
       )}
-      {embedded && (
-        <button
-          type="button"
-          className="button secondary"
-          disabled={disabled}
-          onClick={() => void show()}
-        >
-          <Plus size={16} />
-          选择虚拟人
-        </button>
-      )}
       {value.length > 0 && catalog && (
-        <div className="avatar-selected">
+        <div className="avatar-selected reference-thumbs">
           {value.map((item) => {
             const asset =
               item.source === "personal"
@@ -129,15 +146,23 @@ export function AvatarPicker({ value, onChange, disabled, embedded = false }: Pr
                     .flatMap((persona) => persona.assets)
                     .find((candidate) => candidate.id === item.id);
             return (
-              <div className="avatar-chip" key={keyOf(item.source, item.id)}>
-                {asset?.preview_url ? (
-                  <img src={asset.preview_url_64 || asset.preview_url} alt="" />
-                ) : (
-                  <span />
-                )}
-                {asset?.name || "已选虚拟人"}
+              <div
+                className="reference-thumb"
+                key={keyOf(item.source, item.id)}
+              >
+                <div className="product-reference active">
+                  {asset?.preview_url ? (
+                    <img
+                      src={asset.preview_url_64 || asset.preview_url}
+                      alt=""
+                    />
+                  ) : (
+                    <span className="avatar-preview-placeholder" />
+                  )}
+                </div>
                 <button
                   type="button"
+                  className="reference-remove"
                   aria-label="移除虚拟人"
                   disabled={disabled}
                   onClick={() => toggle(item.source, item.id)}
@@ -148,6 +173,17 @@ export function AvatarPicker({ value, onChange, disabled, embedded = false }: Pr
             );
           })}
         </div>
+      )}
+      {embedded && (
+        <button
+          type="button"
+          className="button secondary avatar-picker-action"
+          disabled={disabled}
+          onClick={() => void show()}
+        >
+          <Plus size={16} />
+          选择虚拟人
+        </button>
       )}
       {open && (
         <div
@@ -230,6 +266,9 @@ export function AvatarPicker({ value, onChange, disabled, embedded = false }: Pr
                             }
                             detail={`${item.assets.length} 个参考素材`}
                             detailLabel={`查看 ${item.name || "虚拟人"} 详情`}
+                            selected={item.assets.some((asset) =>
+                              isSelected("public", asset.id),
+                            )}
                             onClick={() => {
                               setCopied(false);
                               setDetail({
@@ -318,9 +357,16 @@ export function AvatarPicker({ value, onChange, disabled, embedded = false }: Pr
                             <button
                               type="button"
                               className={
-                                asset.id === detail.asset.id ? "active" : ""
+                                [
+                                  asset.id === detail.asset.id && "active",
+                                  isSelected(detail.source, asset.id) &&
+                                    "selected",
+                                ]
+                                  .filter(Boolean)
+                                  .join(" ")
                               }
                               key={asset.id}
+                              aria-pressed={isSelected(detail.source, asset.id)}
                               onClick={() => {
                                 toggle(detail.source, asset.id);
                                 setCopied(false);
@@ -349,13 +395,13 @@ export function AvatarPicker({ value, onChange, disabled, embedded = false }: Pr
                       type="button"
                       className="avatar-use"
                       onClick={() => {
-                        toggle(detail.source, detail.asset.id);
+                        addSelection(detail.source, detail.asset.id);
                         setDetail(null);
                         setOpen(false);
                       }}
                     >
                       <Check size={17} />
-                      使用
+                      使用此参考图
                     </button>
                   </aside>
                 )}

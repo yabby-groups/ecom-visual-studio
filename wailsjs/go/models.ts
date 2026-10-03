@@ -16,6 +16,7 @@ export namespace main {
 	}
 	export class AIVideoReplicaInput {
 	    source_video_path: string;
+	    product_paths: string[];
 	    product_path: string;
 	    prompt: string;
 	    model: string;
@@ -31,6 +32,7 @@ export namespace main {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.source_video_path = source["source_video_path"];
+	        this.product_paths = source["product_paths"];
 	        this.product_path = source["product_path"];
 	        this.prompt = source["prompt"];
 	        this.model = source["model"];

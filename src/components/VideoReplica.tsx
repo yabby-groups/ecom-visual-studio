@@ -546,11 +546,18 @@ export function VideoReplica() {
                   )}
                 </div>
               </div>
-              <AvatarPicker
-                value={avatarAssets}
-                onChange={setAvatarAssets}
-                disabled={!!busy || isPending(selected?.status || "")}
-              />
+              <div className="reference-row avatar-reference-row">
+                <div>
+                  <strong>虚拟人</strong>
+                  <span>可选，作为人物一致性参考</span>
+                </div>
+                <AvatarPicker
+                  value={avatarAssets}
+                  onChange={setAvatarAssets}
+                  disabled={!!busy || isPending(selected?.status || "")}
+                  embedded
+                />
+              </div>
               {mode === "replica" && (
                 <button
                   className="button secondary workflow-action"
