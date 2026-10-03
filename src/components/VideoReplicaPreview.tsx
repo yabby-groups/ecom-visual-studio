@@ -1,5 +1,11 @@
 import { Download, Film, RefreshCw, ShieldCheck } from "lucide-react";
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import type { VideoReplicaJob, VideoReplicaSegment } from "../types";
 import { failureReason, fileUrl, isPending, statusText } from "../utils/assets";
 import {
@@ -9,11 +15,20 @@ import {
 
 type Props = {
   selected: VideoReplicaJob | null;
-  duration: number;
-  busy: string;
+  duration?: number;
+  busy?: string;
   mediaRefreshToken: number;
-  regenerate: (id: string) => void;
-  exportVideo: (path: string) => void;
+  regenerate?: (id: string) => void;
+  exportVideo?: (path: string) => void;
+  progress?: ReactNode;
+  beforeStage?: ReactNode;
+  emptyState?: {
+    title: string;
+    description: string;
+  };
+  metadata?: ReactNode;
+  actions?: ReactNode;
+  statusLabel?: string;
 };
 
 export function VideoReplicaPreview({
@@ -23,6 +38,12 @@ export function VideoReplicaPreview({
   mediaRefreshToken,
   regenerate,
   exportVideo,
+  progress: customProgress,
+  beforeStage,
+  emptyState,
+  metadata,
+  actions,
+  statusLabel,
 }: Props) {
   const [previewRatio, setPreviewRatio] = useState(defaultVideoPreviewRatio);
   const [previewScale, setPreviewScale] = useState(16 / 9);
@@ -31,10 +52,11 @@ export function VideoReplicaPreview({
     : "";
   const selectedLabel = useMemo(
     () =>
-      selected
+      statusLabel ||
+      (selected
         ? `${selected.model} · ${statusText(selected.status)}`
-        : "等待生成结果",
-    [selected],
+        : "等待生成结果"),
+    [selected, statusLabel],
   );
   const selectedFailure = selected?.status.startsWith("failed")
     ? failureReason(selected.status)
@@ -50,6 +72,117 @@ export function VideoReplicaPreview({
   const phaseIndex = selected
     ? phaseSteps.findIndex(([phase]) => phase === selected.status)
     : -1;
+  const progressContent =
+    customProgress ??
+    (selected && (
+      <div className="video-generation-progress" aria-live="polite">
+        <div className="generation-progress-head">
+          <strong>{statusText(selected.status)}</strong>
+          <span>
+            {progress?.completed_segments ?? 0}/{progress?.total_segments ?? 0}{" "}
+            段完成
+          </span>
+        </div>
+        <div className="generation-phase-list">
+          {phaseSteps.map(([phase, label], index) => {
+            const activeIndex = selected.status === "queued" ? 0 : phaseIndex;
+            const done =
+              selected.status === "ready" ||
+              (activeIndex >= 0 && index < activeIndex);
+            const active =
+              selected.status === phase ||
+              (selected.status === "queued" && index === 0);
+            return (
+              <div
+                className={`generation-phase ${done ? "done" : ""} ${active ? "active" : ""}`}
+                key={phase}
+              >
+                <span className="generation-phase-dot" />
+                <span>{label}</span>
+              </div>
+            );
+          })}
+        </div>
+        {isPending(selected.status) && (
+          <div
+            className="generation-indeterminate"
+            role="progressbar"
+            aria-label="视频生成进行中"
+          />
+        )}
+        {progress?.current_segment !== undefined &&
+          progress.current_segment >= 0 &&
+          progress.total_segments > 0 && (
+            <p className="generation-progress-detail">
+              当前第 {progress.current_segment + 1} / {progress.total_segments}{" "}
+              段 ·{" "}
+              {selected.segments[progress.current_segment]
+                ? segmentStatus(selected.segments[progress.current_segment])
+                : "处理中"}
+            </p>
+          )}
+        {selected.segments.length > 0 && (
+          <div className="generation-segments">
+            {selected.segments.map((segment) => (
+              <div
+                className={`generation-segment ${segment.status.startsWith("failed") ? "failed" : ""}`}
+                key={segment.id}
+              >
+                <span>第 {segment.index + 1} 段</span>
+                <small>{segmentStatus(segment)}</small>
+              </div>
+            ))}
+          </div>
+        )}
+        {selected.status === "interrupted" && (
+          <p className="generation-progress-detail">
+            应用曾在生成期间退出，已保留片段进度，可重新生成。
+          </p>
+        )}
+      </div>
+    ));
+  const defaultMetadata = (
+    <>
+      <span>
+        <small>参考风格</small>
+        <b>{selected ? "已选参考视频" : "等待开始"}</b>
+      </span>
+      <span>
+        <small>预计时长</small>
+        <b>{duration} 秒</b>
+      </span>
+    </>
+  );
+  const defaultActions = selected && regenerate && (
+    <>
+      <button
+        className="button secondary"
+        type="button"
+        onClick={() => void regenerate(selected.id)}
+        disabled={!!busy || isPending(selected.status)}
+      >
+        <RefreshCw size={16} />
+        重新生成
+      </button>
+      {selected.file_path && exportVideo && (
+        <button
+          className="button secondary"
+          type="button"
+          onClick={() => void exportVideo(selected.file_path!)}
+        >
+          <Download size={16} />
+          导出视频
+        </button>
+      )}
+    </>
+  );
+  const stageTitle = selectedFailure
+    ? "生成失败"
+    : emptyState?.title || "等待生成结果";
+  const stageDescription =
+    selectedFailure ||
+    emptyState?.description ||
+    "确认脚本后，视频会在这里出现";
 
   useEffect(() => {
     setPreviewRatio(defaultVideoPreviewRatio);
@@ -72,9 +205,7 @@ export function VideoReplicaPreview({
   }
 
   return (
-    <section
-      className={`video-replica-preview ${selected ? "" : "is-empty"}`}
-    >
+    <section className={`video-replica-preview ${selected ? "" : "is-empty"}`}>
       <div className="video-replica-meta">
         <span className="workflow-badge">
           {selected ? statusText(selected.status) : "未开始"}
@@ -89,74 +220,8 @@ export function VideoReplicaPreview({
         <span className="preview-status">{selectedLabel}</span>
       </div>
       <div className="video-replica-preview-container">
-        {selected && (
-          <div className="video-generation-progress" aria-live="polite">
-            <div className="generation-progress-head">
-              <strong>{statusText(selected.status)}</strong>
-              <span>
-                {progress?.completed_segments ?? 0}/
-                {progress?.total_segments ?? 0} 段完成
-              </span>
-            </div>
-            <div className="generation-phase-list">
-              {phaseSteps.map(([phase, label], index) => {
-                const activeIndex =
-                  selected.status === "queued" ? 0 : phaseIndex;
-                const done =
-                  selected.status === "ready" ||
-                  (activeIndex >= 0 && index < activeIndex);
-                const active =
-                  selected.status === phase ||
-                  (selected.status === "queued" && index === 0);
-                return (
-                  <div
-                    className={`generation-phase ${done ? "done" : ""} ${active ? "active" : ""}`}
-                    key={phase}
-                  >
-                    <span className="generation-phase-dot" />
-                    <span>{label}</span>
-                  </div>
-                );
-              })}
-            </div>
-            {isPending(selected.status) && (
-              <div
-                className="generation-indeterminate"
-                role="progressbar"
-                aria-label="视频生成进行中"
-              />
-            )}
-            {progress?.current_segment !== undefined &&
-              progress.current_segment >= 0 &&
-              progress.total_segments > 0 && (
-                <p className="generation-progress-detail">
-                  当前第 {progress.current_segment + 1} /{" "}
-                  {progress.total_segments} 段 ·{" "}
-                  {selected.segments[progress.current_segment]
-                    ? segmentStatus(selected.segments[progress.current_segment])
-                    : "处理中"}
-                </p>
-              )}
-            {selected.segments.length > 0 && (
-              <div className="generation-segments">
-                {selected.segments.map((segment) => (
-                  <div
-                    className={`generation-segment ${segment.status.startsWith("failed") ? "failed" : ""}`}
-                    key={segment.id}
-                  >
-                    <span>第 {segment.index + 1} 段</span>
-                    <small>{segmentStatus(segment)}</small>
-                  </div>
-                ))}
-              </div>
-            )}
-            {selected.status === "interrupted" && (
-              <p className="generation-progress-detail">
-                应用曾在生成期间退出，已保留片段进度，可重新生成。
-              </p>
-            )}
-          </div>
-        )}
+        {progressContent}
+        {beforeStage}
         <div
           className="video-stage"
           style={
@@ -187,8 +252,8 @@ export function VideoReplicaPreview({
           ) : (
             <>
               <Film size={38} />
-              <strong>{selectedFailure ? "生成失败" : "等待生成结果"}</strong>
-              <p>{selectedFailure || "确认脚本后，视频会在这里出现"}</p>
+              <strong>{stageTitle}</strong>
+              <p>{stageDescription}</p>
             </>
           )}
         </div>
@@ -200,41 +265,14 @@ export function VideoReplicaPreview({
             {selectedFailure}
           </p>
         )}
-        <div className="preview-meta">
-          <span>
-            <small>参考风格</small>
-            <b>{selected ? "已选参考视频" : "等待开始"}</b>
-          </span>
-          <span>
-            <small>预计时长</small>
-            <b>{duration} 秒</b>
-          </span>
-        </div>
+        <div className="preview-meta">{metadata || defaultMetadata}</div>
         <p className="privacy-note">
           <ShieldCheck size={16} />
           选择的本机内容仅用于本次生成，不会公开展示。
         </p>
-        {selected && (
+        {(actions || defaultActions) && (
           <div className="video-result-actions">
-            <button
-              className="button secondary"
-              type="button"
-              onClick={() => void regenerate(selected.id)}
-              disabled={!!busy || isPending(selected.status)}
-            >
-              <RefreshCw size={16} />
-              重新生成
-            </button>
-            {selected.file_path && (
-              <button
-                className="button secondary"
-                type="button"
-                onClick={() => void exportVideo(selected.file_path!)}
-              >
-                <Download size={16} />
-                导出视频
-              </button>
-            )}
+            {actions || defaultActions}
           </div>
         )}
       </div>

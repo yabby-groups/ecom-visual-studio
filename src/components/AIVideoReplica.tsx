@@ -10,17 +10,10 @@ import {
   X,
   Terminal,
 } from "lucide-react";
-import {
-  useEffect,
-  useState,
-  type CSSProperties,
-  type Dispatch,
-  type SetStateAction,
-} from "react";
+import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import type { VideoReplicaJob } from "../types";
 import {
-  failureReason,
   fileUrl,
   isPending,
   statusText,
@@ -31,10 +24,7 @@ import { Shell } from "./Shell";
 import { SettingsSelect } from "./SettingsSelect";
 import { client } from "../api";
 import { aiVideoReplicaControls } from "../utils/aiVideoReplicaState";
-import {
-  defaultVideoPreviewRatio,
-  videoPreviewRatio,
-} from "../utils/videoPreview";
+import { VideoReplicaPreview } from "./VideoReplicaPreview";
 import { VideoWorksList } from "./VideoWorksList";
 
 type Review = {
@@ -123,8 +113,6 @@ export function AIVideoReplica() {
   const [resumingID, setResumingID] = useState("");
   const [pullingResultID, setPullingResultID] = useState("");
   const [mediaRefreshToken, setMediaRefreshToken] = useState(0);
-  const [previewRatio, setPreviewRatio] = useState(defaultVideoPreviewRatio);
-  const [previewScale, setPreviewScale] = useState(16 / 9);
   const [review, setReview] = useState<Review | null>(null);
   const [answer, setAnswer] = useState("");
   const [instruction, setInstruction] = useState("");
@@ -463,10 +451,6 @@ export function AIVideoReplica() {
     terminating: terminatingID === selected?.id,
     resuming: resumingID === selected?.id,
   };
-  useEffect(() => {
-    setPreviewRatio(defaultVideoPreviewRatio);
-    setPreviewScale(16 / 9);
-  }, [p.displayed]);
   const phases = [
     ["queued", "等待提交"],
     ["preparing", "准备素材"],
@@ -478,9 +462,6 @@ export function AIVideoReplica() {
   const phaseIndex = p.selected
     ? phases.findIndex(([phase]) => phase === p.selected?.status)
     : -1;
-  const failed = p.selected?.status.startsWith("failed")
-    ? failureReason(p.selected.status)
-    : "";
   const controls = aiVideoReplicaControls({
     status: p.selected?.status,
     requestID: p.selected?.skill2api_request_id,
@@ -495,6 +476,218 @@ export function AIVideoReplica() {
     !p.replaceReady ||
     !p.scriptReady ||
     invalidBudget;
+  const aiProgress = p.selected && (
+    <div className="video-generation-progress ai-progress" aria-live="polite">
+      <div className="generation-progress-head">
+        <strong>{statusText(p.selected.status)}</strong>
+        <span>
+          {p.selected.status === "generating"
+            ? "远端进度不可量化"
+            : phases.find(([phase]) => phase === p.selected?.status)?.[1]}
+        </span>
+      </div>
+      <div className="generation-phase-list ai-generation-phase-list">
+        {phases.map(([phase, label], index) => (
+          <div
+            className={`generation-phase ${p.selected?.status === "ready" || (phaseIndex >= 0 && index < phaseIndex) ? "done" : ""} ${p.selected?.status === phase ? "active" : ""}`}
+            key={phase}
+          >
+            <span className="generation-phase-dot" />
+            <span>{label}</span>
+          </div>
+        ))}
+      </div>
+      {isPending(p.selected.status) && (
+        <>
+          <div
+            className="generation-indeterminate"
+            role="progressbar"
+            aria-label="AI 复刻生成进行中"
+          />
+          {p.selected.status === "generating" && (
+            <p className="generation-progress-detail">远端进度不可量化</p>
+          )}
+        </>
+      )}
+    </div>
+  );
+  const aiTaskConsole = p.selected?.task_type === "ai_replica" && (
+    <>
+      <div className="video-replica-panel skill2api-console" aria-live="polite">
+        <strong>任务控制台</strong>
+        <div className="prompt-review-actions">
+          {controls.waitingForInput ? (
+            <>
+              <input
+                value={answer}
+                disabled={!controls.canAnswer}
+                onChange={(e) => setAnswer(e.target.value)}
+                placeholder={p.selected.skill2api?.question || "请输入回答"}
+              />
+              <button
+                className="button primary"
+                type="button"
+                disabled={!answer.trim() || !controls.canAnswer}
+                onClick={async () => {
+                  if (await p.resumeTask(p.selected!.id, answer, ""))
+                    setAnswer("");
+                }}
+              >
+                {p.resuming ? "正在提交" : "提交"}
+              </button>
+            </>
+          ) : controls.canResume ? (
+            <>
+              <input
+                value={instruction}
+                onChange={(e) => setInstruction(e.target.value)}
+                placeholder="追加题词（可选）"
+              />
+              <button
+                className="button secondary"
+                type="button"
+                disabled={!controls.canResume}
+                onClick={async () => {
+                  if (await p.resumeTask(p.selected!.id, "", instruction))
+                    setInstruction("");
+                }}
+              >
+                {p.resuming ? "正在恢复" : "恢复任务"}
+              </button>
+            </>
+          ) : null}
+          {p.resuming && (
+            <span className="generation-progress-detail" role="status">
+              正在恢复远端任务…
+            </span>
+          )}
+          {controls.canTerminate && (
+            <button
+              className="button secondary"
+              type="button"
+              disabled={!controls.canTerminate}
+              onClick={() => void p.terminateTask(p.selected!.id)}
+            >
+              <X size={16} />
+              {p.terminating ? "正在终止" : "终止"}
+            </button>
+          )}
+          {controls.canPullResult && (
+            <button
+              className="button primary"
+              type="button"
+              disabled={p.pullingResult}
+              onClick={() => void p.pullResult(p.selected!.id)}
+            >
+              <Download size={16} />
+              {p.pullingResult
+                ? "正在重新拉取"
+                : p.selected.file_path
+                  ? "重新拉取结果"
+                  : "手动拉取结果"}
+            </button>
+          )}
+        </div>
+        <button
+          className="button secondary"
+          type="button"
+          disabled={logsLoading || !controls.canOpenLogs}
+          onClick={() => void openLogs()}
+        >
+          <Terminal size={16} />
+          {logsLoading ? "正在读取日志" : "查看运行日志"}
+        </button>
+        {!p.selected.skill2api_request_id && (
+          <small>该历史任务尚未关联远程请求，请使用“再次生成”恢复。</small>
+        )}
+      </div>
+      {logsOpen && (
+        <div
+          className="skill2api-log-backdrop"
+          role="presentation"
+          onClick={() => setLogsOpen(false)}
+        >
+          <section
+            className="skill2api-log-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="skill2api-log-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="skill2api-log-header">
+              <div>
+                <span className="step-kicker">SKILL2API</span>
+                <h2 id="skill2api-log-title">运行日志</h2>
+              </div>
+              <button
+                className="icon-button"
+                type="button"
+                aria-label="关闭日志"
+                onClick={() => setLogsOpen(false)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div
+              className="skill2api-log-tabs"
+              role="tablist"
+              aria-label="远程任务记录"
+            >
+              {(["stdout", "stderr", "files"] as const).map((tab) => (
+                <button
+                  key={tab}
+                  className="button secondary"
+                  type="button"
+                  role="tab"
+                  aria-selected={logTab === tab}
+                  onClick={() => setLogTab(tab)}
+                >
+                  {tab === "files" ? "文件" : tab}
+                </button>
+              ))}
+            </div>
+            {p.selected.skill2api?.remote_error && (
+              <p className="generation-progress-detail" role="status">
+                远端记录不可用，正在显示本地日志快照。
+              </p>
+            )}
+            {logTab === "files" && (
+              <div className="skill2api-file-list">
+                {p.selected.skill2api?.files?.map((path) => (
+                  <button
+                    className="button secondary"
+                    key={path}
+                    type="button"
+                    disabled={!!fileBusy}
+                    onClick={() => void downloadFile(path)}
+                  >
+                    <Download size={16} />
+                    <span>
+                      {fileBusy === path ? "正在获取：" : ""}
+                      {path}
+                    </span>
+                  </button>
+                ))}
+                {fileError && <p role="alert">{fileError}</p>}
+              </div>
+            )}
+            <div className="skill2api-log-grid" role="tabpanel">
+              <div>
+                <pre className={logTab === "stderr" ? "error" : ""}>
+                  {logTab === "stdout"
+                    ? p.selected.skill2api?.stdout || "暂无标准输出"
+                    : logTab === "stderr"
+                      ? p.selected.skill2api?.stderr || "远程错误输出不可用"
+                      : p.selected.skill2api?.files?.join("\n") ||
+                        "远程文件列表不可用"}
+                </pre>
+              </div>
+            </div>
+          </section>
+        </div>
+      )}
+    </>
+  );
   return (
     <Shell>
       <header className="workspace-header video-replica-header">
@@ -810,315 +1003,24 @@ export function AIVideoReplica() {
               )}
             </div>
           </section>
-          <section
-            className={`video-replica-preview ${p.selected ? "" : "is-empty"}`}
-          >
-            <div className="video-replica-meta">
-              <span className="workflow-badge">
-                {p.selected ? statusText(p.selected.status) : "未开始"}
-              </span>
-              <span>时长不限 · 200MB</span>
-            </div>
-            <div className="video-replica-panel-head">
-              <div>
-                <span className="step-kicker">RESULT</span>
-                <h2>生成结果</h2>
-              </div>
-              <span className="preview-status">
-                {p.selected ? statusText(p.selected.status) : "等待生成"}
-              </span>
-            </div>
-            <div className="video-replica-preview-container">
-              {p.selected && (
-                <div
-                  className="video-generation-progress ai-progress"
-                  aria-live="polite"
-                >
-                  <div className="generation-progress-head">
-                    <strong>{statusText(p.selected.status)}</strong>
-                    <span>
-                      {p.selected.status === "generating"
-                        ? "远端进度不可量化"
-                        : phases.find(
-                            ([phase]) => phase === p.selected?.status,
-                          )?.[1]}
-                    </span>
-                  </div>
-                  <div className="generation-phase-list ai-generation-phase-list">
-                    {phases.map(([phase, label], index) => (
-                      <div
-                        className={`generation-phase ${p.selected?.status === "ready" || (phaseIndex >= 0 && index < phaseIndex) ? "done" : ""} ${p.selected?.status === phase ? "active" : ""}`}
-                        key={phase}
-                      >
-                        <span className="generation-phase-dot" />
-                        <span>{label}</span>
-                      </div>
-                    ))}
-                  </div>
-                  {isPending(p.selected.status) && (
-                    <>
-                      <div
-                        className="generation-indeterminate"
-                        role="progressbar"
-                        aria-label="AI 复刻生成进行中"
-                      />
-                      {p.selected.status === "generating" && (
-                        <p className="generation-progress-detail">
-                          远端进度不可量化
-                        </p>
-                      )}
-                    </>
-                  )}
-                </div>
-              )}
-              {p.selected?.task_type === "ai_replica" && (
-                <div
-                  className="video-replica-panel skill2api-console"
-                  aria-live="polite"
-                >
-                  <strong>任务控制台</strong>
-                  <div className="prompt-review-actions">
-                    {controls.waitingForInput ? (
-                      <>
-                        <input
-                          value={answer}
-                          disabled={!controls.canAnswer}
-                          onChange={(e) => setAnswer(e.target.value)}
-                          placeholder={
-                            p.selected.skill2api?.question || "请输入回答"
-                          }
-                        />
-                        <button
-                          className="button primary"
-                          type="button"
-                          disabled={!answer.trim() || !controls.canAnswer}
-                          onClick={async () => {
-                            if (await p.resumeTask(p.selected!.id, answer, ""))
-                              setAnswer("");
-                          }}
-                        >
-                          {p.resuming ? "正在提交" : "提交"}
-                        </button>
-                      </>
-                    ) : controls.canResume ? (
-                      <>
-                        <input
-                          value={instruction}
-                          onChange={(e) => setInstruction(e.target.value)}
-                          placeholder="追加题词（可选）"
-                        />
-                        <button
-                          className="button secondary"
-                          type="button"
-                          disabled={!controls.canResume}
-                          onClick={async () => {
-                            if (
-                              await p.resumeTask(
-                                p.selected!.id,
-                                "",
-                                instruction,
-                              )
-                            )
-                              setInstruction("");
-                          }}
-                        >
-                          {p.resuming ? "正在恢复" : "恢复任务"}
-                        </button>
-                      </>
-                    ) : null}
-                    {p.resuming && (
-                      <span
-                        className="generation-progress-detail"
-                        role="status"
-                      >
-                        正在恢复远端任务…
-                      </span>
-                    )}
-                    {controls.canTerminate && (
-                      <button
-                        className="button secondary"
-                        type="button"
-                        disabled={!controls.canTerminate}
-                        onClick={() => void p.terminateTask(p.selected!.id)}
-                      >
-                        <X size={16} />
-                        {p.terminating ? "正在终止" : "终止"}
-                      </button>
-                    )}
-                    {controls.canPullResult && (
-                      <button
-                        className="button primary"
-                        type="button"
-                        disabled={p.pullingResult}
-                        onClick={() => void p.pullResult(p.selected!.id)}
-                      >
-                        <Download size={16} />
-                        {p.pullingResult
-                          ? "正在重新拉取"
-                          : p.selected.file_path
-                            ? "重新拉取结果"
-                            : "手动拉取结果"}
-                      </button>
-                    )}
-                  </div>
-                  <button
-                    className="button secondary"
-                    type="button"
-                    disabled={logsLoading || !controls.canOpenLogs}
-                    onClick={() => void openLogs()}
-                  >
-                    <Terminal size={16} />
-                    {logsLoading ? "正在读取日志" : "查看运行日志"}
-                  </button>
-                  {!p.selected.skill2api_request_id && (
-                    <small>
-                      该历史任务尚未关联远程请求，请使用“再次生成”恢复。
-                    </small>
-                  )}
-                </div>
-              )}
-              {logsOpen && p.selected?.task_type === "ai_replica" && (
-                <div
-                  className="skill2api-log-backdrop"
-                  role="presentation"
-                  onClick={() => setLogsOpen(false)}
-                >
-                  <section
-                    className="skill2api-log-dialog"
-                    role="dialog"
-                    aria-modal="true"
-                    aria-labelledby="skill2api-log-title"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <div className="skill2api-log-header">
-                      <div>
-                        <span className="step-kicker">SKILL2API</span>
-                        <h2 id="skill2api-log-title">运行日志</h2>
-                      </div>
-                      <button
-                        className="icon-button"
-                        type="button"
-                        aria-label="关闭日志"
-                        onClick={() => setLogsOpen(false)}
-                      >
-                        <X size={18} />
-                      </button>
-                    </div>
-                    <div
-                      className="skill2api-log-tabs"
-                      role="tablist"
-                      aria-label="远程任务记录"
-                    >
-                      {(["stdout", "stderr", "files"] as const).map((tab) => (
-                        <button
-                          key={tab}
-                          className="button secondary"
-                          type="button"
-                          role="tab"
-                          aria-selected={logTab === tab}
-                          onClick={() => setLogTab(tab)}
-                        >
-                          {tab === "files" ? "文件" : tab}
-                        </button>
-                      ))}
-                    </div>
-                    {p.selected.skill2api?.remote_error && (
-                      <p className="generation-progress-detail" role="status">
-                        远端记录不可用，正在显示本地日志快照。
-                      </p>
-                    )}
-                    {logTab === "files" && (
-                      <div className="skill2api-file-list">
-                        {p.selected.skill2api?.files?.map((path) => (
-                          <button
-                            className="button secondary"
-                            key={path}
-                            type="button"
-                            disabled={!!fileBusy}
-                            onClick={() => void downloadFile(path)}
-                          >
-                            <Download size={16} />
-                            <span>
-                              {fileBusy === path ? "正在获取：" : ""}
-                              {path}
-                            </span>
-                          </button>
-                        ))}
-                        {fileError && <p role="alert">{fileError}</p>}
-                      </div>
-                    )}
-                    <div className="skill2api-log-grid" role="tabpanel">
-                      <div>
-                        <pre className={logTab === "stderr" ? "error" : ""}>
-                          {logTab === "stdout"
-                            ? p.selected.skill2api?.stdout || "暂无标准输出"
-                            : logTab === "stderr"
-                              ? p.selected.skill2api?.stderr ||
-                                "远程错误输出不可用"
-                              : p.selected.skill2api?.files?.join("\n") ||
-                                "远程文件列表不可用"}
-                        </pre>
-                      </div>
-                    </div>
-                  </section>
-                </div>
-              )}
-              <div
-                className="video-stage"
-                style={
-                  {
-                    aspectRatio: previewRatio,
-                    "--preview-scale": previewScale,
-                  } as CSSProperties
-                }
-              >
-                {p.displayed ? (
-                  <video
-                    key={p.displayed}
-                    src={p.displayed}
-                    controls
-                    playsInline
-                    onLoadedMetadata={(event) => {
-                      setPreviewRatio(
-                        videoPreviewRatio(
-                          event.currentTarget.videoWidth,
-                          event.currentTarget.videoHeight,
-                        ),
-                      );
-                      setPreviewScale(
-                        event.currentTarget.videoWidth /
-                          event.currentTarget.videoHeight,
-                      );
-                    }}
-                  />
-                ) : (
-                  <>
-                    <Film size={38} />
-                    <strong>
-                      {failed
-                        ? "生成失败"
-                        : controls.canPullResult
-                          ? "远端结果尚未保存到本机"
-                          : "等待生成结果"}
-                    </strong>
-                    <p>
-                      {failed ||
-                        (controls.canPullResult
-                          ? "请手动拉取结果，保存完成后会显示在这里"
-                          : "提交任务后，生成视频会显示在这里")}
-                    </p>
-                  </>
-                )}
-              </div>
-              {failed && (
-                <p
-                  className="notice notice-error video-generation-error"
-                  role="alert"
-                >
-                  {failed}
-                </p>
-              )}
-              <div className="preview-meta">
+          <VideoReplicaPreview
+            selected={p.selected}
+            mediaRefreshToken={mediaRefreshToken}
+            progress={aiProgress}
+            beforeStage={aiTaskConsole}
+            statusLabel={
+              p.selected ? statusText(p.selected.status) : "等待生成"
+            }
+            emptyState={
+              controls.canPullResult
+                ? {
+                    title: "远端结果尚未保存到本机",
+                    description: "请手动拉取结果，保存完成后会显示在这里",
+                  }
+                : undefined
+            }
+            metadata={
+              <>
                 <span>
                   <small>原视频</small>
                   <b>{p.sourceReady ? "已选择" : "未选择"}</b>
@@ -1127,9 +1029,11 @@ export function AIVideoReplica() {
                   <small>商品参考图</small>
                   <b>{p.replaceReady ? "已添加" : "未添加"}</b>
                 </span>
-              </div>
-              {p.selected && (
-                <div className="video-result-actions">
+              </>
+            }
+            actions={
+              p.selected && (
+                <>
                   <button
                     className="button secondary"
                     type="button"
@@ -1161,10 +1065,10 @@ export function AIVideoReplica() {
                       {p.pullingResult ? "正在拉取结果" : "手动拉取结果"}
                     </button>
                   )}
-                </div>
-              )}
-            </div>
-          </section>
+                </>
+              )
+            }
+          />
         </div>
         <section className="video-replica-history">
           <div className="video-replica-panel-head">
