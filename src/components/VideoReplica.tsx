@@ -457,7 +457,7 @@ export function VideoReplica() {
               <div className="reference-row">
                 <div>
                   <strong>参考素材</strong>
-                  <span>选择主产品图；其余图片只补充人物、场景或风格</span>
+                  <span>可选：选择主产品图；其余图片只补充人物、场景或风格</span>
                 </div>
                 <div className="reference-thumbs">
                   {referencePaths.map((path) => {

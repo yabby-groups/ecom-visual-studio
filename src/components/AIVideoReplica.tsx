@@ -48,7 +48,7 @@ type PendingConfirmation = {
 type Props = {
   sourceReady: boolean;
   sourcePreview: string;
-  replaceReady: boolean;
+  hasProductReferences: boolean;
   scriptReady: boolean;
   busy: string;
   videoReadProgress: number | null;
@@ -321,7 +321,6 @@ export function AIVideoReplica() {
     if (!requireAiAuth()) return;
     if (!sourcePath || !prompt.trim())
       return setError("请先选择视频并填写复刻说明");
-    if (referencePaths.length === 0) return setError("请至少添加一张商品图片");
     if (!Number.isFinite(budget) || budget <= 0)
       return setError("预算必须大于 0");
     setBusy("create");
@@ -465,7 +464,7 @@ export function AIVideoReplica() {
   const p: Props = {
     sourceReady: Boolean(sourcePath),
     sourcePreview,
-    replaceReady: referencePaths.length > 0,
+    hasProductReferences: referencePaths.length > 0,
     scriptReady: Boolean(prompt.trim()),
     busy,
     videoReadProgress,
@@ -527,7 +526,6 @@ export function AIVideoReplica() {
   const createDisabled =
     controls.draftLocked ||
     !p.sourceReady ||
-    !p.replaceReady ||
     !p.scriptReady ||
     invalidBudget;
   const aiProgress = p.selected && (
@@ -803,7 +801,7 @@ export function AIVideoReplica() {
             <div className="video-replica-panel ai-workflow-intro">
               <span className="step-kicker">QUICK WORKFLOW</span>
               <h2>三步完成一次 AI 复刻</h2>
-              <p>选择视频、添加商品图、描述你要替换的内容，然后开始生成。</p>
+              <p>选择视频，按需添加商品图并描述目标内容，然后开始生成。</p>
             </div>
             <div
               className={`video-replica-panel workflow-panel ${p.sourceReady ? "done" : ""}`}
@@ -884,19 +882,19 @@ export function AIVideoReplica() {
               </div>
             </div>
             <div
-              className={`video-replica-panel workflow-panel ${p.replaceReady ? "done" : ""}`}
+              className={`video-replica-panel workflow-panel ${p.hasProductReferences ? "done" : ""}`}
             >
               <div className="workflow-step-head">
                 <div className="step-number">2</div>
                 <div>
                   <span className="step-kicker">素材 02</span>
-                  <h2>添加商品图片</h2>
+                  <h2>添加商品图片（可选）</h2>
                   <p>可添加同一商品的多个角度或细节，第一张作为主参考图。</p>
                 </div>
                 <span className="step-state">
-                  {p.replaceReady
+                  {p.hasProductReferences
                     ? `已添加 ${p.productReferencePaths.length} 张`
-                    : "待添加"}
+                    : "可选"}
                 </span>
               </div>
               <div className="reference-thumbs ai-product-thumb">
@@ -1153,7 +1151,7 @@ export function AIVideoReplica() {
                 </span>
                 <span>
                   <small>商品参考图</small>
-                  <b>{p.replaceReady ? "已添加" : "未添加"}</b>
+                  <b>{p.hasProductReferences ? "已添加" : "未添加（可选）"}</b>
                 </span>
                 <span>
                   <small>视频时长</small>

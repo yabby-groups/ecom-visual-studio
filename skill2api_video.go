@@ -47,7 +47,7 @@ func (s *Studio) aiVideoReplicaProductPaths(paths []string, primary string) ([]s
 		paths = []string{primary}
 	}
 	if len(paths) == 0 {
-		return nil, errors.New("请至少添加一张商品图片")
+		return []string{}, nil
 	}
 	if len(paths) > maxAIVideoReplicaProductImages {
 		return nil, fmt.Errorf("商品图片最多 %d 张", maxAIVideoReplicaProductImages)
@@ -144,7 +144,10 @@ func (s *Studio) CreateAIVideoReplica(input AIVideoReplicaInput) (map[string]str
 		return nil, err
 	}
 	input.ProductPaths = productPaths
-	input.ProductPath = productPaths[0]
+	input.ProductPath = ""
+	if len(productPaths) > 0 {
+		input.ProductPath = productPaths[0]
+	}
 	id := newID("video-ai-replica")
 	refs, _ := json.Marshal(productPaths)
 	avatarAssets, _ := json.Marshal(input.AvatarAssets)
@@ -267,11 +270,14 @@ func (s *Studio) runAIVideoReplica(id, userID string, input AIVideoReplicaInput)
 			return
 		}
 		setStatus("submitting")
-		productReferences := make([]string, 0, len(imageURLs))
-		for index, imageURL := range imageURLs {
-			productReferences = append(productReferences, fmt.Sprintf("商品参考图 %d：%s", index+1, imageURL))
+		prompt := fmt.Sprintf("克隆参考视频的镜头节奏、动作和构图。参考视频：%s 。", videoURL)
+		if len(imageURLs) > 0 {
+			productReferences := make([]string, 0, len(imageURLs))
+			for index, imageURL := range imageURLs {
+				productReferences = append(productReferences, fmt.Sprintf("商品参考图 %d：%s", index+1, imageURL))
+			}
+			prompt = fmt.Sprintf("克隆参考视频的镜头节奏、动作和构图，将目标商品替换为参考商品。参考视频：%s ；%s 。", videoURL, strings.Join(productReferences, "；"))
 		}
-		prompt := fmt.Sprintf("克隆参考视频的镜头节奏、动作和构图，将目标商品替换为参考商品。参考视频：%s ；%s 。", videoURL, strings.Join(productReferences, "；"))
 		avatarIDs, resolveErr := s.resolveAvatarAssetIDs(userID, input.AvatarAssets)
 		if resolveErr != nil {
 			fail(resolveErr)

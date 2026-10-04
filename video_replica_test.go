@@ -220,6 +220,10 @@ func TestAvatarAssetSelectionsRejectInvalidAndDuplicateValues(t *testing.T) {
 
 func TestAIVideoReplicaProductPathsValidateAndPreserveOrder(t *testing.T) {
 	studio := newAIVideoReplicaTestStudio(t)
+	empty, err := studio.aiVideoReplicaProductPaths(nil, "")
+	if err != nil || len(empty) != 0 {
+		t.Fatalf("empty paths = %v, %v", empty, err)
+	}
 	uploads := filepath.Join(studio.dataDir, "storage", "uploads")
 	if err := os.MkdirAll(uploads, 0o700); err != nil {
 		t.Fatal(err)
@@ -826,6 +830,14 @@ func TestVideoReplicaPayloadUsesReferenceTaskType(t *testing.T) {
 	payload := videoReplicaPayload("doubao-seedance-2.5", "复刻商品", 30, "480p", "16:9", 1, true)
 	if got := payload["omni_reference_task_type"]; got != "reference" {
 		t.Fatalf("omni_reference_task_type = %v, want reference", got)
+	}
+}
+
+func TestVideoReplicaPayloadWithoutProductReferenceHasNoImageAnchors(t *testing.T) {
+	payload := videoReplicaPayload("doubao-seedance-2.5", "复刻视频", 30, "480p", "16:9", 0, false)
+	prompt, ok := payload["prompt"].(string)
+	if !ok || strings.Contains(prompt, "@Image") {
+		t.Fatalf("prompt = %q, want no image anchors", prompt)
 	}
 }
 
