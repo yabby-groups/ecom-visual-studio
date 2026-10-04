@@ -1158,6 +1158,10 @@ export function AIVideoReplica() {
                   <small>商品参考图</small>
                   <b>{p.replaceReady ? "已添加" : "未添加"}</b>
                 </span>
+                <span>
+                  <small>视频时长</small>
+                  <b>{p.selected?.duration ?? 0} 秒</b>
+                </span>
                 {p.selected?.versions[0]?.generation_duration_seconds !==
                   null &&
                   p.selected?.versions[0]?.generation_duration_seconds !==

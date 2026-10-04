@@ -32,6 +32,24 @@ type Props = {
   statusLabel?: string;
 };
 
+function formatHumanDuration(seconds: number) {
+  const rounded = Math.max(0, Math.round(seconds));
+  if (rounded < 60) return `${rounded} 秒`;
+  const minutes = Math.floor(rounded / 60);
+  const remainder = rounded % 60;
+  return remainder ? `${minutes} 分 ${remainder} 秒` : `${minutes} 分钟`;
+}
+
+function versionGenerationDuration(version: VideoReplicaJob["versions"][number]) {
+  if (version.generation_duration_seconds != null) {
+    return version.generation_duration_seconds;
+  }
+  if (version.generation_started_at != null && version.completed_at != null) {
+    return Math.max(0, version.completed_at - version.generation_started_at);
+  }
+  return null;
+}
+
 export function VideoReplicaPreview({
   selected,
   duration,
@@ -46,10 +64,22 @@ export function VideoReplicaPreview({
   actions,
   statusLabel,
 }: Props) {
+  const [selectedVersionId, setSelectedVersionId] = useState<string | null>(
+    null,
+  );
   const [previewRatio, setPreviewRatio] = useState(defaultVideoPreviewRatio);
   const [previewScale, setPreviewScale] = useState(16 / 9);
-  const displayed = selected?.file_path
-    ? `${fileUrl(selected.file_path)}?refresh=${mediaRefreshToken}`
+  const displayedVersion =
+    selected?.versions.find((version) => version.id === selectedVersionId) ??
+    selected?.versions.find((version) => version.file_path === selected.file_path);
+  const versions = selected?.versions.filter(
+    (version, index, all) =>
+      all.findIndex((candidate) => candidate.file_path === version.file_path) ===
+      index,
+  );
+  const displayedPath = displayedVersion?.file_path ?? selected?.file_path ?? null;
+  const displayed = displayedPath
+    ? `${fileUrl(displayedPath)}?refresh=${mediaRefreshToken}`
     : "";
   const selectedLabel = useMemo(
     () =>
@@ -149,9 +179,15 @@ export function VideoReplicaPreview({
         <b>{selected ? "已选参考视频" : "等待开始"}</b>
       </span>
       <span>
-        <small>预计时长</small>
-        <b>{duration} 秒</b>
+        <small>视频时长</small>
+        <b>{formatHumanDuration(duration ?? 0)}</b>
       </span>
+      {displayedVersion && versionGenerationDuration(displayedVersion) != null && (
+        <span>
+          <small>生成耗时</small>
+          <b>{formatHumanDuration(versionGenerationDuration(displayedVersion)!)}</b>
+        </span>
+      )}
     </>
   );
   const defaultActions = selected && regenerate && (
@@ -165,11 +201,11 @@ export function VideoReplicaPreview({
         <RefreshCw size={16} />
         重新生成
       </button>
-      {selected.file_path && exportVideo && (
+      {displayedPath && exportVideo && (
         <button
           className="button secondary"
           type="button"
-          onClick={() => void exportVideo(selected.file_path!)}
+          onClick={() => void exportVideo(displayedPath)}
         >
           <Download size={16} />
           导出视频
@@ -186,9 +222,10 @@ export function VideoReplicaPreview({
     "确认脚本后，视频会在这里出现";
 
   useEffect(() => {
+    setSelectedVersionId(null);
     setPreviewRatio(defaultVideoPreviewRatio);
     setPreviewScale(16 / 9);
-  }, [displayed]);
+  }, [selected?.id]);
 
   function segmentStatus(segment: VideoReplicaSegment) {
     if (segment.status.startsWith("failed")) return "失败";
@@ -267,6 +304,26 @@ export function VideoReplicaPreview({
           </p>
         )}
         <div className="preview-meta">{metadata || defaultMetadata}</div>
+        {selected && versions?.length ? (
+          <div className="video-version-strip" aria-label="视频版本">
+            <span>版本</span>
+            {versions.map((version, index) => {
+              const active = version.id === displayedVersion?.id;
+              const current = index === 0;
+              return (
+                <button
+                  className={`video-version ${active ? "active" : ""}`}
+                  key={version.id}
+                  type="button"
+                  onClick={() => setSelectedVersionId(version.id)}
+                  aria-label={`查看${current ? "当前" : `历史 ${versions.length - index}`}版本`}
+                >
+                  {current ? "当前" : `v${versions.length - index}`}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
         <p className="privacy-note">
           <ShieldCheck size={16} />
           选择的本机内容仅用于本次生成，不会公开展示。

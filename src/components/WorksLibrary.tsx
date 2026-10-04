@@ -11,6 +11,7 @@ import {
 import { type ReactElement, useEffect, useState } from "react";
 import { client } from "../api";
 import { fileUrl, userFacingError } from "../utils/assets";
+import type { VideoReplicaVersion } from "../types";
 import {
   defaultVideoPreviewRatio,
   videoPreviewRatio,
@@ -24,7 +25,27 @@ export type LibraryPreview = {
   detail: string;
   path: string | null;
   editPath: string;
+  duration?: number;
+  versions?: VideoReplicaVersion[];
 };
+
+function formatHumanDuration(seconds: number) {
+  const rounded = Math.max(0, Math.round(seconds));
+  if (rounded < 60) return `${rounded} 秒`;
+  const minutes = Math.floor(rounded / 60);
+  const remainder = rounded % 60;
+  return remainder ? `${minutes} 分 ${remainder} 秒` : `${minutes} 分钟`;
+}
+
+function versionGenerationDuration(version: VideoReplicaVersion) {
+  if (version.generation_duration_seconds != null) {
+    return version.generation_duration_seconds;
+  }
+  if (version.generation_started_at != null && version.completed_at != null) {
+    return Math.max(0, version.completed_at - version.generation_started_at);
+  }
+  return null;
+}
 
 export type LibraryRename = {
   kind: "project" | "try-on" | "video";
@@ -254,9 +275,28 @@ export function LibraryPreview({
   onEdit: () => void;
 }) {
   const playable = preview.kind === "video" && Boolean(preview.path);
+  const [selectedVersionId, setSelectedVersionId] = useState<string | null>(
+    null,
+  );
   const [previewRatio, setPreviewRatio] = useState(defaultVideoPreviewRatio);
+  const displayedVersion =
+    preview.versions?.find((version) => version.id === selectedVersionId) ??
+    preview.versions?.find((version) => version.file_path === preview.path);
+  const versions = preview.versions?.filter(
+    (version, index, all) =>
+      all.findIndex((candidate) => candidate.file_path === version.file_path) ===
+      index,
+  );
+  const displayedPath = displayedVersion?.file_path ?? preview.path;
+  const displayedDetail = displayedVersion
+    ? preview.detail.replace(
+        /生成耗时 .+$/,
+        `生成耗时 ${versionGenerationDuration(displayedVersion) != null ? formatHumanDuration(versionGenerationDuration(displayedVersion)!) : "未知"}`,
+      )
+    : preview.detail;
 
   useEffect(() => {
+    setSelectedVersionId(null);
     setPreviewRatio(defaultVideoPreviewRatio);
   }, [preview.path]);
 
@@ -276,7 +316,7 @@ export function LibraryPreview({
         <div className="library-preview-toolbar">
           <div className="library-preview-heading">
             <h2>{preview.title}</h2>
-            <p>{preview.detail}</p>
+            <p>{displayedDetail}</p>
           </div>
           <div className="library-preview-actions">
             <button className="button primary" type="button" onClick={onEdit}>
@@ -293,14 +333,14 @@ export function LibraryPreview({
           </div>
         </div>
         <div className="library-preview-media">
-          {preview.path ? (
+          {displayedPath ? (
             playable ? (
               <video
-                key={preview.path}
+                key={displayedPath}
                 controls
                 playsInline
                 preload="metadata"
-                src={fileUrl(preview.path)}
+                src={fileUrl(displayedPath)}
                 style={{ aspectRatio: previewRatio }}
                 onLoadedMetadata={(event) => {
                   setPreviewRatio(
@@ -312,7 +352,7 @@ export function LibraryPreview({
                 }}
               />
             ) : (
-              <img src={fileUrl(preview.path)} alt={preview.title} />
+              <img src={fileUrl(displayedPath)} alt={preview.title} />
             )
           ) : (
             <div className="library-preview-unavailable">
@@ -325,6 +365,28 @@ export function LibraryPreview({
             </div>
           )}
         </div>
+        {preview.kind === "video" && versions?.length ? (
+          <div className="library-preview-version-area">
+            <div className="library-preview-versions" aria-label="视频版本">
+              <span>版本</span>
+            {versions.map((version, index) => {
+              const active = version.id === displayedVersion?.id;
+              const current = index === 0;
+              return (
+                <button
+                  className={`video-version ${active ? "active" : ""}`}
+                  key={version.id}
+                  type="button"
+                  onClick={() => setSelectedVersionId(version.id)}
+                  aria-label={`查看${current ? "当前" : `历史 ${versions.length - index}`}版本`}
+                >
+                  {current ? "当前" : `v${versions.length - index}`}
+                </button>
+              );
+            })}
+            </div>
+          </div>
+        ) : null}
       </section>
     </div>
   );

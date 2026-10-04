@@ -80,20 +80,24 @@ export function VideoWorksList({
         <div className="art-grid library-art-grid">
           {works.map((job) => {
             const title = job.title || job.model;
+            const latestGenerationDuration = job.versions[0]?.generation_duration_seconds;
+            const durationDetail = `${statusText(job.status)} · 视频时长 ${job.duration} 秒${latestGenerationDuration != null ? ` · 生成耗时 ${latestGenerationDuration} 秒` : ""}`;
             return (
               <LibraryWorkCard
                 key={job.id}
                 type={type}
                 title={title}
-                detail={`${statusText(job.status)} · ${job.duration} 秒`}
+                detail={durationDetail}
                 imagePath={job.status === "ready" ? job.preview_path : null}
                 icon={<Film size={28} />}
                 preview={{
                   kind: "video",
                   title,
-                  detail: `${type} · ${job.status === "ready" ? `${job.duration} 秒` : statusText(job.status)}`,
-                  path: job.status === "ready" ? job.file_path : null,
-                  editPath: "",
+                  detail: `${type} · ${durationDetail}`,
+            path: job.status === "ready" ? job.file_path : null,
+            editPath: "",
+            duration: job.duration,
+            versions: job.versions,
                 }}
                 onPreview={() => !disabled && setPreview(job)}
               >
@@ -125,9 +129,11 @@ export function VideoWorksList({
           preview={{
             kind: "video",
             title: preview.title || preview.model,
-            detail: `${type} · ${preview.status === "ready" ? `${preview.duration} 秒` : statusText(preview.status)}`,
+            detail: `${type} · ${statusText(preview.status)} · 视频时长 ${preview.duration} 秒${preview.versions[0]?.generation_duration_seconds != null ? ` · 生成耗时 ${preview.versions[0].generation_duration_seconds} 秒` : ""}`,
             path: preview.status === "ready" ? preview.file_path : null,
             editPath: "",
+            duration: preview.duration,
+            versions: preview.versions,
           }}
           onClose={() => setPreview(null)}
           onEdit={() => {
