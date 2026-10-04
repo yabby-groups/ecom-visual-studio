@@ -5,7 +5,7 @@ export const libraryTabs = [
   { id: "try-on", label: "换装", createPath: "/try-on" },
   {
     id: "video-replica",
-    label: "普通复刻视频",
+    label: "普通复刻",
     createPath: "/video-replica",
   },
   {
