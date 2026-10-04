@@ -19,10 +19,6 @@ func (s *Studio) AvatarAssets() (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	bearer, err := s.currentHuabotBearer(user.ID)
-	if err != nil {
-		return nil, err
-	}
 	base := s.huabotConfig().WebBase
 	var public struct {
 		Personas []map[string]any `json:"personas"`
@@ -30,10 +26,12 @@ func (s *Studio) AvatarAssets() (map[string]any, error) {
 	var mine struct {
 		Assets []map[string]any `json:"assets"`
 	}
-	if err := s.webRequest(http.MethodGet, base+"/api/avatar_asset/public/personas/", bearer, nil, &public); err != nil {
-		return nil, err
-	}
-	if err := s.webRequest(http.MethodGet, base+"/api/avatar_asset/assets/?size=100", bearer, nil, &mine); err != nil {
+	if err := s.withHuabotBearer(user.ID, func(bearer string) error {
+		if err := s.webRequest(http.MethodGet, base+"/api/avatar_asset/public/personas/", bearer, nil, &public); err != nil {
+			return err
+		}
+		return s.webRequest(http.MethodGet, base+"/api/avatar_asset/assets/?size=100", bearer, nil, &mine)
+	}); err != nil {
 		return nil, err
 	}
 	personas := make([]map[string]any, 0, len(public.Personas))
@@ -172,10 +170,6 @@ func (s *Studio) resolveAvatarAssetIDs(userID string, selections []AvatarAssetSe
 	if len(selections) == 0 {
 		return nil, nil
 	}
-	bearer, err := s.currentHuabotBearer(userID)
-	if err != nil {
-		return nil, err
-	}
 	base := s.huabotConfig().WebBase
 	var public struct {
 		Personas []map[string]any `json:"personas"`
@@ -183,10 +177,12 @@ func (s *Studio) resolveAvatarAssetIDs(userID string, selections []AvatarAssetSe
 	var mine struct {
 		Assets []map[string]any `json:"assets"`
 	}
-	if err := s.webRequest(http.MethodGet, base+"/api/avatar_asset/public/personas/", bearer, nil, &public); err != nil {
-		return nil, err
-	}
-	if err := s.webRequest(http.MethodGet, base+"/api/avatar_asset/assets/?size=100", bearer, nil, &mine); err != nil {
+	if err := s.withHuabotBearer(userID, func(bearer string) error {
+		if err := s.webRequest(http.MethodGet, base+"/api/avatar_asset/public/personas/", bearer, nil, &public); err != nil {
+			return err
+		}
+		return s.webRequest(http.MethodGet, base+"/api/avatar_asset/assets/?size=100", bearer, nil, &mine)
+	}); err != nil {
 		return nil, err
 	}
 	available := map[string]string{}
@@ -211,7 +207,7 @@ func (s *Studio) resolveAvatarAssetIDs(userID string, selections []AvatarAssetSe
 		if providerID == "" {
 			return nil, fmt.Errorf("所选虚拟人素材不可用")
 		}
-		result = append(result, "asset://" + providerID)
+		result = append(result, "asset://"+providerID)
 	}
 	return result, nil
 }

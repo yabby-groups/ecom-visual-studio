@@ -195,11 +195,7 @@ func (s *Studio) runAIVideoReplica(id, userID string, input AIVideoReplicaInput)
 	if isTerminated() {
 		return
 	}
-	bearer, err := s.currentHuabotBearer(userID)
-	if err != nil {
-		fail(err)
-		return
-	}
+	var err error
 	config := s.huabotConfig()
 	var requestID string
 	for attempt := 0; attempt < 5; attempt++ {
@@ -219,7 +215,7 @@ func (s *Studio) runAIVideoReplica(id, userID string, input AIVideoReplicaInput)
 		if isTerminated() {
 			return
 		}
-		videoURL, uploadErr := s.uploadSkill2APIMedia(config.WebBase, bearer, input.SourceVideoPath)
+		videoURL, uploadErr := s.uploadSkill2APIMedia(userID, config.WebBase, input.SourceVideoPath)
 		if uploadErr != nil {
 			fail(uploadErr)
 			return
@@ -229,7 +225,7 @@ func (s *Studio) runAIVideoReplica(id, userID string, input AIVideoReplicaInput)
 		}
 		imageURLs := make([]string, 0, len(input.ProductPaths))
 		for _, productPath := range input.ProductPaths {
-			imageURL, uploadErr := s.uploadSkill2APIMedia(config.WebBase, bearer, productPath)
+			imageURL, uploadErr := s.uploadSkill2APIMedia(userID, config.WebBase, productPath)
 			if uploadErr != nil {
 				fail(uploadErr)
 				return
@@ -260,7 +256,7 @@ func (s *Studio) runAIVideoReplica(id, userID string, input AIVideoReplicaInput)
 		if isTerminated() {
 			return
 		}
-		if err = jsonRequest(s.httpClient, http.MethodPost, config.WebBase+"/api/skill2api/generate/", bearer, map[string]any{"prompt": prompt, "skill_name": "hypit", "model": input.Model}, &submitted); err != nil {
+		if err = s.skill2APIJSONRequest(userID, http.MethodPost, config.WebBase+"/api/skill2api/generate/", map[string]any{"prompt": prompt, "skill_name": "hypit", "model": input.Model}, &submitted); err != nil {
 			fail(err)
 			return
 		}
@@ -279,7 +275,7 @@ func (s *Studio) runAIVideoReplica(id, userID string, input AIVideoReplicaInput)
 		}
 		if isTerminated() {
 			var ignored map[string]any
-			if terminateErr := jsonRequest(s.httpClient, http.MethodPost, config.WebBase+"/api/skill2api/terminate/", bearer, map[string]string{"request_id": requestID}, &ignored); terminateErr != nil {
+			if terminateErr := s.skill2APIJSONRequest(userID, http.MethodPost, config.WebBase+"/api/skill2api/terminate/", map[string]string{"request_id": requestID}, &ignored); terminateErr != nil {
 				log.Printf("video replica %s: terminate raced submission %s: %v", id, requestID, terminateErr)
 			}
 			return
@@ -290,7 +286,7 @@ func (s *Studio) runAIVideoReplica(id, userID string, input AIVideoReplicaInput)
 		if isTerminated() {
 			return
 		}
-		status, statusErr := s.skill2APIStatus(requestID, bearer)
+		status, statusErr := s.skill2APIStatus(userID, requestID)
 		if statusErr != nil {
 			if isSkill2APIStatusNotFound(statusErr) {
 				_, _ = s.reconcileAIVideoReplicaRemoteStatus(id, map[string]any{"status": "not_found", "error": statusErr.Error()})
@@ -325,7 +321,7 @@ func (s *Studio) runAIVideoReplica(id, userID string, input AIVideoReplicaInput)
 			if isTerminated() {
 				return
 			}
-			if err = jsonRequest(s.httpClient, http.MethodPost, config.WebBase+"/api/skill2api/file/", bearer, map[string]string{"request_id": requestID, "file_path": filePath}, &delivery); err != nil {
+			if err = s.skill2APIJSONRequest(userID, http.MethodPost, config.WebBase+"/api/skill2api/file/", map[string]string{"request_id": requestID, "file_path": filePath}, &delivery); err != nil {
 				fail(err)
 				return
 			}
@@ -346,7 +342,7 @@ func (s *Studio) runAIVideoReplica(id, userID string, input AIVideoReplicaInput)
 					return
 				}
 				var result map[string]any
-				if err = jsonRequest(s.httpClient, http.MethodGet, config.WebBase+"/api/skill2api/file/delivery/?request_id="+url.QueryEscape(requestID)+"&delivery_id="+url.QueryEscape(delivery.DeliveryID), bearer, nil, &result); err != nil {
+				if err = s.skill2APIJSONRequest(userID, http.MethodGet, config.WebBase+"/api/skill2api/file/delivery/?request_id="+url.QueryEscape(requestID)+"&delivery_id="+url.QueryEscape(delivery.DeliveryID), nil, &result); err != nil {
 					fail(err)
 					return
 				}
@@ -364,7 +360,7 @@ func (s *Studio) runAIVideoReplica(id, userID string, input AIVideoReplicaInput)
 					if isTerminated() {
 						return
 					}
-					if err = s.downloadAIVideo(id, rawURL, bearer); err != nil {
+					if err = s.downloadAIVideo(id, userID, rawURL); err != nil {
 						fail(err)
 					}
 					return
@@ -421,11 +417,7 @@ func (s *Studio) RefreshAIVideoReplica(id string) (map[string]any, error) {
 	if rid == "" {
 		return result, nil
 	}
-	bearer, err := s.currentHuabotBearer(user.ID)
-	if err != nil {
-		return nil, err
-	}
-	status, err := s.skill2APIStatus(rid, bearer)
+	status, err := s.skill2APIStatus(user.ID, rid)
 	if err != nil {
 		if isSkill2APIStatusNotFound(err) {
 			status = map[string]any{"status": "not_found", "error": err.Error()}
@@ -549,7 +541,17 @@ func (s *Studio) saveSkill2APIStatusSnapshot(id string, status map[string]any) {
 // skill2APIStatus intentionally accepts a terminal task's error field. The
 // status endpoint uses it for states such as "terminated by user" while still
 // returning stdout/stderr that the desktop must display.
-func (s *Studio) skill2APIStatus(requestID, bearer string) (map[string]any, error) {
+func (s *Studio) skill2APIStatus(userID, requestID string) (map[string]any, error) {
+	var status map[string]any
+	err := s.withHuabotBearer(userID, func(bearer string) error {
+		var requestErr error
+		status, requestErr = s.skill2APIStatusWithBearer(requestID, bearer)
+		return requestErr
+	})
+	return status, err
+}
+
+func (s *Studio) skill2APIStatusWithBearer(requestID, bearer string) (map[string]any, error) {
 	req, err := http.NewRequest(http.MethodGet, s.huabotConfig().WebBase+"/api/skill2api/status/?request_id="+url.QueryEscape(requestID), nil)
 	if err != nil {
 		return nil, err
@@ -568,6 +570,12 @@ func (s *Studio) skill2APIStatus(requestID, bearer string) (map[string]any, erro
 		return nil, fmt.Errorf("Skill2API 状态响应无效：%w", err)
 	}
 	return status, nil
+}
+
+func (s *Studio) skill2APIJSONRequest(userID, method, rawURL string, payload, target any) error {
+	return s.withHuabotBearer(userID, func(bearer string) error {
+		return jsonRequest(s.httpClient, method, rawURL, bearer, payload, target)
+	})
 }
 
 type skill2APIStatusError struct {
@@ -600,11 +608,7 @@ func (s *Studio) ResumeAIVideoReplica(id, answer, instruction string) (map[strin
 	if localStatus != "waiting_for_input" && !aiVideoReplicaResumableStatus(localStatus) {
 		return nil, errors.New("当前任务不能恢复")
 	}
-	bearer, err := s.currentHuabotBearer(user.ID)
-	if err != nil {
-		return nil, err
-	}
-	remoteStatus, err := s.skill2APIStatus(rid, bearer)
+	remoteStatus, err := s.skill2APIStatus(user.ID, rid)
 	if err != nil {
 		if isSkill2APIStatusNotFound(err) {
 			remoteStatus = map[string]any{"status": "not_found", "error": err.Error()}
@@ -672,7 +676,7 @@ func (s *Studio) ResumeAIVideoReplica(id, answer, instruction string) (map[strin
 		payload["instruction"] = instruction
 	}
 	var result map[string]any
-	err = jsonRequest(s.httpClient, http.MethodPost, s.huabotConfig().WebBase+"/api/skill2api/resume/", bearer, payload, &result)
+	err = s.skill2APIJSONRequest(user.ID, http.MethodPost, s.huabotConfig().WebBase+"/api/skill2api/resume/", payload, &result)
 	if err != nil {
 		return result, err
 	}
@@ -727,11 +731,7 @@ func (s *Studio) TerminateAIVideoReplica(id string) (map[string]any, error) {
 		if rid == "" || localStatus == "ready" {
 			return nil, errors.New("当前任务不能终止")
 		}
-		bearer, bearerErr := s.currentHuabotBearer(user.ID)
-		if bearerErr != nil {
-			return nil, bearerErr
-		}
-		remote, statusErr := s.skill2APIStatus(rid, bearer)
+		remote, statusErr := s.skill2APIStatus(user.ID, rid)
 		if isSkill2APIStatusNotFound(statusErr) {
 			reconciledStatus, reconcileErr := s.reconcileAIVideoReplicaRemoteStatus(id, map[string]any{"status": "not_found", "error": statusErr.Error()})
 			if reconcileErr != nil {
@@ -770,13 +770,8 @@ func (s *Studio) TerminateAIVideoReplica(id string) (map[string]any, error) {
 	if rid == "" {
 		return result, nil
 	}
-	bearer, err := s.currentHuabotBearer(user.ID)
-	if err != nil {
-		result["remote_error"] = err.Error()
-		return result, nil
-	}
 	var remote map[string]any
-	if err = jsonRequest(s.httpClient, http.MethodPost, s.huabotConfig().WebBase+"/api/skill2api/terminate/", bearer, map[string]string{"request_id": rid}, &remote); err != nil {
+	if err = s.skill2APIJSONRequest(user.ID, http.MethodPost, s.huabotConfig().WebBase+"/api/skill2api/terminate/", map[string]string{"request_id": rid}, &remote); err != nil {
 		result["remote_error"] = err.Error()
 		return result, nil
 	}
@@ -793,12 +788,8 @@ func (s *Studio) DeliverAIVideoReplicaFile(id, filePath string) (map[string]any,
 	if err != nil {
 		return nil, err
 	}
-	bearer, err := s.currentHuabotBearer(user.ID)
-	if err != nil {
-		return nil, err
-	}
 	var result map[string]any
-	err = jsonRequest(s.httpClient, http.MethodPost, s.huabotConfig().WebBase+"/api/skill2api/file/", bearer, map[string]string{"request_id": rid, "file_path": filePath}, &result)
+	err = s.skill2APIJSONRequest(user.ID, http.MethodPost, s.huabotConfig().WebBase+"/api/skill2api/file/", map[string]string{"request_id": rid, "file_path": filePath}, &result)
 	return result, err
 }
 
@@ -807,27 +798,10 @@ func (s *Studio) AIVideoReplicaDelivery(id, deliveryID string) (map[string]any, 
 	if err != nil {
 		return nil, err
 	}
-	bearer, err := s.currentHuabotBearer(user.ID)
-	if err != nil {
-		return nil, err
-	}
-	req, err := http.NewRequest(http.MethodGet, s.huabotConfig().WebBase+"/api/skill2api/file/delivery/?request_id="+url.QueryEscape(rid)+"&delivery_id="+url.QueryEscape(deliveryID), nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+bearer)
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return nil, fmt.Errorf("文件投递查询失败：HTTP %d", resp.StatusCode)
-	}
 	var result map[string]any
-	err = json.NewDecoder(io.LimitReader(resp.Body, 8<<20)).Decode(&result)
+	err = s.skill2APIJSONRequest(user.ID, http.MethodGet, s.huabotConfig().WebBase+"/api/skill2api/file/delivery/?request_id="+url.QueryEscape(rid)+"&delivery_id="+url.QueryEscape(deliveryID), nil, &result)
 	if err != nil {
-		return nil, fmt.Errorf("文件投递响应无效：%w", err)
+		return nil, err
 	}
 	if err == nil && strings.HasPrefix(stringValue(result["url"]), "/") {
 		result["url"] = s.huabotConfig().WebBase + stringValue(result["url"])
@@ -899,11 +873,7 @@ func (s *Studio) PullAIVideoReplicaResult(id string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	bearer, err := s.currentHuabotBearer(user.ID)
-	if err != nil {
-		return false, err
-	}
-	status, err := s.skill2APIStatus(rid, bearer)
+	status, err := s.skill2APIStatus(user.ID, rid)
 	if err != nil {
 		return false, err
 	}
@@ -919,7 +889,7 @@ func (s *Studio) PullAIVideoReplicaResult(id string) (bool, error) {
 					switch stringValue(result["status"]) {
 					case "succeeded":
 						if rawURL := stringValue(result["url"]); rawURL != "" {
-							if err = s.downloadAIVideo(id, rawURL, bearer); err == nil {
+							if err = s.downloadAIVideo(id, user.ID, rawURL); err == nil {
 								return true, nil
 							}
 						}
@@ -938,25 +908,27 @@ func (s *Studio) PullAIVideoReplicaResult(id string) (bool, error) {
 	// the worker could not create an asynchronous temporary upload.
 	config := s.huabotConfig()
 	rawURL := config.WebBase + "/api/skill2api/file/?request_id=" + url.QueryEscape(rid) + "&file_path=" + url.QueryEscape(filePath)
-	req, err := http.NewRequest(http.MethodGet, rawURL, nil)
-	if err != nil {
-		return false, err
-	}
-	req.Header.Set("Authorization", "Bearer "+bearer)
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return false, err
-	}
 	var fileResult struct {
 		URL string `json:"url"`
 	}
-	if err = decodeResponse(resp, &fileResult); err != nil {
+	if err = s.withHuabotBearer(user.ID, func(bearer string) error {
+		req, requestErr := http.NewRequest(http.MethodGet, rawURL, nil)
+		if requestErr != nil {
+			return requestErr
+		}
+		req.Header.Set("Authorization", "Bearer "+bearer)
+		resp, requestErr := s.httpClient.Do(req)
+		if requestErr != nil {
+			return requestErr
+		}
+		return decodeResponse(resp, &fileResult)
+	}); err != nil {
 		return false, err
 	}
 	if fileResult.URL == "" {
 		return false, errors.New("远程未返回结果文件地址")
 	}
-	if err = s.downloadAIVideo(id, fileResult.URL, bearer); err != nil {
+	if err = s.downloadAIVideo(id, user.ID, fileResult.URL); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -1031,7 +1003,7 @@ func aiVideoReplicaMP4Path(status map[string]any) (string, error) {
 	return "", errors.New("远端没有可拉取的 MP4 结果")
 }
 
-func (s *Studio) uploadSkill2APIMedia(baseURL, bearer, localPath string) (string, error) {
+func (s *Studio) uploadSkill2APIMedia(userID, baseURL, localPath string) (string, error) {
 	path, err := s.replicaSourcePath(localPath)
 	if err != nil {
 		path, err = s.uploadedImagePath(localPath)
@@ -1054,18 +1026,22 @@ func (s *Studio) uploadSkill2APIMedia(baseURL, bearer, localPath string) (string
 	}
 	_ = w.WriteField("temporary", "true")
 	_ = w.Close()
-	req, err := http.NewRequest(http.MethodPost, baseURL+"/api/file/run/", &body)
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Authorization", "Bearer "+bearer)
-	req.Header.Set("Content-Type", w.FormDataContentType())
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return "", err
-	}
 	var result map[string]any
-	if err = decodeResponse(resp, &result); err != nil {
+	bodyBytes := body.Bytes()
+	contentType := w.FormDataContentType()
+	if err = s.withHuabotBearer(userID, func(bearer string) error {
+		req, requestErr := http.NewRequest(http.MethodPost, baseURL+"/api/file/run/", bytes.NewReader(bodyBytes))
+		if requestErr != nil {
+			return requestErr
+		}
+		req.Header.Set("Authorization", "Bearer "+bearer)
+		req.Header.Set("Content-Type", contentType)
+		resp, requestErr := s.httpClient.Do(req)
+		if requestErr != nil {
+			return requestErr
+		}
+		return decodeResponse(resp, &result)
+	}); err != nil {
 		return "", err
 	}
 	file, _ := result["file"].(map[string]any)
@@ -1076,7 +1052,7 @@ func (s *Studio) uploadSkill2APIMedia(baseURL, bearer, localPath string) (string
 	return baseURL + "/upload/" + key[:2] + "/" + key[2:4] + "/" + key + "." + ext, nil
 }
 
-func (s *Studio) downloadAIVideo(id, rawURL, bearer string) error {
+func (s *Studio) downloadAIVideo(id, userID, rawURL string) error {
 	config := s.huabotConfig()
 	downloadURL := rawURL
 	if strings.HasPrefix(rawURL, "/") {
@@ -1088,19 +1064,6 @@ func (s *Studio) downloadAIVideo(id, rawURL, bearer string) error {
 			return errors.New("Skill2API 下载地址无效")
 		}
 	}
-	req, err := http.NewRequest(http.MethodGet, downloadURL, nil)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Authorization", "Bearer "+bearer)
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("下载视频失败：HTTP %d", resp.StatusCode)
-	}
 	path := filepath.ToSlash(filepath.Join("generated", "video-replica", id+".mp4"))
 	full, err := s.generatedAssetOutputPath(path)
 	if err != nil {
@@ -1109,17 +1072,32 @@ func (s *Studio) downloadAIVideo(id, rawURL, bearer string) error {
 	if err = os.MkdirAll(filepath.Dir(full), 0o700); err != nil {
 		return err
 	}
-	file, err := os.OpenFile(full, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
-	if err != nil {
-		return err
-	}
-	_, err = io.Copy(file, io.LimitReader(resp.Body, 512<<20))
-	closeErr := file.Close()
-	if err != nil {
-		return err
-	}
-	if closeErr != nil {
+	if err = s.withHuabotBearer(userID, func(bearer string) error {
+		req, requestErr := http.NewRequest(http.MethodGet, downloadURL, nil)
+		if requestErr != nil {
+			return requestErr
+		}
+		req.Header.Set("Authorization", "Bearer "+bearer)
+		resp, requestErr := s.httpClient.Do(req)
+		if requestErr != nil {
+			return requestErr
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			return fmt.Errorf("下载视频失败：HTTP %d", resp.StatusCode)
+		}
+		file, requestErr := os.OpenFile(full, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+		if requestErr != nil {
+			return requestErr
+		}
+		_, requestErr = io.Copy(file, io.LimitReader(resp.Body, 512<<20))
+		closeErr := file.Close()
+		if requestErr != nil {
+			return requestErr
+		}
 		return closeErr
+	}); err != nil {
+		return err
 	}
 	if _, previewErr := s.ensureVideoReplicaPreview(path); previewErr != nil {
 		log.Printf("video replica %s: preview generation failed: %v", id, previewErr)

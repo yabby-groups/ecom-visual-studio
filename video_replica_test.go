@@ -291,6 +291,65 @@ func TestRefreshAIVideoReplicaDoesNotLetRemoteRunningReplaceLocalPhase(t *testin
 	}
 }
 
+func TestRefreshAIVideoReplicaRefreshesBearerAfterForbidden(t *testing.T) {
+	statusRequests := 0
+	refreshes := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/skill2api/status/":
+			statusRequests++
+			if r.Header.Get("Authorization") == "Bearer stale-access" {
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
+			if r.Header.Get("Authorization") != "Bearer fresh-access" {
+				t.Fatalf("authorization = %q", r.Header.Get("Authorization"))
+			}
+			_, _ = w.Write([]byte(`{"status":"running"}`))
+		case "/oauth/token":
+			refreshes++
+			if err := r.ParseForm(); err != nil {
+				t.Fatal(err)
+			}
+			if r.Form.Get("grant_type") != "refresh_token" || r.Form.Get("refresh_token") != "refresh-secret" {
+				t.Fatalf("refresh form = %#v", r.Form)
+			}
+			_, _ = w.Write([]byte(`{"access_token":"fresh-access","expires_in":3600}`))
+		default:
+			t.Fatalf("path = %q", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+	t.Setenv("HUABOT_WEB_BASE_URL", server.URL)
+
+	studio := newAIVideoReplicaTestStudio(t)
+	studio.httpClient = server.Client()
+	studio.huabotBearer = "stale-access"
+	studio.huabotBearerExpiry = time.Now().Add(time.Hour)
+	if _, err := studio.db.Exec("insert into users(id,username,created_at,nick_name,avatar_url) values(?,?,?,?,?)", "test-user", "tester", 1, "", ""); err != nil {
+		t.Fatal(err)
+	}
+	credential, err := seal(studio.masterKey, "refresh-secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = studio.db.Exec("insert into auth_credentials(user_id,kind,secret) values(?,?,?)", "test-user", oauthRefreshCredentialKind, credential); err != nil {
+		t.Fatal(err)
+	}
+	insertAIVideoReplicaTestJob(t, studio, "job-forbidden", "generating", "remote-request")
+
+	result, err := studio.RefreshAIVideoReplica("job-forbidden")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result["remote_status"] != "running" {
+		t.Fatalf("result = %#v", result)
+	}
+	if statusRequests != 2 || refreshes != 1 {
+		t.Fatalf("status requests = %d, refreshes = %d; want 2, 1", statusRequests, refreshes)
+	}
+}
+
 func TestRefreshAIVideoReplicaReturnsLogsAfterLocalTermination(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"status":"terminated","error":"terminated by user","stdout":"before termination","stderr":"final detail"}`))

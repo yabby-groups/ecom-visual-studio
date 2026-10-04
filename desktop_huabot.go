@@ -563,18 +563,12 @@ func (s *Studio) refreshTokenSettings() (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	bearer, err := s.currentHuabotBearer(user.ID)
-	if err != nil {
-		return nil, err
-	}
-	summary, err := s.refreshTokenUsage(user.ID, bearer)
-	if isAuthenticationFailure(err) {
-		s.clearHuabotBearer(user.ID)
-		bearer, err = s.currentHuabotBearer(user.ID)
-		if err == nil {
-			summary, err = s.refreshTokenUsage(user.ID, bearer)
-		}
-	}
+	var summary walletSummary
+	err = s.withHuabotBearer(user.ID, func(bearer string) error {
+		var requestErr error
+		summary, requestErr = s.refreshTokenUsage(user.ID, bearer)
+		return requestErr
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -686,6 +680,34 @@ func (s *Studio) clearHuabotBearer(userID string) {
 	}
 }
 
+// withHuabotBearer obtains a non-expiring access token for each outbound
+// request. A rejected bearer is refreshed once and the request is replayed;
+// repeated authorization failures remain visible to the caller.
+func (s *Studio) withHuabotBearer(userID string, request func(bearer string) error) error {
+	bearer, err := s.currentHuabotBearer(userID)
+	if err != nil {
+		return err
+	}
+	if err = request(bearer); !isAuthenticationFailure(err) {
+		return err
+	}
+	s.clearHuabotBearerIfCurrent(userID, bearer)
+	bearer, refreshErr := s.currentHuabotBearer(userID)
+	if refreshErr != nil {
+		return refreshErr
+	}
+	return request(bearer)
+}
+
+func (s *Studio) clearHuabotBearerIfCurrent(userID, bearer string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.user != nil && s.user.ID == userID && s.huabotBearer == bearer {
+		s.huabotBearer = ""
+		s.huabotBearerExpiry = time.Time{}
+	}
+}
+
 func (s *Studio) invalidateHuabotAuthorization(userID string) error {
 	done, err := s.beginDataWrite()
 	if err != nil {
@@ -732,7 +754,7 @@ func isAuthenticationFailure(err error) bool {
 		return false
 	}
 	message := strings.ToLower(err.Error())
-	return strings.Contains(message, "http 401") || strings.Contains(message, "unauthorized")
+	return strings.Contains(message, "http 401") || strings.Contains(message, "http 403") || strings.Contains(message, "unauthorized") || strings.Contains(message, "forbidden")
 }
 
 func (s *Studio) refreshTokenUsage(userID, bearer string) (walletSummary, error) {
