@@ -208,6 +208,7 @@ func (s *Studio) migrate() error {
 		"update custom_templates set user_id='" + localWorkspaceID + "' where user_id<>'" + localWorkspaceID + "'",
 		"update try_on_jobs set user_id='" + localWorkspaceID + "' where user_id<>'" + localWorkspaceID + "'",
 		"update video_replica_jobs set user_id='" + localWorkspaceID + "' where user_id<>'" + localWorkspaceID + "'",
+		"update video_replica_jobs set task_type='reference' where task_type in ('auto','extend','replace')",
 		"update video_replica_jobs set status='interrupted' where task_type<>'ai_replica' and status in ('queued','preparing','generating','downloading','merging')",
 	} {
 		if _, err := s.db.Exec(statement); err != nil {

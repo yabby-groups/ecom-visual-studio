@@ -146,7 +146,7 @@ export const client = {
       referencePaths,
       productReferencePath,
     ),
-  reviewVideoReplicaPrompt: (mode: "replica" | "replace", prompt: string) =>
+  reviewVideoReplicaPrompt: (mode: "replica", prompt: string) =>
     call<{ score: number; issues: string[]; optimized_prompt: string }>(
       "ReviewVideoReplicaPrompt",
       mode,
@@ -167,7 +167,6 @@ export const client = {
     source_video_path: string;
     reference_paths: string[];
     product_reference_path: string;
-    task_type: "auto" | "reference" | "extend" | "replace";
     model: string;
     prompt: string;
     storyboard: VideoReplicaJob["storyboard"];

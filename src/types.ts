@@ -210,7 +210,7 @@ export type VideoReplicaJob = {
   source_video_path: string;
   reference_paths: string[];
   product_reference_path: string;
-  task_type: "auto" | "reference" | "extend" | "replace" | "ai_replica";
+  task_type: "reference" | "ai_replica";
   model: string;
   prompt: string;
   storyboard: VideoReplicaStoryboardItem[];

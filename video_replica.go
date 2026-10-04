@@ -271,7 +271,7 @@ func (s *Studio) AnalyzeVideoReplica(path string, referencePaths []string, produ
 func (s *Studio) ReviewVideoReplicaPrompt(mode, prompt string) (map[string]any, error) {
 	mode = strings.TrimSpace(mode)
 	prompt = strings.TrimSpace(prompt)
-	if mode != "replica" && mode != "replace" {
+	if mode != "replica" {
 		return nil, errors.New("视频审核模式无效")
 	}
 	if err := validateRequired(prompt, "复刻描述", maxVideoReplicaReviewPromptRunes); err != nil {
@@ -285,13 +285,7 @@ func (s *Studio) ReviewVideoReplicaPrompt(mode, prompt string) (map[string]any, 
 	if err != nil {
 		return nil, err
 	}
-	task := "视频复刻"
-	criteria := "检查主体、镜头结构、动作、时长、画面风格、声音和连续性是否清晰。"
-	if mode == "replace" {
-		task = "AI 视频替换"
-		criteria = "检查被替换对象、目标商品、保留的动作/镜头/光线和一致性约束是否清晰。"
-	}
-	instruction := fmt.Sprintf("你是电商视频创作审核员。请审核以下%s描述。%s 只返回 JSON，不要 Markdown：{\"score\":0,\"issues\":[\"问题1\"],\"optimized_prompt\":\"完整优化稿\"}。score 为 0 到 100 的整数；issues 返回最多 5 条具体、可执行的中文问题；optimized_prompt 必须是一段可直接用于生成视频的中文描述，保留用户真实意图，不得凭空添加商品规格、认证或功效；优化稿不超过 %d 个字符。\n用户描述：%s", task, criteria, maxVideoReplicaReviewPromptRunes, prompt)
+	instruction := fmt.Sprintf("你是电商视频创作审核员。请审核以下视频复刻描述。检查主体、镜头结构、动作、时长、画面风格、声音和连续性是否清晰。只返回 JSON，不要 Markdown：{\"score\":0,\"issues\":[\"问题1\"],\"optimized_prompt\":\"完整优化稿\"}。score 为 0 到 100 的整数；issues 返回最多 5 条具体、可执行的中文问题；optimized_prompt 必须是一段可直接用于生成视频的中文描述，保留用户真实意图，不得凭空添加商品规格、认证或功效；优化稿不超过 %d 个字符。\n用户描述：%s", maxVideoReplicaReviewPromptRunes, prompt)
 	client := s.openAIClient(config, key)
 	response, err := client.Responses.New(context.Background(), responses.ResponseNewParams{
 		Model: textModel,
@@ -332,39 +326,17 @@ func (s *Studio) CreateVideoReplica(input VideoReplicaInput) (map[string]string,
 	if err != nil {
 		return nil, err
 	}
+	input.TaskType = "reference"
 	if err := validateVideoReplicaInput(input); err != nil {
 		return nil, err
 	}
 	if _, _, _, _, _, err = s.activeProvider(user.ID); err != nil {
 		return nil, err
 	}
-	sourcePath, err := s.replicaSourcePath(input.SourceVideoPath)
-	if err != nil {
+	if _, err := s.replicaSourcePath(input.SourceVideoPath); err != nil {
 		return nil, err
 	}
 	id := newID("video-replica")
-	persistedSourcePath := input.SourceVideoPath
-	effectiveDuration := input.Duration
-	if input.TaskType == "replace" {
-		maxDuration := seedanceMaxDuration[input.Model]
-		seconds, durationErr := videoDuration(sourcePath)
-		if durationErr != nil {
-			return nil, errors.New("无法读取视频时长，请确认已安装 ffprobe")
-		}
-		if seconds > float64(maxDuration)+videoDurationTolerance {
-			persistedSourcePath, sourcePath, err = s.prepareVideoReplacementSource(sourcePath, id, maxDuration)
-			if err != nil {
-				return nil, err
-			}
-		}
-		effectiveDuration = int(seconds)
-		if seconds-float64(effectiveDuration) > 0 {
-			effectiveDuration++
-		}
-		if effectiveDuration > maxDuration {
-			effectiveDuration = maxDuration
-		}
-	}
 	for _, path := range input.ReferencePaths {
 		if _, err = s.uploadedImagePath(path); err != nil {
 			return nil, err
@@ -372,14 +344,14 @@ func (s *Studio) CreateVideoReplica(input VideoReplicaInput) (map[string]string,
 	}
 	storyboard, _ := json.Marshal(input.Storyboard)
 	runID := newID("video-run")
-	plans, err := segmentVideo(effectiveDuration, seedanceMaxDuration[input.Model], input.Storyboard, input.Prompt)
+	plans, err := segmentVideo(input.Duration, seedanceMaxDuration[input.Model], input.Storyboard, input.Prompt)
 	if err != nil {
 		return nil, err
 	}
 	refs, _ := json.Marshal(input.ReferencePaths)
 	avatarAssets, _ := json.Marshal(input.AvatarAssets)
 	if err := s.writeTransaction(func(tx *sql.Tx) error {
-		if _, err := tx.Exec("insert into video_replica_jobs(id,user_id,source_video_path,reference_paths,product_reference_path,task_type,model,prompt,storyboard,storyboard_confirmed,duration,resolution,ratio,status,current_run_id,created_at,avatar_assets) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", id, localWorkspaceID, persistedSourcePath, string(refs), input.ProductReferencePath, input.TaskType, seedanceModels[input.Model], input.Prompt, string(storyboard), 1, effectiveDuration, input.Resolution, input.Ratio, "queued", runID, time.Now().Unix(), string(avatarAssets)); err != nil {
+		if _, err := tx.Exec("insert into video_replica_jobs(id,user_id,source_video_path,reference_paths,product_reference_path,task_type,model,prompt,storyboard,storyboard_confirmed,duration,resolution,ratio,status,current_run_id,created_at,avatar_assets) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", id, localWorkspaceID, input.SourceVideoPath, string(refs), input.ProductReferencePath, "reference", seedanceModels[input.Model], input.Prompt, string(storyboard), 1, input.Duration, input.Resolution, input.Ratio, "queued", runID, time.Now().Unix(), string(avatarAssets)); err != nil {
 			return err
 		}
 		return insertVideoSegments(tx, id, runID, plans)
@@ -388,19 +360,6 @@ func (s *Studio) CreateVideoReplica(input VideoReplicaInput) (map[string]string,
 	}
 	go s.generateVideoReplica(id, user.ID)
 	return map[string]string{"id": id}, nil
-}
-
-func (s *Studio) prepareVideoReplacementSource(sourcePath, jobID string, maxDuration int) (string, string, error) {
-	relative := filepath.ToSlash(filepath.Join("generated", "video-replace", jobID+".mp4"))
-	output := filepath.Join(s.dataDir, "storage", filepath.FromSlash(relative))
-	if err := os.MkdirAll(filepath.Dir(output), 0o700); err != nil {
-		return "", "", err
-	}
-	command := exec.Command(mediaToolPath("ffmpeg"), "-y", "-i", sourcePath, "-t", strconv.Itoa(maxDuration), "-map", "0:v:0", "-map", "0:a?", "-c:v", "libx264", "-preset", "veryfast", "-crf", "28", "-c:a", "aac", "-b:a", "96k", "-movflags", "+faststart", output)
-	if outputBytes, err := command.CombinedOutput(); err != nil {
-		return "", "", fmt.Errorf("视频剪切压缩失败：%w (%s)", err, truncate(string(outputBytes)))
-	}
-	return relative, output, nil
 }
 
 func (s *Studio) UpdateVideoReplicaStoryboard(id string, storyboard []map[string]any) (map[string]bool, error) {
@@ -696,9 +655,9 @@ func insertVideoSegments(tx *sql.Tx, jobID, runID string, plans []videoSegmentPl
 
 func (s *Studio) generateVideoReplica(id, providerUserID string) {
 	log.Printf("video generation started: job=%s user=%s", id, providerUserID)
-	var source, refsJSON, productReferencePath, taskType, model, ratio, resolution, runID string
+	var source, refsJSON, productReferencePath, model, ratio, resolution, runID string
 	var duration int
-	if err := s.db.QueryRow("select source_video_path,reference_paths,product_reference_path,task_type,model,duration,resolution,ratio,current_run_id from video_replica_jobs where id=?", id).Scan(&source, &refsJSON, &productReferencePath, &taskType, &model, &duration, &resolution, &ratio, &runID); err != nil {
+	if err := s.db.QueryRow("select source_video_path,reference_paths,product_reference_path,model,duration,resolution,ratio,current_run_id from video_replica_jobs where id=?", id).Scan(&source, &refsJSON, &productReferencePath, &model, &duration, &resolution, &ratio, &runID); err != nil {
 		log.Printf("video generation load failed: job=%s error=%v", id, err)
 		return
 	}
@@ -710,7 +669,7 @@ func (s *Studio) generateVideoReplica(id, providerUserID string) {
 		log.Printf("video generation state failed: job=%s error=%v", id, err)
 		return
 	}
-	err := s.runVideoSegments(id, runID, providerUserID, source, refsJSON, productReferencePath, taskType, model, resolution, ratio, duration)
+	err := s.runVideoSegments(id, runID, providerUserID, source, refsJSON, productReferencePath, model, resolution, ratio, duration)
 	if err != nil {
 		err = normalizeVideoGenerationError(err)
 		log.Printf("video generation failed: job=%s error=%v", id, err)
@@ -732,7 +691,7 @@ func normalizeVideoGenerationError(err error) error {
 	return err
 }
 
-func (s *Studio) runVideoSegments(id, runID, providerUserID, source, refsJSON, productReferencePath, taskType, model, resolution, ratio string, duration int) error {
+func (s *Studio) runVideoSegments(id, runID, providerUserID, source, refsJSON, productReferencePath, model, resolution, ratio string, duration int) error {
 	_, key, _, _, _, err := s.activeProvider(providerUserID)
 	if err != nil {
 		return err
@@ -761,14 +720,7 @@ func (s *Studio) runVideoSegments(id, runID, providerUserID, source, refsJSON, p
 	if err != nil {
 		return err
 	}
-	inputRefs := make([]map[string]any, 0, len(refs)+1)
-	if taskType == "extend" || taskType == "replace" {
-		videoURL, err := s.uploadVideoReplicaSource(config, bearer, source)
-		if err != nil {
-			return err
-		}
-		inputRefs = append(inputRefs, map[string]any{"type": "video_url", "video_url": map[string]string{"url": videoURL}})
-	}
+	inputRefs := make([]map[string]any, 0, len(refs)+len(avatarAssets))
 	for _, ref := range refs {
 		refURL, err := s.uploadVideoReplicaSource(config, bearer, ref)
 		if err != nil {
@@ -813,7 +765,7 @@ func (s *Studio) runVideoSegments(id, runID, providerUserID, source, refsJSON, p
 		}); err != nil {
 			return err
 		}
-		payload := videoReplicaPayload(model, segment.Prompt, segment.Duration, resolution, ratio, taskType, len(refs), productReferencePath != "")
+		payload := videoReplicaPayload(model, segment.Prompt, segment.Duration, resolution, ratio, len(refs), productReferencePath != "")
 		if len(inputRefs) > 0 {
 			payload["input_references"] = inputRefs
 		}
@@ -876,7 +828,7 @@ func (s *Studio) runVideoSegments(id, runID, providerUserID, source, refsJSON, p
 	})
 }
 
-func videoReplicaPayload(model, prompt string, duration int, resolution, ratio, taskType string, imageReferenceCount int, hasProductReference bool) map[string]any {
+func videoReplicaPayload(model, prompt string, duration int, resolution, ratio string, imageReferenceCount int, hasProductReference bool) map[string]any {
 	if hasProductReference {
 		anchors := []string{"@Image 1 是主产品参考图。必须保持其产品外观、材质、标识和颜色一致。"}
 		for index := 2; index <= imageReferenceCount; index++ {
@@ -890,19 +842,9 @@ func videoReplicaPayload(model, prompt string, duration int, resolution, ratio, 
 		"duration":                 duration,
 		"resolution":               resolution,
 		"ratio":                    ratio,
-		"omni_reference_task_type": huabotOmniReferenceTaskType(taskType),
+		"omni_reference_task_type": "reference",
 		"generate_audio":           true,
 	}
-}
-
-// Huabot does not expose the UI's replace mode as an omni reference task type.
-// Replacement still uses the reference-image contract, with the source video
-// and product image supplied through input_references.
-func huabotOmniReferenceTaskType(taskType string) string {
-	if taskType == "replace" {
-		return "reference"
-	}
-	return taskType
 }
 
 func (s *Studio) uploadVideoReplicaSource(config huabotConfig, bearer, localPath string) (string, error) {
@@ -1206,7 +1148,7 @@ func (s *Studio) populateVideoReplicaSegments(job map[string]any) error {
 }
 
 func validateVideoReplicaInput(input VideoReplicaInput) error {
-	if input.TaskType != "auto" && input.TaskType != "reference" && input.TaskType != "extend" && input.TaskType != "replace" {
+	if input.TaskType != "reference" {
 		return errors.New("视频复刻模式无效")
 	}
 	if _, ok := seedanceModels[input.Model]; !ok {
@@ -1220,11 +1162,6 @@ func validateVideoReplicaInput(input VideoReplicaInput) error {
 	}
 	if input.Duration < 4 || input.Duration > 300 {
 		return errors.New("视频总时长须在 4 到 300 秒之间")
-	}
-	if input.TaskType == "replace" {
-		if len(input.ReferencePaths) != 1 {
-			return errors.New("AI 替换需要一张商品图片")
-		}
 	}
 	if input.Resolution != "480p" && input.Resolution != "720p" {
 		return errors.New("视频清晰度无效")

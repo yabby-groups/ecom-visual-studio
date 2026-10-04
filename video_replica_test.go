@@ -780,29 +780,49 @@ func TestNormalizeVideoGenerationErrorMapsUnauthorized(t *testing.T) {
 	}
 }
 
-func TestHuabotOmniReferenceTaskTypeMapsReplaceToReference(t *testing.T) {
-	payload := videoReplicaPayload("doubao-seedance-2.5", "替换商品", 30, "480p", "16:9", "replace", 1, true)
+func TestVideoReplicaPayloadUsesReferenceTaskType(t *testing.T) {
+	payload := videoReplicaPayload("doubao-seedance-2.5", "复刻商品", 30, "480p", "16:9", 1, true)
 	if got := payload["omni_reference_task_type"]; got != "reference" {
 		t.Fatalf("omni_reference_task_type = %v, want reference", got)
 	}
 }
 
-func TestValidateVideoReplicaReplaceRequiresSingleProductImage(t *testing.T) {
-	input := VideoReplicaInput{TaskType: "replace", Model: "seedance-2.5", Prompt: "把苹果替换成香蕉", Duration: 10, Resolution: "480p", Ratio: "16:9"}
-	if err := validateVideoReplicaInput(input); err == nil {
-		t.Fatal("expected product image validation error")
+func TestMigrateNormalizesRetiredVideoReplicaTaskTypes(t *testing.T) {
+	studio := newAIVideoReplicaTestStudio(t)
+	for _, taskType := range []string{"auto", "extend", "replace", "ai_replica"} {
+		if _, err := studio.db.Exec(`insert into video_replica_jobs
+			(id,user_id,source_video_path,task_type,model,duration,resolution,ratio,status,created_at)
+			values(?,?,?,?,?,?,?,?,?,?)`, "legacy-"+taskType, localWorkspaceID, "uploads/source.mp4", taskType, "seedance-2.5", 10, "480p", "16:9", "ready", 1); err != nil {
+			t.Fatal(err)
+		}
 	}
-	input.ReferencePaths = []string{"uploads/product.png"}
-	input.ProductReferencePath = "uploads/product.png"
-	if err := validateVideoReplicaInput(input); err != nil {
-		t.Fatalf("valid replace input rejected: %v", err)
+	if err := studio.migrate(); err != nil {
+		t.Fatal(err)
+	}
+	for _, check := range []struct {
+		id, want string
+	}{
+		{"legacy-auto", "reference"},
+		{"legacy-extend", "reference"},
+		{"legacy-replace", "reference"},
+		{"legacy-ai_replica", "ai_replica"},
+	} {
+		var got string
+		if err := studio.db.QueryRow("select task_type from video_replica_jobs where id=?", check.id).Scan(&got); err != nil {
+			t.Fatal(err)
+		}
+		if got != check.want {
+			t.Fatalf("task type for %s = %q, want %q", check.id, got, check.want)
+		}
 	}
 }
 
-func TestValidateVideoReplicaReplaceAllowsPreprocessingLongerSource(t *testing.T) {
-	input := VideoReplicaInput{TaskType: "replace", Model: "seedance-2.0", Prompt: "把苹果替换成香蕉", Duration: 16, Resolution: "480p", Ratio: "16:9", ReferencePaths: []string{"uploads/product.png"}, ProductReferencePath: "uploads/product.png"}
-	if err := validateVideoReplicaInput(input); err != nil {
-		t.Fatalf("replace input should be accepted for preprocessing: %v", err)
+func TestValidateVideoReplicaRejectsRetiredTaskTypes(t *testing.T) {
+	for _, taskType := range []string{"auto", "extend", "replace"} {
+		input := VideoReplicaInput{TaskType: taskType, Model: "seedance-2.5", Prompt: "复刻商品", Duration: 10, Resolution: "480p", Ratio: "16:9"}
+		if err := validateVideoReplicaInput(input); err == nil {
+			t.Fatalf("retired task type %q was accepted", taskType)
+		}
 	}
 }
 
@@ -921,7 +941,7 @@ func TestParseVideoReplicaReviewAllowsTwoThousandCharacterOptimization(t *testin
 }
 
 func TestVideoReplicaPayloadEnablesNativeAudio(t *testing.T) {
-	payload := videoReplicaPayload("doubao-seedance-2.5", "生成同步音效", 10, "480p", "16:9", "reference", 2, true)
+	payload := videoReplicaPayload("doubao-seedance-2.5", "生成同步音效", 10, "480p", "16:9", 2, true)
 	if got, ok := payload["generate_audio"].(bool); !ok || !got {
 		t.Fatalf("generate_audio = %#v, want true", payload["generate_audio"])
 	}

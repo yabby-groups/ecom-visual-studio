@@ -37,20 +37,15 @@ export function VideoReplica() {
   const [referencePaths, setReferencePaths] = useState<string[]>([]);
   const [productReferencePath, setProductReferencePath] = useState("");
   const [avatarAssets, setAvatarAssets] = useState<AvatarAssetSelection[]>([]);
-  const [mode, setMode] = useState<"replica" | "replace">("replica");
   const [jobs, setJobs] = useState<VideoReplicaJob[]>([]);
   const [selected, setSelected] = useState<VideoReplicaJob | null>(null);
   const [storyboard, setStoryboard] =
     useState<VideoReplicaStoryboardItem[]>(defaultStoryboard);
   const [model, setModel] = useState("seedance-2.5");
-  const [taskType, setTaskType] = useState<
-    "auto" | "reference" | "extend" | "replace"
-  >("reference");
   const [prompt, setPrompt] = useState("");
   const [duration, setDuration] = useState(30);
   const [ratio, setRatio] = useState("16:9");
   const [resolution, setResolution] = useState("480p");
-  const [sourceDuration, setSourceDuration] = useState<number | null>(null);
   const [busy, setBusy] = useState("");
   const [videoReadProgress, setVideoReadProgress] = useState<number | null>(
     null,
@@ -105,10 +100,7 @@ export function VideoReplica() {
         ? "seedance-2.0"
         : "seedance-2.5",
     );
-    setTaskType(job.task_type);
-    setMode(job.task_type === "replace" ? "replace" : "replica");
     setDuration(job.duration);
-    setSourceDuration(job.duration || null);
     setRatio(job.ratio);
     setResolution(job.resolution);
   }
@@ -164,7 +156,6 @@ export function VideoReplica() {
   async function uploadVideo(file: File) {
     setBusy("upload");
     setVideoReadProgress(0);
-    setSourceDuration(null);
     setError("");
     try {
       const buffer = await new Promise<ArrayBuffer>((resolve, reject) => {
@@ -195,7 +186,6 @@ export function VideoReplica() {
       );
       setSourcePath(result.path);
       setSourcePreview(fileUrl(result.path));
-      setSourceDuration(Number(result.duration_seconds));
     } catch (reason) {
       setError(operationError(reason, "添加视频失败"));
     } finally {
@@ -205,15 +195,13 @@ export function VideoReplica() {
   }
 
   async function uploadReference(file: File) {
-    if (mode !== "replace" && referencePaths.length >= 4) return;
+    if (referencePaths.length >= 4) return;
     setBusy("reference");
     setError("");
     try {
       const result = await client.upload(file);
       setReferencePaths((paths) => [...paths, result.path]);
-      setProductReferencePath((path) =>
-        mode === "replace" || !path ? result.path : path,
-      );
+      setProductReferencePath((path) => path || result.path);
     } catch (reason) {
       setError(operationError(reason, "添加图片失败"));
     } finally {
@@ -259,7 +247,7 @@ export function VideoReplica() {
     setBusy("review");
     setError("");
     try {
-      const result = await client.reviewVideoReplicaPrompt(mode, prompt);
+      const result = await client.reviewVideoReplicaPrompt("replica", prompt);
       setReview({ ...result, source: prompt });
     } catch (reason) {
       setError(operationError(reason, "AI 审核失败"));
@@ -287,7 +275,6 @@ export function VideoReplica() {
         source_video_path: sourcePath,
         reference_paths: referencePaths,
         product_reference_path: productReferencePath,
-        task_type: taskType,
         model,
         prompt,
         storyboard,
@@ -352,7 +339,6 @@ export function VideoReplica() {
 
   const sourceReady = Boolean(sourcePath);
   const scriptReady = Boolean(prompt.trim());
-  const replaceReady = mode === "replace" && referencePaths.length > 0;
   const maxSegmentDuration = model === "seedance-2.0" ? 15 : 30;
   const durationOptions = [5, 10, 15, 30, 60, 120, 180, 300];
   const stepStatus = (step: number) =>
@@ -425,27 +411,8 @@ export function VideoReplica() {
                     <video
                       src={sourcePreview}
                       controls
-                      onLoadedMetadata={(event) => {
-                        if (!Number.isFinite(event.currentTarget.duration))
-                          return;
-                        const seconds = event.currentTarget.duration;
-                        setSourceDuration(seconds);
-                        if (mode === "replace") {
-                          setDuration(
-                            Math.min(
-                              maxSegmentDuration,
-                              Math.max(4, Math.ceil(seconds)),
-                            ),
-                          );
-                          setError(
-                            seconds > maxSegmentDuration + 0.5
-                              ? `视频将自动截取前 ${maxSegmentDuration} 秒并压缩`
-                              : "",
-                          );
-                        }
-                      }}
                     />
-                    <label className="video-replace-action">
+                    <label className="video-reselect-action">
                       <Upload size={15} />
                       重新选择
                       <input
@@ -463,12 +430,7 @@ export function VideoReplica() {
                   <label className="video-upload-prompt">
                     <Film size={30} />
                     <strong>点击选择本机视频</strong>
-                    <span>
-                      MP4 / WebM / MOV ·{" "}
-                      {mode === "replace"
-                        ? `当前模型最长 ${maxSegmentDuration} 秒，超出会自动剪切压缩`
-                        : "时长不限"}
-                    </span>
+                    <span>MP4 / WebM / MOV · 时长不限</span>
                     <input
                       type="file"
                       accept="video/mp4,video/webm,video/quicktime"
@@ -483,14 +445,8 @@ export function VideoReplica() {
               </div>
               <div className="reference-row">
                 <div>
-                  <strong>
-                    {mode === "replace" ? "商品图片" : "参考素材"}
-                  </strong>
-                  <span>
-                    {mode === "replace"
-                      ? "添加要替换进视频的商品图片"
-                      : "选择主产品图；其余图片只补充人物、场景或风格"}
-                  </span>
+                  <strong>参考素材</strong>
+                  <span>选择主产品图；其余图片只补充人物、场景或风格</span>
                 </div>
                 <div className="reference-thumbs">
                   {referencePaths.map((path) => {
@@ -528,9 +484,7 @@ export function VideoReplica() {
                       </div>
                     );
                   })}
-                  {(mode === "replace"
-                    ? referencePaths.length < 1
-                    : referencePaths.length < 4) && (
+                  {referencePaths.length < 4 && (
                     <label className="reference-add">
                       <Upload size={17} />
                       <input
@@ -558,21 +512,19 @@ export function VideoReplica() {
                   embedded
                 />
               </div>
-              {mode === "replica" && (
-                <button
-                  className="button secondary workflow-action"
-                  type="button"
-                  disabled={!sourcePath || !!busy}
-                  onClick={() => void analyze()}
-                >
-                  {busy === "analyze" ? (
-                    <LoaderCircle className="spin" />
-                  ) : (
-                    <RefreshCw size={16} />
-                  )}
-                  AI 分析并生成分镜
-                </button>
-              )}
+              <button
+                className="button secondary workflow-action"
+                type="button"
+                disabled={!sourcePath || !!busy}
+                onClick={() => void analyze()}
+              >
+                {busy === "analyze" ? (
+                  <LoaderCircle className="spin" />
+                ) : (
+                  <RefreshCw size={16} />
+                )}
+                AI 分析并生成分镜
+              </button>
             </div>
             <div
               className={`video-replica-panel workflow-panel ${stepStatus(2)}`}
@@ -581,14 +533,8 @@ export function VideoReplica() {
                 <div className="step-number">2</div>
                 <div>
                   <span className="step-kicker">内容</span>
-                  <h2>
-                    {mode === "replace" ? "描述替换内容" : "描述你要复刻的内容"}
-                  </h2>
-                  <p>
-                    {mode === "replace"
-                      ? "例如：把视频中的苹果替换成香蕉，保持镜头运动和光线一致。"
-                      : "写下主题、产品或人物，AI 会匹配参考视频的结构。"}
-                  </p>
+                  <h2>描述你要复刻的内容</h2>
+                  <p>写下主题、产品或人物，AI 会匹配参考视频的结构。</p>
                 </div>
                 <span className="step-state">{prompt.length}/2000</span>
               </div>
@@ -599,11 +545,7 @@ export function VideoReplica() {
                   setPrompt(event.target.value);
                   setReview(null);
                 }}
-                placeholder={
-                  mode === "replace"
-                    ? "例如：把视频中的苹果替换成香蕉，保持原视频的动作、光线和背景。"
-                    : "例如：为一款轻便的随行咖啡杯制作 15 秒种草短片，强调通勤、保温和极简设计。"
-                }
+                placeholder="例如：为一款轻便的随行咖啡杯制作 15 秒种草短片，强调通勤、保温和极简设计。"
               />
               <div className="prompt-review-actions">
                 <button
@@ -662,7 +604,7 @@ export function VideoReplica() {
                   </div>
                 </div>
               )}
-              {mode === "replica" && storyboard.length > 0 && (
+              {storyboard.length > 0 && (
                 <div className="storyboard-list">
                   {storyboard.map((item, index) => (
                     <div
@@ -701,20 +643,10 @@ export function VideoReplica() {
                 <div className="step-number">3</div>
                 <div>
                   <span className="step-kicker">设置</span>
-                  <h2>
-                    {mode === "replace" ? "生成替换视频" : "选择视频参数"}
-                  </h2>
-                  <p>
-                    {mode === "replace"
-                      ? "使用商品图片和提示词生成新视频。"
-                      : "选择画幅、时长、模型和清晰度。"}
-                  </p>
+                  <h2>选择视频参数</h2>
+                  <p>选择画幅、时长、模型和清晰度。</p>
                 </div>
-                <span className="step-state">
-                  {mode === "replace"
-                    ? `${duration} 秒`
-                    : `单段上限 ${maxSegmentDuration} 秒`}
-                </span>
+                <span className="step-state">单段上限 {maxSegmentDuration} 秒</span>
               </div>
               <div className="video-controls">
                 <label>
@@ -726,42 +658,9 @@ export function VideoReplica() {
                       { value: "seedance-2.5", label: "Seedance 2.5" },
                       { value: "seedance-2.0", label: "Seedance 2.0" },
                     ]}
-                    onChange={(value) => {
-                      setModel(value);
-                      if (mode === "replace" && sourceDuration !== null) {
-                        const nextMax = value === "seedance-2.0" ? 15 : 30;
-                        setDuration(
-                          Math.min(
-                            nextMax,
-                            Math.max(4, Math.ceil(sourceDuration)),
-                          ),
-                        );
-                        setError(
-                          sourceDuration > nextMax + 0.5
-                            ? `视频将自动截取前 ${nextMax} 秒并压缩`
-                            : "",
-                        );
-                      }
-                    }}
+                    onChange={setModel}
                   />
                 </label>
-                {mode === "replica" && (
-                  <label>
-                    任务类型
-                    <SettingsSelect
-                      name="video-task-type"
-                      value={taskType}
-                      options={[
-                        { value: "reference", label: "参考重制" },
-                        { value: "extend", label: "延长上一段" },
-                        { value: "auto", label: "自动判断" },
-                      ]}
-                      onChange={(value) =>
-                        setTaskType(value as typeof taskType)
-                      }
-                    />
-                  </label>
-                )}
                 <label>
                   画面比例
                   <SettingsSelect
@@ -773,20 +672,18 @@ export function VideoReplica() {
                     onChange={setRatio}
                   />
                 </label>
-                {mode === "replica" && (
-                  <label>
-                    视频时长
-                    <SettingsSelect
-                      name="video-duration"
-                      value={String(duration)}
-                      options={durationOptions.map((value) => ({
-                        value: String(value),
-                        label: `${value} 秒 · ${Math.ceil(value / maxSegmentDuration)} 段`,
-                      }))}
-                      onChange={(value) => setDuration(Number(value))}
-                    />
-                  </label>
-                )}
+                <label>
+                  视频时长
+                  <SettingsSelect
+                    name="video-duration"
+                    value={String(duration)}
+                    options={durationOptions.map((value) => ({
+                      value: String(value),
+                      label: `${value} 秒 · ${Math.ceil(value / maxSegmentDuration)} 段`,
+                    }))}
+                    onChange={(value) => setDuration(Number(value))}
+                  />
+                </label>
                 <label>
                   清晰度
                   <SettingsSelect
@@ -810,8 +707,7 @@ export function VideoReplica() {
                 disabled={
                   !!busy ||
                   !sourcePath ||
-                  !prompt.trim() ||
-                  (mode === "replace" && !replaceReady)
+                  !prompt.trim()
                 }
                 onClick={() => void create()}
               >
@@ -820,7 +716,7 @@ export function VideoReplica() {
                 ) : (
                   <Play size={16} />
                 )}
-                {mode === "replace" ? "生成替换视频" : "生成复刻视频"}
+                生成复刻视频
               </button>
             </div>
           </section>
@@ -871,24 +767,6 @@ export function VideoReplica() {
             }
             onSelect={selectJob}
             management={{ onRefresh: load, onDeleted: clearDeletedJob }}
-            renderActions={(job) =>
-              job.file_path ? (
-                <button
-                  type="button"
-                  className="button secondary video-use-result"
-                  onClick={() => {
-                    setMode("replica");
-                    setTaskType("extend");
-                    setSourcePath(job.file_path!);
-                    setSourcePreview(fileUrl(job.file_path));
-                    setSelected(job);
-                    setPrompt(job.prompt);
-                  }}
-                >
-                  继续延长
-                </button>
-              ) : null
-            }
           />
         </section>
         {error && (
