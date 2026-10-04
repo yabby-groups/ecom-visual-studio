@@ -131,13 +131,16 @@ func (s *Studio) CreateAIVideoReplica(input AIVideoReplicaInput) (map[string]str
 	if input.Ratio == "" {
 		input.Ratio = "9:16"
 	}
-	sourcePath, err := s.replicaSourcePath(input.SourceVideoPath)
-	if err != nil {
-		return nil, err
-	}
-	seconds, err := videoDuration(sourcePath)
-	if err != nil {
-		return nil, errors.New("无法读取视频时长，请确认已安装 ffprobe")
+	var seconds float64
+	if strings.TrimSpace(input.SourceVideoPath) != "" {
+		sourcePath, err := s.replicaSourcePath(input.SourceVideoPath)
+		if err != nil {
+			return nil, err
+		}
+		seconds, err = videoDuration(sourcePath)
+		if err != nil {
+			return nil, errors.New("无法读取视频时长，请确认已安装 ffprobe")
+		}
 	}
 	productPaths, err := s.aiVideoReplicaProductPaths(input.ProductPaths, input.ProductPath)
 	if err != nil {
@@ -249,10 +252,14 @@ func (s *Studio) runAIVideoReplica(id, userID string, input AIVideoReplicaInput)
 		if isTerminated() {
 			return
 		}
-		videoURL, uploadErr := s.uploadSkill2APIMedia(userID, config.WebBase, input.SourceVideoPath)
-		if uploadErr != nil {
-			fail(uploadErr)
-			return
+		videoURL := ""
+		if strings.TrimSpace(input.SourceVideoPath) != "" {
+			var uploadErr error
+			videoURL, uploadErr = s.uploadSkill2APIMedia(userID, config.WebBase, input.SourceVideoPath)
+			if uploadErr != nil {
+				fail(uploadErr)
+				return
+			}
 		}
 		if isTerminated() {
 			return
@@ -270,13 +277,22 @@ func (s *Studio) runAIVideoReplica(id, userID string, input AIVideoReplicaInput)
 			return
 		}
 		setStatus("submitting")
-		prompt := fmt.Sprintf("克隆参考视频的镜头节奏、动作和构图。参考视频：%s 。", videoURL)
-		if len(imageURLs) > 0 {
+		prompt := "根据以下创作说明生成视频。"
+		if videoURL != "" {
+			prompt = fmt.Sprintf("克隆参考视频的镜头节奏、动作和构图。参考视频：%s 。", videoURL)
+		}
+		if len(imageURLs) > 0 && videoURL != "" {
 			productReferences := make([]string, 0, len(imageURLs))
 			for index, imageURL := range imageURLs {
 				productReferences = append(productReferences, fmt.Sprintf("商品参考图 %d：%s", index+1, imageURL))
 			}
 			prompt = fmt.Sprintf("克隆参考视频的镜头节奏、动作和构图，将目标商品替换为参考商品。参考视频：%s ；%s 。", videoURL, strings.Join(productReferences, "；"))
+		} else if len(imageURLs) > 0 {
+			productReferences := make([]string, 0, len(imageURLs))
+			for index, imageURL := range imageURLs {
+				productReferences = append(productReferences, fmt.Sprintf("商品参考图 %d：%s", index+1, imageURL))
+			}
+			prompt += " " + strings.Join(productReferences, "；") + "。"
 		}
 		avatarIDs, resolveErr := s.resolveAvatarAssetIDs(userID, input.AvatarAssets)
 		if resolveErr != nil {

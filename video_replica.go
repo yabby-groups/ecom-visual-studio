@@ -332,8 +332,10 @@ func (s *Studio) CreateVideoReplica(input VideoReplicaInput) (map[string]string,
 	if _, _, _, _, _, err = s.activeProvider(user.ID); err != nil {
 		return nil, err
 	}
-	if _, err := s.replicaSourcePath(input.SourceVideoPath); err != nil {
-		return nil, err
+	if strings.TrimSpace(input.SourceVideoPath) != "" {
+		if _, err := s.replicaSourcePath(input.SourceVideoPath); err != nil {
+			return nil, err
+		}
 	}
 	id := newID("video-replica")
 	for _, path := range input.ReferencePaths {

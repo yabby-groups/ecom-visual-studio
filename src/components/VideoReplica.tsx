@@ -274,8 +274,8 @@ export function VideoReplica() {
 
   async function create() {
     if (!requireAiAuth()) return;
-    if (!sourcePath || !prompt.trim()) {
-      setError("请先选择原视频并确认复刻脚本");
+    if (!prompt.trim()) {
+      setError("请确认复刻脚本");
       return;
     }
     setBusy("create");
@@ -365,7 +365,7 @@ export function VideoReplica() {
           <span className="eyebrow">AI VIDEO STUDIO</span>
           <h1>视频复刻</h1>
           <p>
-            选择一条本机视频，复刻它的节奏、镜头和动作，生成属于你的新版本。
+            可选参考视频复刻节奏、镜头和动作，或直接按描述生成新版本。
           </p>
         </div>
       </header>
@@ -379,15 +379,15 @@ export function VideoReplica() {
                 <div className="step-number">1</div>
                 <div>
                   <span className="step-kicker">素材</span>
-                  <h2>选择原视频</h2>
-                  <p>从本机选择一段要复刻的视频。</p>
+                  <h2>添加参考视频（可选）</h2>
+                  <p>选择本机视频以复刻节奏、镜头和动作；不选则按描述生成。</p>
                 </div>
                 <span className="step-state">
                   {busy === "upload"
                     ? "正在添加"
                     : sourceReady
                       ? "已添加"
-                      : "待选择"}
+                      : "可选"}
                 </span>
               </div>
               <div
@@ -440,7 +440,7 @@ export function VideoReplica() {
                 ) : (
                   <label className="video-upload-prompt">
                     <Film size={30} />
-                    <strong>点击选择本机视频</strong>
+                    <strong>点击选择参考视频（可选）</strong>
                     <span>MP4 / WebM / MOV · 时长不限</span>
                     <input
                       type="file"
@@ -545,7 +545,7 @@ export function VideoReplica() {
                 <div>
                   <span className="step-kicker">内容</span>
                   <h2>描述你要复刻的内容</h2>
-                  <p>写下主题、产品或人物，AI 会匹配参考视频的结构。</p>
+                  <p>写下主题、产品或人物；有参考视频时，AI 会匹配其结构。</p>
                 </div>
                 <span className="step-state">{prompt.length}/2000</span>
               </div>
@@ -717,7 +717,6 @@ export function VideoReplica() {
                 type="button"
                 disabled={
                   !!busy ||
-                  !sourcePath ||
                   !prompt.trim()
                 }
                 onClick={() => void create()}

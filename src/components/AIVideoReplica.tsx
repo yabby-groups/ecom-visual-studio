@@ -319,8 +319,7 @@ export function AIVideoReplica() {
   }
   async function create() {
     if (!requireAiAuth()) return;
-    if (!sourcePath || !prompt.trim())
-      return setError("请先选择视频并填写复刻说明");
+    if (!prompt.trim()) return setError("请填写复刻说明");
     if (!Number.isFinite(budget) || budget <= 0)
       return setError("预算必须大于 0");
     setBusy("create");
@@ -525,7 +524,6 @@ export function AIVideoReplica() {
   const invalidBudget = !Number.isFinite(p.budget) || p.budget <= 0;
   const createDisabled =
     controls.draftLocked ||
-    !p.sourceReady ||
     !p.scriptReady ||
     invalidBudget;
   const aiProgress = p.selected && (
@@ -792,7 +790,7 @@ export function AIVideoReplica() {
         <div className="video-replica-title">
           <span className="eyebrow">AI VIDEO STUDIO / QUICK REPLACE</span>
           <h1>AI 复刻</h1>
-          <p>用原视频的节奏和镜头，替换为你的商品并生成新版本。</p>
+          <p>可选原视频复刻节奏和镜头，或直接按描述与素材生成新版本。</p>
         </div>
       </header>
       <main className="video-replica">
@@ -801,7 +799,7 @@ export function AIVideoReplica() {
             <div className="video-replica-panel ai-workflow-intro">
               <span className="step-kicker">QUICK WORKFLOW</span>
               <h2>三步完成一次 AI 复刻</h2>
-              <p>选择视频，按需添加商品图并描述目标内容，然后开始生成。</p>
+              <p>按需添加参考视频和商品图，描述目标内容后开始生成。</p>
             </div>
             <div
               className={`video-replica-panel workflow-panel ${p.sourceReady ? "done" : ""}`}
@@ -810,15 +808,15 @@ export function AIVideoReplica() {
                 <div className="step-number">1</div>
                 <div>
                   <span className="step-kicker">素材 01</span>
-                  <h2>选择原视频</h2>
-                  <p>添加要保留镜头节奏和动作的本机视频。</p>
+                  <h2>添加参考视频（可选）</h2>
+                  <p>添加本机视频以保留镜头节奏和动作；不选则按描述生成。</p>
                 </div>
                 <span className="step-state">
                   {p.busy === "upload"
                     ? "正在添加"
                     : p.sourceReady
                       ? "已添加"
-                      : "待选择"}
+                      : "可选"}
                 </span>
               </div>
               <div
@@ -865,7 +863,7 @@ export function AIVideoReplica() {
                     className={`video-upload-prompt ${controls.draftLocked ? "is-disabled" : ""}`}
                   >
                     <Film size={30} />
-                    <strong>点击选择本机视频</strong>
+                    <strong>点击选择参考视频（可选）</strong>
                     <span>支持 MP4 / WebM / MOV，具体限制由所选模型决定</span>
                     <input
                       type="file"
@@ -1146,8 +1144,8 @@ export function AIVideoReplica() {
             metadata={
               <>
                 <span>
-                  <small>原视频</small>
-                  <b>{p.sourceReady ? "已选择" : "未选择"}</b>
+                  <small>参考视频</small>
+                  <b>{p.sourceReady ? "已选择" : "未使用（可选）"}</b>
                 </span>
                 <span>
                   <small>商品参考图</small>
@@ -1155,7 +1153,7 @@ export function AIVideoReplica() {
                 </span>
                 <span>
                   <small>视频时长</small>
-                  <b>{p.selected?.duration ?? 0} 秒</b>
+                  <b>{p.sourceReady ? `${p.selected?.duration ?? 0} 秒` : "未指定"}</b>
                 </span>
                 {p.selected?.versions[0]?.generation_duration_seconds !==
                   null &&

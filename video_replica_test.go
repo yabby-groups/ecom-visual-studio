@@ -895,6 +895,20 @@ func TestValidateVideoReplicaRequiresSelectedProductReference(t *testing.T) {
 	}
 }
 
+func TestValidateVideoReplicaAllowsNoReferenceVideo(t *testing.T) {
+	input := VideoReplicaInput{
+		TaskType:   "reference",
+		Model:      "seedance-2.5",
+		Prompt:     "为咖啡杯制作简洁的通勤短片",
+		Duration:   10,
+		Resolution: "480p",
+		Ratio:      "9:16",
+	}
+	if err := validateVideoReplicaInput(input); err != nil {
+		t.Fatalf("reference video should be optional: %v", err)
+	}
+}
+
 func TestOrderedVideoReferencePathsPutsProductFirst(t *testing.T) {
 	ordered := orderedVideoReferencePaths([]string{"uploads/style.png", "uploads/product.png", "uploads/person.png"}, "uploads/product.png")
 	if got, want := strings.Join(ordered, ","), "uploads/product.png,uploads/style.png,uploads/person.png"; got != want {
