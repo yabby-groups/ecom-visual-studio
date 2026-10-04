@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -153,6 +154,43 @@ func TestProjectsIncludeDistinctTemplateIDs(t *testing.T) {
 	got := projects[1]["template_ids"].([]string)
 	if len(got) != 2 || !slices.Contains(got, "hero-image") || !slices.Contains(got, "infographic") {
 		t.Fatalf("project templates = %#v", got)
+	}
+}
+
+func TestContentPagesLimitResultsToTwenty(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	studio := &Studio{db: db}
+	if err := studio.migrate(); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 21; i++ {
+		if _, err := db.Exec("insert into projects(id,user_id,name,product,created_at) values(?,?,?,?,?)", fmt.Sprintf("project-%02d", i), localWorkspaceID, "Project", "Desk", i); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.Exec("insert into custom_templates(id,user_id,name,ratio,direction,created_at) values(?,?,?,?,?,?)", fmt.Sprintf("template-%02d", i), localWorkspaceID, "Template", "1:1", "Clean", i); err != nil {
+			t.Fatal(err)
+		}
+	}
+	projects, err := studio.ProjectsPage(20, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(projects["items"].([]map[string]any)) != 20 || projects["total"] != 21 || projects["has_more"] != true {
+		t.Fatalf("project page = %#v", projects)
+	}
+	templates, err := studio.TemplatesPage(20, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(templates["items"].([]map[string]any)) != 13 || templates["total"] != 33 || templates["has_more"] != false {
+		t.Fatalf("template page = %#v", templates)
+	}
+	if _, err := studio.ProjectsPage(21, 0); err == nil {
+		t.Fatal("project page accepted an oversized limit")
 	}
 }
 

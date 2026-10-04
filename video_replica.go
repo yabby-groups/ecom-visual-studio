@@ -445,19 +445,29 @@ func (s *Studio) removeVideoReplicaFiles(paths []string) {
 	}
 }
 
-func (s *Studio) VideoReplicaJobs(limit, offset int) (map[string]any, error) {
-	if limit < 1 || limit > 48 || offset < 0 {
+func (s *Studio) VideoReplicaJobs(limit, offset int, taskType string) (map[string]any, error) {
+	if limit < 1 || limit > 20 || offset < 0 {
 		return nil, errors.New("分页参数无效")
+	}
+	if taskType != "" && taskType != "reference" && taskType != "ai_replica" {
+		return nil, errors.New("视频任务类型无效")
 	}
 	_, err := s.currentUser()
 	if err != nil {
 		return nil, err
 	}
 	var total int
-	if err := s.db.QueryRow("select count(*) from video_replica_jobs").Scan(&total); err != nil {
+	where := ""
+	args := []any{}
+	if taskType != "" {
+		where = " where task_type=?"
+		args = append(args, taskType)
+	}
+	if err := s.db.QueryRow("select count(*) from video_replica_jobs"+where, args...).Scan(&total); err != nil {
 		return nil, err
 	}
-	rows, err := s.db.Query("select id,title,source_video_path,reference_paths,product_reference_path,task_type,model,prompt,storyboard,duration,resolution,ratio,status,file_path,generation_started_at,completed_at,created_at,ai_budget,avatar_assets from video_replica_jobs order by created_at desc,id desc limit ? offset ?", limit, offset)
+	args = append(args, limit, offset)
+	rows, err := s.db.Query("select id,title,source_video_path,reference_paths,product_reference_path,task_type,model,prompt,storyboard,duration,resolution,ratio,status,file_path,generation_started_at,completed_at,created_at,ai_budget,avatar_assets from video_replica_jobs"+where+" order by created_at desc,id desc limit ? offset ?", args...)
 	if err != nil {
 		return nil, err
 	}

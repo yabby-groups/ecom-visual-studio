@@ -522,7 +522,7 @@ func truncate(value string) string {
 	return value
 }
 func (s *Studio) TryOnJobs(limit, offset int) (map[string]any, error) {
-	if limit < 1 || limit > 48 || offset < 0 {
+	if limit < 1 || limit > 20 || offset < 0 {
 		return nil, errors.New("分页参数无效")
 	}
 	var total int

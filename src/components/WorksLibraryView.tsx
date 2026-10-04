@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { client } from "../api";
 import { useAppStore } from "../store";
-import type { TryOnJob, VideoReplicaJob } from "../types";
+import type { Project, TryOnJob, VideoReplicaJob } from "../types";
 import { statusText, userFacingError } from "../utils/assets";
 import {
   libraryTabs,
@@ -13,6 +13,7 @@ import {
 import { ConfirmDialog } from "./ConfirmDialog";
 import { Notice } from "./Notice";
 import { ProjectCard } from "./ProjectCard";
+import { Pagination } from "./Pagination";
 import { VideoWorksList } from "./VideoWorksList";
 import {
   LibraryPreview,
@@ -23,8 +24,7 @@ import {
 } from "./WorksLibrary";
 import "./Library.css";
 
-const VIDEO_WORKS_PAGE_SIZE = 48;
-const TRY_ON_WORKS_PAGE_SIZE = 48;
+const WORKS_PAGE_SIZE = 20;
 
 const tabCopy: Record<LibraryTabID, { title: string; empty: string }> = {
   images: { title: "图片作品", empty: "还没有图片作品" },
@@ -41,16 +41,18 @@ type LibraryDeletion = {
 };
 
 export function WorksLibraryView({ limit }: { limit?: number }) {
-  const projects = useAppStore((state) => state.projects);
   const refresh = useAppStore((state) => state.refreshProjects);
   const navigate = useNavigate();
   const [tab, setTab] = useState<LibraryTabID>("images");
+  const [page, setPage] = useState(1);
   const [notice, setNotice] = useState<{
     text: string;
     tone: "success" | "error";
   } | null>(null);
   const [videoJobs, setVideoJobs] = useState<VideoReplicaJob[]>([]);
   const [tryOnJobs, setTryOnJobs] = useState<TryOnJob[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [total, setTotal] = useState(0);
   const [worksError, setWorksError] = useState("");
   const [preview, setPreview] = useState<LibraryPreview | null>(null);
   const [deletingID, setDeletingID] = useState("");
@@ -60,14 +62,30 @@ export function WorksLibraryView({ limit }: { limit?: number }) {
   const [renaming, setRenaming] = useState<LibraryRename | null>(null);
   const activeTab = libraryTabs.find((item) => item.id === tab)!;
 
-  async function loadWorks() {
+  async function loadWorks(requestedPage = page, requestedTab = tab) {
     try {
-      const [videos, tryOns] = await Promise.all([
-        client.videoReplicaJobs(VIDEO_WORKS_PAGE_SIZE, 0),
-        client.tryOnJobs(TRY_ON_WORKS_PAGE_SIZE, 0),
-      ]);
-      setVideoJobs(videos.items);
-      setTryOnJobs(tryOns.items);
+      const offset = (requestedPage - 1) * WORKS_PAGE_SIZE;
+      const result =
+        requestedTab === "images"
+          ? await client.projectsPage(WORKS_PAGE_SIZE, offset)
+          : requestedTab === "try-on"
+            ? await client.tryOnJobs(WORKS_PAGE_SIZE, offset)
+            : await client.videoReplicaJobs(
+                WORKS_PAGE_SIZE,
+                offset,
+                requestedTab === "ai-video-replica" ? "ai_replica" : "reference",
+              );
+      if (requestedPage > 1 && result.items.length === 0) {
+        setPage(Math.max(1, Math.ceil(result.total / WORKS_PAGE_SIZE)));
+        return;
+      }
+      setTotal(result.total);
+      if (requestedTab === "images") setProjects(result.items as Project[]);
+      else if (requestedTab === "try-on") setTryOnJobs(result.items as TryOnJob[]);
+      else setVideoJobs(result.items as VideoReplicaJob[]);
+      if (requestedTab !== "video-replica" && requestedTab !== "ai-video-replica")
+        return;
+      const videos = result as import("../types").VideoReplicaPage;
       const results = await Promise.all(
         videos.items
           .filter(
@@ -109,7 +127,7 @@ export function WorksLibraryView({ limit }: { limit?: number }) {
 
   useEffect(() => {
     void loadWorks();
-  }, []);
+  }, [page, tab]);
 
   useEffect(() => {
     setPreview(null);
@@ -148,13 +166,12 @@ export function WorksLibraryView({ limit }: { limit?: number }) {
         setNotice({ text: "项目已删除", tone: "success" });
       } else if (kind === "try-on") {
         await client.deleteTryOn(id);
-        setTryOnJobs((jobs) => jobs.filter((job) => job.id !== id));
         setNotice({ text: "换装作品已删除", tone: "success" });
       } else {
         await client.deleteVideoReplica(id);
-        setVideoJobs((jobs) => jobs.filter((job) => job.id !== id));
         setNotice({ text: "视频作品已删除", tone: "success" });
       }
+      await loadWorks();
       setPendingDeletion(null);
     } catch (reason) {
       setDeleteError(reason instanceof Error ? reason.message : "删除作品失败");
@@ -259,7 +276,10 @@ export function WorksLibraryView({ limit }: { limit?: number }) {
             aria-selected={tab === item.id}
             role="tab"
             type="button"
-            onClick={() => setTab(item.id)}
+            onClick={() => {
+              setTab(item.id);
+              setPage(1);
+            }}
             key={item.id}
           >
             {item.label}
@@ -325,6 +345,7 @@ export function WorksLibraryView({ limit }: { limit?: number }) {
         ) : (
           renderVideoWorks()
         )}
+        {!limit && <Pagination page={page} total={total} onChange={setPage} />}
       </section>
       {notice && (
         <Notice

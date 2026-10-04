@@ -28,6 +28,7 @@ import { useAppStore } from "../store";
 import { useAiInteraction } from "../aiInteraction";
 import type { Template } from "../types";
 import { fileUrl } from "../utils/assets";
+import { Pagination } from "./Pagination";
 import "./Templates.css";
 import "./ImageRatioPicker.css";
 
@@ -45,6 +46,9 @@ export function Templates() {
   const [imagePath, setImagePath] = useState("");
   const [imageBusy, setImageBusy] = useState(false);
   const [templateRatio, setTemplateRatio] = useState("1:1");
+  const [pageTemplates, setPageTemplates] = useState<Template[]>([]);
+  const [templateTotal, setTemplateTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [customWidth, setCustomWidth] = useState("1024");
   const [customHeight, setCustomHeight] = useState("1024");
   const savingRef = useRef(false);
@@ -57,6 +61,22 @@ export function Templates() {
     height: 0,
     positions: {} as Record<string, { left: number; top: number }>,
   });
+  async function loadPage(requestedPage = page) {
+    try {
+      const result = await client.templatesPage(20, (requestedPage - 1) * 20);
+      if (requestedPage > 1 && result.items.length === 0) {
+        setPage(Math.max(1, Math.ceil(result.total / 20)));
+        return;
+      }
+      setPageTemplates(result.items);
+      setTemplateTotal(result.total);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "无法加载模板");
+    }
+  }
+  useEffect(() => {
+    void loadPage();
+  }, [page]);
   useEffect(
     () =>
       registerPage({
@@ -166,6 +186,11 @@ export function Templates() {
         await client.addTemplate(body);
       }
       await refresh();
+      if (editTemplate) await loadPage();
+      else {
+        setPage(1);
+        await loadPage(1);
+      }
       setCreateOpen(false);
       setEditTemplate(null);
     } catch (reason) {
@@ -182,6 +207,7 @@ export function Templates() {
     try {
       await client.deleteTemplate(deleteTemplate.id);
       await refresh();
+      await loadPage();
       setDeleteTemplate(null);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "删除失败");
@@ -244,7 +270,7 @@ export function Templates() {
       const positions: Record<string, { left: number; top: number }> = {};
       const columnWidth = (wall.clientWidth - gap * (columns - 1)) / columns;
 
-      for (const item of templates) {
+      for (const item of pageTemplates) {
         const tile = tileRefs.current.get(item.id);
         if (!tile) continue;
         const column = heights.reduce(
@@ -259,11 +285,12 @@ export function Templates() {
         heights[column] += tile.offsetHeight + gap;
       }
 
-      const height = Math.max(0, ...heights) - (templates.length ? gap : 0);
+      const height =
+        Math.max(0, ...heights) - (pageTemplates.length ? gap : 0);
       setMasonry((current) => {
         const unchanged =
           current.height === height &&
-          templates.every(
+          pageTemplates.every(
             (item) =>
               current.positions[item.id]?.left === positions[item.id]?.left &&
               current.positions[item.id]?.top === positions[item.id]?.top,
@@ -286,7 +313,7 @@ export function Templates() {
       observer.disconnect();
       window.removeEventListener("resize", schedule);
     };
-  }, [templates]);
+  }, [pageTemplates]);
 
   return (
     <Shell>
@@ -323,7 +350,7 @@ export function Templates() {
           ref={wallRef}
           style={{ height: masonry.height }}
         >
-          {templates.map((item) => {
+          {pageTemplates.map((item) => {
             const direction = guide[item.id];
             const preview = item.custom
               ? fileUrl(item.image_path)
@@ -409,6 +436,7 @@ export function Templates() {
             );
           })}
         </div>
+        <Pagination page={page} total={templateTotal} onChange={setPage} />
       </div>
       {createOpen && (
         <div

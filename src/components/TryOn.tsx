@@ -20,11 +20,12 @@ import { imageRatioLabel } from "../constants/imageSizes";
 import type { TryOnJob } from "../types";
 import { fileUrl, isPending, statusText } from "../utils/assets";
 import { ImageRatioPicker } from "./ImageRatioPicker";
+import { Pagination } from "./Pagination";
 import { Shell } from "./Shell";
 import "./TryOn.css";
 import "./Workspace.css";
 
-const HISTORY_PAGE_SIZE = 12;
+const HISTORY_PAGE_SIZE = 20;
 const TRY_ON_DRAFT = "frameboard:try-on-draft";
 
 type TryOnDraft = {
@@ -525,7 +526,6 @@ export function TryOn() {
         ? `新建并生成 ${combinationCount} 组`
         : "新建并生成组合"
       : "新建并生成换装";
-  const totalPages = Math.max(1, Math.ceil(historyTotal / HISTORY_PAGE_SIZE));
   const elapsedSeconds = pendingJob?.generation_started_at
     ? Math.max(0, Math.floor(now / 1000 - pendingJob.generation_started_at))
     : null;
@@ -606,27 +606,11 @@ export function TryOn() {
               </button>
             </div>
           ))}
-          {historyTotal > HISTORY_PAGE_SIZE && (
-            <div className="try-on-pagination">
-              <button
-                type="button"
-                disabled={historyPage === 1}
-                onClick={() => setHistoryPage((page) => page - 1)}
-              >
-                上一页
-              </button>
-              <span>
-                {historyPage} / {totalPages}
-              </span>
-              <button
-                type="button"
-                disabled={historyPage >= totalPages}
-                onClick={() => setHistoryPage((page) => page + 1)}
-              >
-                下一页
-              </button>
-            </div>
-          )}
+          <Pagination
+            page={historyPage}
+            total={historyTotal}
+            onChange={setHistoryPage}
+          />
         </aside>
         <section className="stage try-on-stage">
           <header>

@@ -72,6 +72,8 @@ export function Project(arg1:string):Promise<Record<string, any>>;
 
 export function Projects():Promise<Array<Record<string, any>>>;
 
+export function ProjectsPage(arg1:number,arg2:number):Promise<Record<string, any>>;
+
 export function PullAIVideoReplicaResult(arg1:string):Promise<boolean>;
 
 export function RefreshAIVideoReplica(arg1:string):Promise<Record<string, any>>;
@@ -98,6 +100,8 @@ export function SuggestWorkTitles(arg1:string,arg2:string):Promise<Record<string
 
 export function Templates():Promise<Array<Record<string, any>>>;
 
+export function TemplatesPage(arg1:number,arg2:number):Promise<Record<string, any>>;
+
 export function TerminateAIVideoReplica(arg1:string):Promise<Record<string, any>>;
 
 export function TokenSettings():Promise<Record<string, any>>;
@@ -118,4 +122,4 @@ export function UploadVideoReplicaVideo(arg1:string,arg2:string,arg3:Array<numbe
 
 export function VideoReplicaJob(arg1:string):Promise<Record<string, any>>;
 
-export function VideoReplicaJobs(arg1:number,arg2:number):Promise<Record<string, any>>;
+export function VideoReplicaJobs(arg1:number,arg2:number,arg3:string):Promise<Record<string, any>>;

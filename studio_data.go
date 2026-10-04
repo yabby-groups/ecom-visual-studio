@@ -91,6 +91,39 @@ func (s *Studio) Projects() ([]map[string]any, error) {
 	return projects, rows.Err()
 }
 
+func (s *Studio) ProjectsPage(limit, offset int) (map[string]any, error) {
+	if limit < 1 || limit > 20 || offset < 0 {
+		return nil, errors.New("分页参数无效")
+	}
+	var total int
+	if err := s.db.QueryRow("select count(*) from projects").Scan(&total); err != nil {
+		return nil, err
+	}
+	rows, err := s.db.Query("select p.id,p.user_id,p.name,p.product,p.description,p.benefits,p.color,p.reference,p.created_at,count(a.id),group_concat(distinct a.template) from projects p left join assets a on a.project_id=p.id group by p.id order by p.created_at desc,p.id desc limit ? offset ?", limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []map[string]any{}
+	for rows.Next() {
+		var id, uid, name, product, description, benefits, color, reference string
+		var created, count int64
+		var templates sql.NullString
+		if err := rows.Scan(&id, &uid, &name, &product, &description, &benefits, &color, &reference, &created, &count, &templates); err != nil {
+			return nil, err
+		}
+		templateIDs := []string{}
+		if templates.Valid && templates.String != "" {
+			templateIDs = strings.Split(templates.String, ",")
+		}
+		items = append(items, map[string]any{"id": id, "user_id": uid, "name": name, "product": product, "description": description, "benefits": benefits, "color": color, "reference": reference, "created_at": created, "asset_count": count, "template_ids": templateIDs})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return map[string]any{"items": items, "total": total, "has_more": offset+len(items) < total}, nil
+}
+
 func (s *Studio) Project(id string) (map[string]any, error) {
 	project, err := s.localProject(id)
 	if err != nil {
@@ -274,6 +307,25 @@ func (s *Studio) Templates() ([]map[string]any, error) {
 		result = append(result, map[string]any{"id": id, "name": name, "group": "自定义", "ratio": ratio, "direction": direction, "image_path": imagePath, "custom": true})
 	}
 	return result, rows.Err()
+}
+
+func (s *Studio) TemplatesPage(limit, offset int) (map[string]any, error) {
+	if limit < 1 || limit > 20 || offset < 0 {
+		return nil, errors.New("分页参数无效")
+	}
+	templates, err := s.Templates()
+	if err != nil {
+		return nil, err
+	}
+	total := len(templates)
+	if offset >= total {
+		return map[string]any{"items": []map[string]any{}, "total": total, "has_more": false}, nil
+	}
+	end := offset + limit
+	if end > total {
+		end = total
+	}
+	return map[string]any{"items": templates[offset:end], "total": total, "has_more": end < total}, nil
 }
 func (s *Studio) AddTemplate(input TemplateInput) (map[string]string, error) {
 	if err := validateTemplateInput(input); err != nil {

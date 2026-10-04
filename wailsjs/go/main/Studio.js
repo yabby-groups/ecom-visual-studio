@@ -142,6 +142,10 @@ export function Projects() {
   return window['go']['main']['Studio']['Projects']();
 }
 
+export function ProjectsPage(arg1, arg2) {
+  return window['go']['main']['Studio']['ProjectsPage'](arg1, arg2);
+}
+
 export function PullAIVideoReplicaResult(arg1) {
   return window['go']['main']['Studio']['PullAIVideoReplicaResult'](arg1);
 }
@@ -194,6 +198,10 @@ export function Templates() {
   return window['go']['main']['Studio']['Templates']();
 }
 
+export function TemplatesPage(arg1, arg2) {
+  return window['go']['main']['Studio']['TemplatesPage'](arg1, arg2);
+}
+
 export function TerminateAIVideoReplica(arg1) {
   return window['go']['main']['Studio']['TerminateAIVideoReplica'](arg1);
 }
@@ -234,6 +242,6 @@ export function VideoReplicaJob(arg1) {
   return window['go']['main']['Studio']['VideoReplicaJob'](arg1);
 }
 
-export function VideoReplicaJobs(arg1, arg2) {
-  return window['go']['main']['Studio']['VideoReplicaJobs'](arg1, arg2);
+export function VideoReplicaJobs(arg1, arg2, arg3) {
+  return window['go']['main']['Studio']['VideoReplicaJobs'](arg1, arg2, arg3);
 }

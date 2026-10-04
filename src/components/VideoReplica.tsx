@@ -22,6 +22,7 @@ import { Shell } from "./Shell";
 import { SettingsSelect } from "./SettingsSelect";
 import { VideoReplicaPreview } from "./VideoReplicaPreview";
 import { VideoWorksList } from "./VideoWorksList";
+import { Pagination } from "./Pagination";
 import { AvatarPicker } from "./AvatarPicker";
 import "./VideoReplica.css";
 import "./VideoReplicaShared.css";
@@ -38,6 +39,8 @@ export function VideoReplica() {
   const [productReferencePath, setProductReferencePath] = useState("");
   const [avatarAssets, setAvatarAssets] = useState<AvatarAssetSelection[]>([]);
   const [jobs, setJobs] = useState<VideoReplicaJob[]>([]);
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyTotal, setHistoryTotal] = useState(0);
   const [selected, setSelected] = useState<VideoReplicaJob | null>(null);
   const [storyboard, setStoryboard] =
     useState<VideoReplicaStoryboardItem[]>(defaultStoryboard);
@@ -109,13 +112,20 @@ export function VideoReplica() {
     if (selected?.id === job.id) setSelected(null);
   }
 
-  async function load() {
+  async function load(requestedPage = historyPage) {
     try {
-      const result = await client.videoReplicaJobs(48, 0);
-      const regularJobs = result.items.filter(
-        (item) => item.task_type !== "ai_replica",
+      const result = await client.videoReplicaJobs(
+        20,
+        (requestedPage - 1) * 20,
+        "reference",
       );
+      if (requestedPage > 1 && result.items.length === 0) {
+        setHistoryPage(Math.max(1, Math.ceil(result.total / 20)));
+        return;
+      }
+      const regularJobs = result.items;
       setJobs(regularJobs);
+      setHistoryTotal(result.total);
       if (selected) {
         const fresh = regularJobs.find((item) => item.id === selected.id);
         if (fresh)
@@ -133,7 +143,7 @@ export function VideoReplica() {
 
   useEffect(() => {
     void load();
-  }, []);
+  }, [historyPage]);
   useEffect(() => {
     const jobID =
       routeJobID || (location.state as { jobId?: string } | null)?.jobId;
@@ -283,7 +293,8 @@ export function VideoReplica() {
         ratio,
         avatar_assets: avatarAssets,
       });
-      await load();
+      setHistoryPage(1);
+      await load(1);
       const fresh = await client.videoReplicaJob(result.id);
       selectJob(fresh);
     } catch (reason) {
@@ -754,7 +765,7 @@ export function VideoReplica() {
         <section className="video-replica-history">
           <div className="video-replica-panel-head">
             <h2>历史任务</h2>
-            <span>{jobs.length} 条</span>
+            <span>{historyTotal} 条</span>
           </div>
           <VideoWorksList
             jobs={jobs}
@@ -766,6 +777,11 @@ export function VideoReplica() {
             }
             onSelect={selectJob}
             management={{ onRefresh: load, onDeleted: clearDeletedJob }}
+          />
+          <Pagination
+            page={historyPage}
+            total={historyTotal}
+            onChange={setHistoryPage}
           />
         </section>
         {error && (

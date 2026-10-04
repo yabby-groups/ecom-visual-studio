@@ -189,7 +189,7 @@ func TestAIVideoReplicaJobReturnsSavedBudget(t *testing.T) {
 		t.Fatalf("budget = %v", got)
 	}
 
-	page, err := studio.VideoReplicaJobs(12, 0)
+	page, err := studio.VideoReplicaJobs(12, 0, "ai_replica")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -7,6 +7,7 @@ import type {
   LatestCreation,
   Model,
   Project,
+  ProjectPage,
   StorageLocation,
   Template,
   TokenSettings,
@@ -59,6 +60,8 @@ export const client = {
     call<DeviceAuthorizationPoll>("PollHuabotAuthorization", deviceCode),
   logout: () => call("Logout"),
   projects: () => call<Project[]>("Projects"),
+  projectsPage: (limit = 20, offset = 0) =>
+    call<ProjectPage>("ProjectsPage", limit, offset),
   latestCreation: () =>
     call<{ creation: LatestCreation | null }>("LatestCreation"),
   project: (id: string) => call<Project>("Project", id),
@@ -92,6 +95,8 @@ export const client = {
   generateAsset: (id: string) => call("GenerateAsset", id),
   generatePack: (id: string) => call<{ queued: number }>("GeneratePack", id),
   templates: () => call<Template[]>("Templates"),
+  templatesPage: (limit = 20, offset = 0) =>
+    call<import("./types").Page<Template>>("TemplatesPage", limit, offset),
   addTemplate: (body: {
     name: string;
     ratio: string;
@@ -111,7 +116,7 @@ export const client = {
   upload: uploadFile,
   pickImage: () => call<{ path: string }>("PickImage"),
   importUrl: (url: string) => call<{ path: string }>("ImportURL", url),
-  tryOnJobs: (limit = 12, offset = 0) =>
+  tryOnJobs: (limit = 20, offset = 0) =>
     call<TryOnPage>("TryOnJobs", limit, offset),
   tryOnJob: (id: string) => call<TryOnJob>("TryOnJob", id),
   createTryOn: (body: {
@@ -151,8 +156,11 @@ export const client = {
       mode,
       prompt,
     ),
-  videoReplicaJobs: (limit = 12, offset = 0) =>
-    call<VideoReplicaPage>("VideoReplicaJobs", limit, offset),
+  videoReplicaJobs: (
+    limit = 20,
+    offset = 0,
+    taskType: "reference" | "ai_replica" | "" = "",
+  ) => call<VideoReplicaPage>("VideoReplicaJobs", limit, offset, taskType),
   prepareVideoReplicaPreview: (id: string) =>
     call<{ preview_path: string | null }>("PrepareVideoReplicaPreview", id),
   videoReplicaJob: (id: string) => call<VideoReplicaJob>("VideoReplicaJob", id),

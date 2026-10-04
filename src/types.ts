@@ -67,6 +67,12 @@ export type Template = {
   image_path?: string;
   custom: boolean;
 };
+export type Page<T> = {
+  items: T[];
+  total: number;
+  has_more: boolean;
+};
+export type ProjectPage = Page<Project>;
 export type Token = {
   id: string;
   name: string;
@@ -135,11 +141,7 @@ export type TryOnVersion = {
   generation_started_at: number | null;
   created_at: number;
 };
-export type TryOnPage = {
-  items: TryOnJob[];
-  total: number;
-  has_more: boolean;
-};
+export type TryOnPage = Page<TryOnJob>;
 
 export type VideoReplicaStoryboardItem = {
   start: number;
@@ -233,11 +235,7 @@ export type VideoReplicaJob = {
   skill2api_delivery_id?: string;
   skill2api?: Skill2APIStatus;
 };
-export type VideoReplicaPage = {
-  items: VideoReplicaJob[];
-  total: number;
-  has_more: boolean;
-};
+export type VideoReplicaPage = Page<VideoReplicaJob>;
 export type Skill2APIStatus = {
   request_id: string;
   status: string;

@@ -27,6 +27,7 @@ import { client } from "../api";
 import { aiVideoReplicaControls } from "../utils/aiVideoReplicaState";
 import { VideoReplicaPreview } from "./VideoReplicaPreview";
 import { VideoWorksList } from "./VideoWorksList";
+import { Pagination } from "./Pagination";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { AvatarPicker } from "./AvatarPicker";
 import "./AIVideoReplica.css";
@@ -106,6 +107,8 @@ export function AIVideoReplica() {
   const [ratio, setRatio] = useState("16:9");
   const [resolution, setResolution] = useState("480p");
   const [jobs, setJobs] = useState<VideoReplicaJob[]>([]);
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyTotal, setHistoryTotal] = useState(0);
   const [selected, setSelected] = useState<VideoReplicaJob | null>(null);
   const [busy, setBusy] = useState("");
   const [videoReadProgress, setVideoReadProgress] = useState<number | null>(
@@ -173,13 +176,20 @@ export function AIVideoReplica() {
   function clearDeletedJob(job: VideoReplicaJob) {
     if (selected?.id === job.id) setSelected(null);
   }
-  async function load() {
+  async function load(requestedPage = historyPage) {
     try {
-      const result = await client.videoReplicaJobs(48, 0);
-      const aiJobs = result.items.filter(
-        (job) => job.task_type === "ai_replica",
+      const result = await client.videoReplicaJobs(
+        20,
+        (requestedPage - 1) * 20,
+        "ai_replica",
       );
+      if (requestedPage > 1 && result.items.length === 0) {
+        setHistoryPage(Math.max(1, Math.ceil(result.total / 20)));
+        return;
+      }
+      const aiJobs = result.items;
       setJobs(aiJobs);
+      setHistoryTotal(result.total);
       if (selected) {
         const fresh = aiJobs.find((job) => job.id === selected.id);
         if (fresh) selectJob({ ...fresh, skill2api: selected.skill2api });
@@ -188,7 +198,7 @@ export function AIVideoReplica() {
       setError(operationError(reason, "无法加载 AI 复刻任务"));
     }
   }
-  useEffect(() => void load(), []);
+  useEffect(() => void load(), [historyPage]);
   useEffect(() => {
     const jobID =
       routeJobID || (location.state as { jobId?: string } | null)?.jobId;
@@ -327,7 +337,8 @@ export function AIVideoReplica() {
         budget,
         avatar_assets: avatarAssets,
       });
-      await load();
+      setHistoryPage(1);
+      await load(1);
       selectJob(await client.videoReplicaJob(result.id));
     } catch (reason) {
       setError(operationError(reason, "创建 AI 复刻任务失败"));
@@ -355,7 +366,8 @@ export function AIVideoReplica() {
         budget: job.ai_budget ?? budget,
         avatar_assets: job.avatar_assets ?? [],
       });
-      await load();
+      setHistoryPage(1);
+      await load(1);
       selectJob(await client.videoReplicaJob(result.id));
     } catch (reason) {
       setError(operationError(reason, "重新生成失败"));
@@ -1228,7 +1240,7 @@ export function AIVideoReplica() {
           <div className="video-replica-panel-head">
             <h2>AI 复刻历史</h2>
             <span>
-              {p.jobs.filter((job) => job.task_type === "ai_replica").length} 条
+              {historyTotal} 条
             </span>
           </div>
           <VideoWorksList
@@ -1244,6 +1256,11 @@ export function AIVideoReplica() {
               onRefresh: p.refreshJobs,
               onDeleted: p.clearDeletedJob,
             }}
+          />
+          <Pagination
+            page={historyPage}
+            total={historyTotal}
+            onChange={setHistoryPage}
           />
         </section>
         {p.error && (
