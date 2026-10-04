@@ -9,7 +9,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useLocation, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 import { client } from "../api";
 import { useRequireAiAuth } from "../auth";
 import type {
@@ -735,9 +735,9 @@ export function VideoReplica() {
               <span className="eyebrow">START EASIER</span>
               <h2>从精选模板开始</h2>
             </div>
-            <a href="/templates" className="text-link">
+            <Link to="/templates" className="text-link">
               查看全部 <span aria-hidden="true">→</span>
-            </a>
+            </Link>
           </div>
           <div className="video-template-grid">
             {templatePresentation.map(([id, name, image, description]) => (
