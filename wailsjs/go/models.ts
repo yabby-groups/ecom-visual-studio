@@ -20,6 +20,7 @@ export namespace main {
 	    product_path: string;
 	    prompt: string;
 	    model: string;
+	    seedance_model: string;
 	    resolution: string;
 	    ratio: string;
 	    budget: number;
@@ -36,6 +37,7 @@ export namespace main {
 	        this.product_path = source["product_path"];
 	        this.prompt = source["prompt"];
 	        this.model = source["model"];
+	        this.seedance_model = source["seedance_model"];
 	        this.resolution = source["resolution"];
 	        this.ratio = source["ratio"];
 	        this.budget = source["budget"];

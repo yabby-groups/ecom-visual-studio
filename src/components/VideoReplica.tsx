@@ -44,7 +44,7 @@ export function VideoReplica() {
   const [selected, setSelected] = useState<VideoReplicaJob | null>(null);
   const [storyboard, setStoryboard] =
     useState<VideoReplicaStoryboardItem[]>(defaultStoryboard);
-  const [model, setModel] = useState("seedance-2.5");
+  const [model, setModel] = useState("doubao-seedance-2.0-mini");
   const [prompt, setPrompt] = useState("");
   const [duration, setDuration] = useState(30);
   const [ratio, setRatio] = useState("16:9");
@@ -98,11 +98,7 @@ export function VideoReplica() {
     setStoryboard(job.storyboard);
     setPrompt(job.prompt);
     setReview(null);
-    setModel(
-      job.model === "doubao-seedance-2.0-mini"
-        ? "seedance-2.0"
-        : "seedance-2.5",
-    );
+    setModel(job.model);
     setDuration(job.duration);
     setRatio(job.ratio);
     setResolution(job.resolution);
@@ -350,7 +346,7 @@ export function VideoReplica() {
 
   const sourceReady = Boolean(sourcePath);
   const scriptReady = Boolean(prompt.trim());
-  const maxSegmentDuration = model === "seedance-2.0" ? 15 : 30;
+  const maxSegmentDuration = model === "doubao-seedance-2.5" ? 30 : 15;
   const durationOptions = [5, 10, 15, 30, 60, 120, 180, 300];
   const stepStatus = (step: number) =>
     (step === 1 && sourceReady) ||
@@ -666,8 +662,9 @@ export function VideoReplica() {
                     name="video-model"
                     value={model}
                     options={[
-                      { value: "seedance-2.5", label: "Seedance 2.5" },
-                      { value: "seedance-2.0", label: "Seedance 2.0" },
+                      { value: "doubao-seedance-2.5", label: "Seedance 2.5" },
+                      { value: "doubao-seedance-2.0", label: "Seedance 2.0" },
+                      { value: "doubao-seedance-2.0-mini", label: "Seedance 2.0 Mini" },
                     ]}
                     onChange={setModel}
                   />

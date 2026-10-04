@@ -22,7 +22,7 @@ func TestUpdateWorkTitleAcrossLibraryTypes(t *testing.T) {
 	if _, err := db.Exec("insert into try_on_jobs(id,user_id,person_paths,garment_paths,generation_mode,ratio,status,created_at) values('try-1',?,'[\"uploads/person.png\"]','[\"uploads/shirt.png\"]','combined','1:1','ready',1)", localWorkspaceID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec("insert into video_replica_jobs(id,user_id,source_video_path,task_type,model,duration,resolution,ratio,status,created_at) values('video-1',?,'uploads/source.mp4','auto','seedance-2.0',5,'480p','16:9','ready',1)", localWorkspaceID); err != nil {
+	if _, err := db.Exec("insert into video_replica_jobs(id,user_id,source_video_path,task_type,model,duration,resolution,ratio,status,created_at) values('video-1',?,'uploads/source.mp4','auto','doubao-seedance-2.0',5,'480p','16:9','ready',1)", localWorkspaceID); err != nil {
 		t.Fatal(err)
 	}
 	for _, input := range []workTitleInput{

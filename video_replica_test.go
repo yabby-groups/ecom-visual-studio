@@ -46,7 +46,7 @@ func TestMigrateDropsStoryboardConfirmedWithoutLosingVideoJobs(t *testing.T) {
 	}
 	if _, err := studio.db.Exec(`insert into video_replica_jobs
 		(id,user_id,source_video_path,task_type,model,duration,resolution,ratio,status,created_at)
-		values(?,?,?,?,?,?,?,?,?,?)`, "job-migrate-storyboard", localWorkspaceID, "uploads/source.mp4", "reference", "seedance-2.5", 30, "480p", "16:9", "ready", 1); err != nil {
+		values(?,?,?,?,?,?,?,?,?,?)`, "job-migrate-storyboard", localWorkspaceID, "uploads/source.mp4", "reference", "doubao-seedance-2.5", 30, "480p", "16:9", "ready", 1); err != nil {
 		t.Fatal(err)
 	}
 	if err := studio.migrate(); err != nil {
@@ -78,6 +78,41 @@ func TestMigrateDropsStoryboardConfirmedWithoutLosingVideoJobs(t *testing.T) {
 	}
 	if status != "ready" {
 		t.Fatalf("job status = %q, want ready", status)
+	}
+}
+
+func TestAIVideoReplicaSeedanceModelDefaultsAndPrompt(t *testing.T) {
+	model, err := normalizeAIVideoReplicaSeedanceModel("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if model != "doubao-seedance-2.0-mini" {
+		t.Fatalf("default Seedance model = %q", model)
+	}
+	if _, err := normalizeAIVideoReplicaSeedanceModel("not-seedance"); err == nil {
+		t.Fatal("invalid Seedance model was accepted")
+	}
+	prompt := buildAIVideoReplicaPrompt(AIVideoReplicaInput{
+		Prompt:        "展示商品细节",
+		SeedanceModel: "doubao-seedance-2.5",
+		Resolution:    "720p",
+		Ratio:         "16:9",
+		Budget:        2,
+	}, "https://example.test/source.mp4", []string{"https://example.test/product.png"}, nil)
+	if !strings.Contains(prompt, "最终视频必须使用 Seedance 模型 doubao-seedance-2.5 生成。") {
+		t.Fatalf("prompt missing Seedance constraint: %s", prompt)
+	}
+}
+
+func TestVideoReplicaJobReturnsSeedanceModel(t *testing.T) {
+	studio := newAIVideoReplicaTestStudio(t)
+	insertAIVideoReplicaTestJob(t, studio, "job-seedance-model", "ready", "")
+	job, err := studio.VideoReplicaJob("job-seedance-model")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if job["seedance_model"] != "doubao-seedance-2.0-mini" {
+		t.Fatalf("seedance_model = %#v", job["seedance_model"])
 	}
 }
 
@@ -846,7 +881,7 @@ func TestMigrateNormalizesRetiredVideoReplicaTaskTypes(t *testing.T) {
 	for _, taskType := range []string{"auto", "extend", "replace", "ai_replica"} {
 		if _, err := studio.db.Exec(`insert into video_replica_jobs
 			(id,user_id,source_video_path,task_type,model,duration,resolution,ratio,status,created_at)
-			values(?,?,?,?,?,?,?,?,?,?)`, "legacy-"+taskType, localWorkspaceID, "uploads/source.mp4", taskType, "seedance-2.5", 10, "480p", "16:9", "ready", 1); err != nil {
+			values(?,?,?,?,?,?,?,?,?,?)`, "legacy-"+taskType, localWorkspaceID, "uploads/source.mp4", taskType, "doubao-seedance-2.5", 10, "480p", "16:9", "ready", 1); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -873,7 +908,7 @@ func TestMigrateNormalizesRetiredVideoReplicaTaskTypes(t *testing.T) {
 
 func TestValidateVideoReplicaRejectsRetiredTaskTypes(t *testing.T) {
 	for _, taskType := range []string{"auto", "extend", "replace"} {
-		input := VideoReplicaInput{TaskType: taskType, Model: "seedance-2.5", Prompt: "复刻商品", Duration: 10, Resolution: "480p", Ratio: "16:9"}
+		input := VideoReplicaInput{TaskType: taskType, Model: "doubao-seedance-2.5", Prompt: "复刻商品", Duration: 10, Resolution: "480p", Ratio: "16:9"}
 		if err := validateVideoReplicaInput(input); err == nil {
 			t.Fatalf("retired task type %q was accepted", taskType)
 		}
@@ -881,7 +916,7 @@ func TestValidateVideoReplicaRejectsRetiredTaskTypes(t *testing.T) {
 }
 
 func TestValidateVideoReplicaRequiresSelectedProductReference(t *testing.T) {
-	input := VideoReplicaInput{TaskType: "reference", Model: "seedance-2.5", Prompt: "复刻商品", Duration: 10, Resolution: "480p", Ratio: "16:9", ReferencePaths: []string{"uploads/product.png"}}
+	input := VideoReplicaInput{TaskType: "reference", Model: "doubao-seedance-2.5", Prompt: "复刻商品", Duration: 10, Resolution: "480p", Ratio: "16:9", ReferencePaths: []string{"uploads/product.png"}}
 	if err := validateVideoReplicaInput(input); err == nil {
 		t.Fatal("expected missing product reference error")
 	}
@@ -898,7 +933,7 @@ func TestValidateVideoReplicaRequiresSelectedProductReference(t *testing.T) {
 func TestValidateVideoReplicaAllowsNoReferenceVideo(t *testing.T) {
 	input := VideoReplicaInput{
 		TaskType:   "reference",
-		Model:      "seedance-2.5",
+		Model:      "doubao-seedance-2.5",
 		Prompt:     "为咖啡杯制作简洁的通勤短片",
 		Duration:   10,
 		Resolution: "480p",

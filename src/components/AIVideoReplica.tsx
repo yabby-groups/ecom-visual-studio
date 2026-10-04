@@ -57,6 +57,7 @@ type Props = {
   prompt: string;
   budget: number;
   aiModel: string;
+  seedanceModel: string;
   ratio: string;
   resolution: string;
   review: Review | null;
@@ -67,6 +68,7 @@ type Props = {
   setReview: Dispatch<SetStateAction<Review | null>>;
   setBudget: Dispatch<SetStateAction<number>>;
   setAiModel: Dispatch<SetStateAction<string>>;
+  setSeedanceModel: Dispatch<SetStateAction<string>>;
   setRatio: Dispatch<SetStateAction<string>>;
   setResolution: Dispatch<SetStateAction<string>>;
   setReferencePaths: Dispatch<SetStateAction<string[]>>;
@@ -104,6 +106,7 @@ export function AIVideoReplica() {
   const [prompt, setPrompt] = useState("");
   const [budget, setBudget] = useState(2);
   const [aiModel, setAiModel] = useState("qwen3.8-flash");
+  const [seedanceModel, setSeedanceModel] = useState("doubao-seedance-2.0-mini");
   const [ratio, setRatio] = useState("16:9");
   const [resolution, setResolution] = useState("480p");
   const [jobs, setJobs] = useState<VideoReplicaJob[]>([]);
@@ -169,6 +172,7 @@ export function AIVideoReplica() {
     setPrompt(job.prompt);
     setBudget(job.ai_budget ?? 2);
     setAiModel(job.model);
+    setSeedanceModel(job.seedance_model || "doubao-seedance-2.0-mini");
     setRatio(job.ratio);
     setResolution(job.resolution);
     setReview(null);
@@ -330,6 +334,7 @@ export function AIVideoReplica() {
         product_paths: referencePaths,
         prompt,
         model: aiModel,
+        seedance_model: seedanceModel,
         resolution,
         ratio,
         budget,
@@ -359,6 +364,7 @@ export function AIVideoReplica() {
             : [job.product_reference_path].filter(Boolean),
         prompt: job.prompt,
         model: job.model,
+        seedance_model: job.seedance_model || "doubao-seedance-2.0-mini",
         resolution: job.resolution,
         ratio: job.ratio,
         budget: job.ai_budget ?? budget,
@@ -472,6 +478,7 @@ export function AIVideoReplica() {
     prompt,
     budget,
     aiModel,
+    seedanceModel,
     ratio,
     resolution,
     review,
@@ -482,6 +489,7 @@ export function AIVideoReplica() {
     setReview,
     setBudget,
     setAiModel,
+    setSeedanceModel,
     setRatio,
     setResolution,
     setReferencePaths,
@@ -1057,6 +1065,20 @@ export function AIVideoReplica() {
                       ]}
                       disabled={controls.draftLocked}
                       onChange={p.setAiModel}
+                    />
+                  </label>
+                  <label>
+                    视频生成模型
+                    <SettingsSelect
+                      name="ai-video-seedance-model"
+                      value={p.seedanceModel}
+                      options={[
+                        { value: "doubao-seedance-2.0-mini", label: "Seedance 2.0 Mini" },
+                        { value: "doubao-seedance-2.0", label: "Seedance 2.0" },
+                        { value: "doubao-seedance-2.5", label: "Seedance 2.5" },
+                      ]}
+                      disabled={controls.draftLocked}
+                      onChange={p.setSeedanceModel}
                     />
                   </label>
                   <label>

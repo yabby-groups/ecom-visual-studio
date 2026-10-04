@@ -214,6 +214,7 @@ export type VideoReplicaJob = {
   product_reference_path: string;
   task_type: "reference" | "ai_replica";
   model: string;
+  seedance_model: string;
   prompt: string;
   storyboard: VideoReplicaStoryboardItem[];
   duration: number;

@@ -165,3 +165,29 @@ describe("client video prompt review", () => {
     expect(review).toHaveBeenCalledWith("replica", "展示产品");
   });
 });
+
+describe("client AI video replica", () => {
+  it("forwards the selected Seedance generation model", async () => {
+    const create = vi.fn(async () => ({ id: "ai-job" }));
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: { go: { main: { Studio: { CreateAIVideoReplica: create } } } },
+    });
+
+    await client.createAIVideoReplica({
+      source_video_path: "uploads/source.mp4",
+      product_paths: [],
+      prompt: "展示商品",
+      model: "qwen3.8-flash",
+      seedance_model: "doubao-seedance-2.0-mini",
+      resolution: "480p",
+      ratio: "16:9",
+      budget: 2,
+      avatar_assets: [],
+    });
+
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({ seedance_model: "doubao-seedance-2.0-mini" }),
+    );
+  });
+});

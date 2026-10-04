@@ -183,6 +183,7 @@ export const client = {
     product_paths: string[];
     prompt: string;
     model: string;
+    seedance_model: string;
     resolution: string;
     ratio: string;
     budget: number;

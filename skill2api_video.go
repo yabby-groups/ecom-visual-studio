@@ -26,13 +26,14 @@ type AIVideoReplicaInput struct {
 	ProductPaths    []string `json:"product_paths"`
 	// ProductPath keeps existing callers and persisted jobs compatible; it is
 	// always normalized to the first entry in ProductPaths before execution.
-	ProductPath  string                 `json:"product_path"`
-	Prompt       string                 `json:"prompt"`
-	Model        string                 `json:"model"`
-	Resolution   string                 `json:"resolution"`
-	Ratio        string                 `json:"ratio"`
-	Budget       float64                `json:"budget"`
-	AvatarAssets []AvatarAssetSelection `json:"avatar_assets"`
+	ProductPath   string                 `json:"product_path"`
+	Prompt        string                 `json:"prompt"`
+	Model         string                 `json:"model"`
+	SeedanceModel string                 `json:"seedance_model"`
+	Resolution    string                 `json:"resolution"`
+	Ratio         string                 `json:"ratio"`
+	Budget        float64                `json:"budget"`
+	AvatarAssets  []AvatarAssetSelection `json:"avatar_assets"`
 }
 
 type aiVideoReplicaTiming struct {
@@ -41,6 +42,49 @@ type aiVideoReplicaTiming struct {
 }
 
 const maxAIVideoReplicaProductImages = 4
+
+const defaultAIVideoReplicaSeedanceModel = "doubao-seedance-2.0-mini"
+
+var aiVideoReplicaSeedanceModels = map[string]struct{}{
+	"doubao-seedance-2.0-mini": {},
+	"doubao-seedance-2.0":      {},
+	"doubao-seedance-2.5":      {},
+}
+
+func normalizeAIVideoReplicaSeedanceModel(model string) (string, error) {
+	model = strings.TrimSpace(model)
+	if model == "" {
+		return defaultAIVideoReplicaSeedanceModel, nil
+	}
+	if _, ok := aiVideoReplicaSeedanceModels[model]; !ok {
+		return "", errors.New("AI 复刻 Seedance 模型无效")
+	}
+	return model, nil
+}
+
+func buildAIVideoReplicaPrompt(input AIVideoReplicaInput, videoURL string, imageURLs, avatarIDs []string) string {
+	prompt := "根据以下创作说明生成视频。"
+	if videoURL != "" {
+		prompt = fmt.Sprintf("克隆参考视频的镜头节奏、动作和构图。参考视频：%s 。", videoURL)
+	}
+	if len(imageURLs) > 0 && videoURL != "" {
+		productReferences := make([]string, 0, len(imageURLs))
+		for index, imageURL := range imageURLs {
+			productReferences = append(productReferences, fmt.Sprintf("商品参考图 %d：%s", index+1, imageURL))
+		}
+		prompt = fmt.Sprintf("克隆参考视频的镜头节奏、动作和构图，将目标商品替换为参考商品。参考视频：%s ；%s 。", videoURL, strings.Join(productReferences, "；"))
+	} else if len(imageURLs) > 0 {
+		productReferences := make([]string, 0, len(imageURLs))
+		for index, imageURL := range imageURLs {
+			productReferences = append(productReferences, fmt.Sprintf("商品参考图 %d：%s", index+1, imageURL))
+		}
+		prompt += " " + strings.Join(productReferences, "；") + "。"
+	}
+	if len(avatarIDs) > 0 {
+		prompt += " 人物素材：" + strings.Join(avatarIDs, " 、") + " 。"
+	}
+	return prompt + fmt.Sprintf("\n最终视频必须使用 Seedance 模型 %s 生成。\n%s\n尺寸 %s %s\n预算 %s 美元", input.SeedanceModel, input.Prompt, input.Resolution, input.Ratio, strconv.FormatFloat(input.Budget, 'f', -1, 64))
+}
 
 func (s *Studio) aiVideoReplicaProductPaths(paths []string, primary string) ([]string, error) {
 	if len(paths) == 0 && strings.TrimSpace(primary) != "" {
@@ -125,6 +169,10 @@ func (s *Studio) CreateAIVideoReplica(input AIVideoReplicaInput) (map[string]str
 	if input.Model == "" {
 		input.Model = "qwen3.8-flash"
 	}
+	input.SeedanceModel, err = normalizeAIVideoReplicaSeedanceModel(input.SeedanceModel)
+	if err != nil {
+		return nil, err
+	}
 	if input.Resolution == "" {
 		input.Resolution = "480p"
 	}
@@ -155,7 +203,7 @@ func (s *Studio) CreateAIVideoReplica(input AIVideoReplicaInput) (map[string]str
 	refs, _ := json.Marshal(productPaths)
 	avatarAssets, _ := json.Marshal(input.AvatarAssets)
 	if err = s.writeTransaction(func(tx *sql.Tx) error {
-		_, e := tx.Exec("insert into video_replica_jobs(id,user_id,source_video_path,reference_paths,product_reference_path,task_type,model,prompt,storyboard,duration,resolution,ratio,status,current_run_id,created_at,ai_budget,avatar_assets) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", id, localWorkspaceID, input.SourceVideoPath, string(refs), input.ProductPath, "ai_replica", input.Model, input.Prompt, "[]", int(math.Ceil(seconds)), input.Resolution, input.Ratio, "queued", "", time.Now().Unix(), input.Budget, string(avatarAssets))
+		_, e := tx.Exec("insert into video_replica_jobs(id,user_id,source_video_path,reference_paths,product_reference_path,task_type,model,seedance_model,prompt,storyboard,duration,resolution,ratio,status,current_run_id,created_at,ai_budget,avatar_assets) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", id, localWorkspaceID, input.SourceVideoPath, string(refs), input.ProductPath, "ai_replica", input.Model, input.SeedanceModel, input.Prompt, "[]", int(math.Ceil(seconds)), input.Resolution, input.Ratio, "queued", "", time.Now().Unix(), input.Budget, string(avatarAssets))
 		return e
 	}); err != nil {
 		return nil, err
@@ -172,16 +220,16 @@ func (s *Studio) resumeAIVideoReplicaJobs() {
 	if err != nil {
 		return
 	}
-	rows, err := s.db.Query(`select id,source_video_path,reference_paths,product_reference_path,prompt,model,resolution,ratio,ai_budget,avatar_assets
+	rows, err := s.db.Query(`select id,source_video_path,reference_paths,product_reference_path,prompt,model,seedance_model,resolution,ratio,ai_budget,avatar_assets
 		from video_replica_jobs where user_id=? and task_type='ai_replica' and status in ('interrupted','queued','preparing','submitting','generating','retrieving')`, localWorkspaceID)
 	if err != nil {
 		return
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var id, source, refsJSON, product, prompt, model, resolution, ratio, avatarAssetsJSON string
+		var id, source, refsJSON, product, prompt, model, seedanceModel, resolution, ratio, avatarAssetsJSON string
 		var budget float64
-		if err := rows.Scan(&id, &source, &refsJSON, &product, &prompt, &model, &resolution, &ratio, &budget, &avatarAssetsJSON); err != nil {
+		if err := rows.Scan(&id, &source, &refsJSON, &product, &prompt, &model, &seedanceModel, &resolution, &ratio, &budget, &avatarAssetsJSON); err != nil {
 			continue
 		}
 		var productPaths []string
@@ -191,11 +239,16 @@ func (s *Studio) resumeAIVideoReplicaJobs() {
 		}
 		var avatarAssets []AvatarAssetSelection
 		_ = json.Unmarshal([]byte(avatarAssetsJSON), &avatarAssets)
-		go s.runAIVideoReplica(id, user.ID, AIVideoReplicaInput{SourceVideoPath: source, ProductPaths: productPaths, ProductPath: product, Prompt: prompt, Model: model, Resolution: resolution, Ratio: ratio, Budget: budget, AvatarAssets: avatarAssets})
+		go s.runAIVideoReplica(id, user.ID, AIVideoReplicaInput{SourceVideoPath: source, ProductPaths: productPaths, ProductPath: product, Prompt: prompt, Model: model, SeedanceModel: seedanceModel, Resolution: resolution, Ratio: ratio, Budget: budget, AvatarAssets: avatarAssets})
 	}
 }
 
 func (s *Studio) runAIVideoReplica(id, userID string, input AIVideoReplicaInput) {
+	seedanceModel, modelErr := normalizeAIVideoReplicaSeedanceModel(input.SeedanceModel)
+	if modelErr != nil {
+		return
+	}
+	input.SeedanceModel = seedanceModel
 	if len(input.ProductPaths) == 0 && input.ProductPath != "" {
 		input.ProductPaths = []string{input.ProductPath}
 	}
@@ -277,32 +330,12 @@ func (s *Studio) runAIVideoReplica(id, userID string, input AIVideoReplicaInput)
 			return
 		}
 		setStatus("submitting")
-		prompt := "根据以下创作说明生成视频。"
-		if videoURL != "" {
-			prompt = fmt.Sprintf("克隆参考视频的镜头节奏、动作和构图。参考视频：%s 。", videoURL)
-		}
-		if len(imageURLs) > 0 && videoURL != "" {
-			productReferences := make([]string, 0, len(imageURLs))
-			for index, imageURL := range imageURLs {
-				productReferences = append(productReferences, fmt.Sprintf("商品参考图 %d：%s", index+1, imageURL))
-			}
-			prompt = fmt.Sprintf("克隆参考视频的镜头节奏、动作和构图，将目标商品替换为参考商品。参考视频：%s ；%s 。", videoURL, strings.Join(productReferences, "；"))
-		} else if len(imageURLs) > 0 {
-			productReferences := make([]string, 0, len(imageURLs))
-			for index, imageURL := range imageURLs {
-				productReferences = append(productReferences, fmt.Sprintf("商品参考图 %d：%s", index+1, imageURL))
-			}
-			prompt += " " + strings.Join(productReferences, "；") + "。"
-		}
 		avatarIDs, resolveErr := s.resolveAvatarAssetIDs(userID, input.AvatarAssets)
 		if resolveErr != nil {
 			fail(resolveErr)
 			return
 		}
-		if len(avatarIDs) > 0 {
-			prompt += " 人物素材：" + strings.Join(avatarIDs, " 、") + " 。"
-		}
-		prompt += fmt.Sprintf("\n%s\n尺寸 %s %s\n预算 %s 美元", input.Prompt, input.Resolution, input.Ratio, strconv.FormatFloat(input.Budget, 'f', -1, 64))
+		prompt := buildAIVideoReplicaPrompt(input, videoURL, imageURLs, avatarIDs)
 		var submitted struct {
 			RequestID string `json:"request_id"`
 		}
@@ -767,7 +800,7 @@ func (s *Studio) ResumeAIVideoReplica(id, answer, instruction string) (map[strin
 	var input AIVideoReplicaInput
 	var avatarAssetsJSON string
 	var refsJSON string
-	if err = s.db.QueryRow("select source_video_path,reference_paths,product_reference_path,prompt,model,resolution,ratio,ai_budget,avatar_assets from video_replica_jobs where id=?", id).Scan(&input.SourceVideoPath, &refsJSON, &input.ProductPath, &input.Prompt, &input.Model, &input.Resolution, &input.Ratio, &input.Budget, &avatarAssetsJSON); err != nil {
+	if err = s.db.QueryRow("select source_video_path,reference_paths,product_reference_path,prompt,model,seedance_model,resolution,ratio,ai_budget,avatar_assets from video_replica_jobs where id=?", id).Scan(&input.SourceVideoPath, &refsJSON, &input.ProductPath, &input.Prompt, &input.Model, &input.SeedanceModel, &input.Resolution, &input.Ratio, &input.Budget, &avatarAssetsJSON); err != nil {
 		return nil, err
 	}
 	_ = json.Unmarshal([]byte(refsJSON), &input.ProductPaths)
