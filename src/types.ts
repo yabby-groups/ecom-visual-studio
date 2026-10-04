@@ -155,6 +155,9 @@ export type VideoReplicaVersion = {
   job_id: string;
   source_version_id?: string | null;
   file_path: string;
+  generation_started_at: number | null;
+  completed_at: number | null;
+  generation_duration_seconds: number | null;
   created_at: number;
 };
 export type VideoReplicaSegment = {
@@ -219,6 +222,7 @@ export type VideoReplicaJob = {
   file_path: string | null;
   preview_path: string | null;
   generation_started_at: number | null;
+  completed_at: number | null;
   created_at: number;
   versions: VideoReplicaVersion[];
   segments: VideoReplicaSegment[];
@@ -240,6 +244,8 @@ export type Skill2APIStatus = {
   status: string;
   remote_status?: string;
   remote_error?: string;
+  started_at?: string;
+  finished_at?: string;
   phase?: string;
   question?: string;
   options?: string[];

@@ -529,7 +529,7 @@ func (s *Studio) VideoReplicaJobs(limit, offset int) (map[string]any, error) {
 	if err := s.db.QueryRow("select count(*) from video_replica_jobs").Scan(&total); err != nil {
 		return nil, err
 	}
-	rows, err := s.db.Query("select id,title,source_video_path,reference_paths,product_reference_path,task_type,model,prompt,storyboard,storyboard_confirmed,duration,resolution,ratio,status,file_path,generation_started_at,created_at,ai_budget,avatar_assets from video_replica_jobs order by created_at desc,id desc limit ? offset ?", limit, offset)
+	rows, err := s.db.Query("select id,title,source_video_path,reference_paths,product_reference_path,task_type,model,prompt,storyboard,storyboard_confirmed,duration,resolution,ratio,status,file_path,generation_started_at,completed_at,created_at,ai_budget,avatar_assets from video_replica_jobs order by created_at desc,id desc limit ? offset ?", limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -560,7 +560,7 @@ func (s *Studio) VideoReplicaJob(id string) (map[string]any, error) {
 	}
 	var job map[string]any
 	for attempt := 0; attempt < 5; attempt++ {
-		row := s.db.QueryRow("select id,title,source_video_path,reference_paths,product_reference_path,task_type,model,prompt,storyboard,storyboard_confirmed,duration,resolution,ratio,status,file_path,generation_started_at,created_at,ai_budget,avatar_assets from video_replica_jobs where id=?", id)
+		row := s.db.QueryRow("select id,title,source_video_path,reference_paths,product_reference_path,task_type,model,prompt,storyboard,storyboard_confirmed,duration,resolution,ratio,status,file_path,generation_started_at,completed_at,created_at,ai_budget,avatar_assets from video_replica_jobs where id=?", id)
 		job, err = scanVideoReplicaRow(row)
 		if err != sql.ErrNoRows {
 			break
@@ -1121,9 +1121,9 @@ func scanVideoReplicaRow(row rowScanner) (map[string]any, error) {
 	var confirmed, duration int
 	var budget float64
 	var path sql.NullString
-	var started sql.NullInt64
+	var started, completed sql.NullInt64
 	var created int64
-	if err := row.Scan(&id, &title, &source, &refsJSON, &productReferencePath, &taskType, &model, &prompt, &storyboardJSON, &confirmed, &duration, &resolution, &ratio, &status, &path, &started, &created, &budget, &avatarAssetsJSON); err != nil {
+	if err := row.Scan(&id, &title, &source, &refsJSON, &productReferencePath, &taskType, &model, &prompt, &storyboardJSON, &confirmed, &duration, &resolution, &ratio, &status, &path, &started, &completed, &created, &budget, &avatarAssetsJSON); err != nil {
 		return nil, err
 	}
 	var refs []string
@@ -1132,11 +1132,11 @@ func scanVideoReplicaRow(row rowScanner) (map[string]any, error) {
 	_ = json.Unmarshal([]byte(refsJSON), &refs)
 	_ = json.Unmarshal([]byte(storyboardJSON), &storyboard)
 	_ = json.Unmarshal([]byte(avatarAssetsJSON), &avatarAssets)
-	return map[string]any{"id": id, "title": title, "source_video_path": source, "reference_paths": refs, "product_reference_path": productReferencePath, "task_type": taskType, "model": model, "prompt": prompt, "storyboard": storyboard, "storyboard_confirmed": confirmed == 1, "duration": duration, "resolution": resolution, "ratio": ratio, "status": status, "file_path": nullableString(path), "generation_started_at": nullableInt(started), "created_at": created, "ai_budget": budget, "avatar_assets": avatarAssets, "versions": []map[string]any{}}, nil
+	return map[string]any{"id": id, "title": title, "source_video_path": source, "reference_paths": refs, "product_reference_path": productReferencePath, "task_type": taskType, "model": model, "prompt": prompt, "storyboard": storyboard, "storyboard_confirmed": confirmed == 1, "duration": duration, "resolution": resolution, "ratio": ratio, "status": status, "file_path": nullableString(path), "generation_started_at": nullableInt(started), "completed_at": nullableInt(completed), "created_at": created, "ai_budget": budget, "avatar_assets": avatarAssets, "versions": []map[string]any{}}, nil
 }
 
 func (s *Studio) populateVideoReplicaVersions(job map[string]any) error {
-	rows, err := s.db.Query("select id,job_id,source_version_id,file_path,created_at from video_replica_versions where job_id=? order by created_at desc,id desc", job["id"])
+	rows, err := s.db.Query("select id,job_id,source_version_id,file_path,generation_started_at,completed_at,generation_duration_seconds,created_at from video_replica_versions where job_id=? order by created_at desc,id desc", job["id"])
 	if err != nil {
 		return err
 	}
@@ -1145,11 +1145,12 @@ func (s *Studio) populateVideoReplicaVersions(job map[string]any) error {
 	for rows.Next() {
 		var id, jobID, path string
 		var sourceID sql.NullString
+		var started, completed, elapsed sql.NullInt64
 		var created int64
-		if err := rows.Scan(&id, &jobID, &sourceID, &path, &created); err != nil {
+		if err := rows.Scan(&id, &jobID, &sourceID, &path, &started, &completed, &elapsed, &created); err != nil {
 			return err
 		}
-		versions = append(versions, map[string]any{"id": id, "job_id": jobID, "source_version_id": nullableString(sourceID), "file_path": path, "created_at": created})
+		versions = append(versions, map[string]any{"id": id, "job_id": jobID, "source_version_id": nullableString(sourceID), "file_path": path, "generation_started_at": nullableInt(started), "completed_at": nullableInt(completed), "generation_duration_seconds": nullableInt(elapsed), "created_at": created})
 	}
 	job["versions"] = versions
 	return rows.Err()

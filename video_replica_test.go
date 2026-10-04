@@ -412,7 +412,7 @@ func TestPullAIVideoReplicaResultFallsBackToSynchronousFile(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/skill2api/status/":
-			_, _ = w.Write([]byte(`{"status":"succeeded","files":["deliverable/final.mp4"]}`))
+			_, _ = w.Write([]byte(`{"status":"succeeded","started_at":"2026-09-30T09:34:29.749128869Z","finished_at":"2026-09-30T09:46:22.391744493Z","files":["deliverable/final.mp4"]}`))
 		case "/api/skill2api/file/":
 			if r.Method == http.MethodPost {
 				w.WriteHeader(http.StatusAccepted)
@@ -422,7 +422,7 @@ func TestPullAIVideoReplicaResultFallsBackToSynchronousFile(t *testing.T) {
 			syncFallback = true
 			_, _ = w.Write([]byte(`{"url":"/upload/aa/bb/final.mp4"}`))
 		case "/api/skill2api/file/delivery/":
-			_, _ = w.Write([]byte(`{"status":"failed","error":"temporary upload failed"}`))
+			_, _ = w.Write([]byte(`{"status":"failed"}`))
 		case "/upload/aa/bb/final.mp4":
 			_, _ = w.Write([]byte("fake mp4 bytes"))
 		default:
@@ -449,8 +449,15 @@ func TestPullAIVideoReplicaResultFallsBackToSynchronousFile(t *testing.T) {
 	if err := studio.db.QueryRow("select status,file_path from video_replica_jobs where id=?", "job-manual-pull").Scan(&status, &path); err != nil {
 		t.Fatal(err)
 	}
-	if status != "ready" || path != "generated/video-replica/job-manual-pull.mp4" {
+	if status != "ready" || !strings.HasPrefix(path, "generated/video-replica/job-manual-pull/") {
 		t.Fatalf("stored result = %q, %q", status, path)
+	}
+	var started, completed, elapsed int64
+	if err := studio.db.QueryRow("select generation_started_at,completed_at,generation_duration_seconds from video_replica_versions where job_id=?", "job-manual-pull").Scan(&started, &completed, &elapsed); err != nil {
+		t.Fatal(err)
+	}
+	if completed <= started || elapsed != completed-started {
+		t.Fatalf("version timing = %d, %d, %d", started, completed, elapsed)
 	}
 	if _, err := os.Stat(filepath.Join(studio.dataDir, "storage", path)); err != nil {
 		t.Fatalf("saved file missing: %v", err)
@@ -629,6 +636,48 @@ func TestResumeAIVideoReplicaUsesDefaultInstructionWhenInterrupted(t *testing.T)
 	insertAIVideoReplicaTestJob(t, studio, "job-resume", "interrupted", "remote-request")
 	if _, err := studio.ResumeAIVideoReplica("job-resume", "", ""); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestResumeAIVideoReplicaResumesRecentSucceededTask(t *testing.T) {
+	finished := time.Now().UTC().Add(-time.Hour)
+	started := finished.Add(-12 * time.Second)
+	var resumed bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			_, _ = w.Write([]byte(`{"status":"succeeded","started_at":"` + started.Format(time.RFC3339Nano) + `","finished_at":"` + finished.Format(time.RFC3339Nano) + `"}`))
+			return
+		}
+		resumed = true
+		var payload map[string]string
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatal(err)
+		}
+		if payload["request_id"] != "remote-request" || payload["instruction"] != "继续执行当前任务" {
+			t.Fatalf("resume payload = %#v", payload)
+		}
+		_, _ = w.Write([]byte(`{"status":"running"}`))
+	}))
+	defer server.Close()
+	t.Setenv("HUABOT_WEB_BASE_URL", server.URL)
+
+	studio := newAIVideoReplicaTestStudio(t)
+	studio.httpClient = server.Client()
+	studio.huabotBearer = "test-token"
+	studio.huabotBearerExpiry = time.Now().Add(time.Hour)
+	insertAIVideoReplicaTestJob(t, studio, "job-ready-resume", "ready", "remote-request")
+	if _, err := studio.ResumeAIVideoReplica("job-ready-resume", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	if !resumed {
+		t.Fatal("resume endpoint was not called")
+	}
+	var status string
+	if err := studio.db.QueryRow("select status from video_replica_jobs where id=?", "job-ready-resume").Scan(&status); err != nil {
+		t.Fatal(err)
+	}
+	if status != "generating" {
+		t.Fatalf("stored status = %q", status)
 	}
 }
 

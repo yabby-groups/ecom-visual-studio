@@ -56,7 +56,13 @@ describe("aiVideoReplicaControls", () => {
     ).toMatchObject({ canResume: true, canRegenerate: true });
     expect(
       aiVideoReplicaControls({ status: "ready", requestID: "remote-1" }),
-    ).toMatchObject({ canResume: false, canRegenerate: true });
+    ).toMatchObject({ canResume: true, canRegenerate: true });
+    expect(
+      aiVideoReplicaControls({
+        status: "ready",
+        requestID: "remote-1",
+      }),
+    ).toMatchObject({ canResume: true, draftLocked: false });
     expect(
       aiVideoReplicaControls({ status: "succeeded", requestID: "remote-1" }),
     ).toMatchObject({ canResume: false, canRegenerate: true });

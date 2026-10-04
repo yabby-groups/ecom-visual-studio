@@ -35,6 +35,11 @@ type AIVideoReplicaInput struct {
 	AvatarAssets []AvatarAssetSelection `json:"avatar_assets"`
 }
 
+type aiVideoReplicaTiming struct {
+	startedAt   int64
+	completedAt int64
+}
+
 const maxAIVideoReplicaProductImages = 4
 
 func (s *Studio) aiVideoReplicaProductPaths(paths []string, primary string) ([]string, error) {
@@ -75,6 +80,32 @@ func aiVideoReplicaTerminableStatus(status string) bool {
 
 func aiVideoReplicaResumableStatus(status string) bool {
 	return status == "interrupted" || status == "terminated"
+}
+
+func aiVideoReplicaTimingFromStatus(status map[string]any) (aiVideoReplicaTiming, error) {
+	parse := func(key string) (int64, error) {
+		raw := strings.TrimSpace(stringValue(status[key]))
+		if raw == "" {
+			return 0, fmt.Errorf("远端状态缺少 %s", key)
+		}
+		value, err := time.Parse(time.RFC3339Nano, raw)
+		if err != nil {
+			return 0, fmt.Errorf("远端 %s 无效: %w", key, err)
+		}
+		return value.UTC().Unix(), nil
+	}
+	startedAt, err := parse("started_at")
+	if err != nil {
+		return aiVideoReplicaTiming{}, err
+	}
+	completedAt, err := parse("finished_at")
+	if err != nil {
+		return aiVideoReplicaTiming{}, err
+	}
+	if completedAt < startedAt {
+		return aiVideoReplicaTiming{}, errors.New("远端 finished_at 早于 started_at")
+	}
+	return aiVideoReplicaTiming{startedAt: startedAt, completedAt: completedAt}, nil
 }
 
 func (s *Studio) CreateAIVideoReplica(input AIVideoReplicaInput) (map[string]string, error) {
@@ -310,6 +341,11 @@ func (s *Studio) runAIVideoReplica(id, userID string, input AIVideoReplicaInput)
 			if localState != "retrieving" {
 				return
 			}
+			timing, timingErr := aiVideoReplicaTimingFromStatus(status)
+			if timingErr != nil {
+				fail(timingErr)
+				return
+			}
 			filePath, pathErr := aiVideoReplicaMP4Path(status)
 			if pathErr != nil {
 				fail(pathErr)
@@ -360,7 +396,7 @@ func (s *Studio) runAIVideoReplica(id, userID string, input AIVideoReplicaInput)
 					if isTerminated() {
 						return
 					}
-					if err = s.downloadAIVideo(id, userID, rawURL); err != nil {
+					if err = s.downloadAIVideo(id, userID, rawURL, timing); err != nil {
 						fail(err)
 					}
 					return
@@ -474,6 +510,16 @@ func normalizeAIVideoReplicaRemoteState(state string) string {
 func (s *Studio) reconcileAIVideoReplicaRemoteStatus(id string, remote map[string]any) (string, error) {
 	s.saveSkill2APIStatusSnapshot(id, remote)
 	remoteState := normalizeAIVideoReplicaRemoteState(stringValue(remote["status"]))
+	if remoteState == "succeeded" {
+		if timing, timingErr := aiVideoReplicaTimingFromStatus(remote); timingErr == nil {
+			if err := s.writeTransaction(func(tx *sql.Tx) error {
+				_, queryErr := tx.Exec("update video_replica_jobs set generation_started_at=?,completed_at=? where id=? and task_type='ai_replica'", timing.startedAt, timing.completedAt, id)
+				return queryErr
+			}); err != nil {
+				return "", err
+			}
+		}
+	}
 	desired := ""
 	switch remoteState {
 	case "waiting_for_input":
@@ -518,7 +564,7 @@ func mergeSkill2APIStatus(result, snapshot map[string]any) {
 
 func (s *Studio) saveSkill2APIStatusSnapshot(id string, status map[string]any) {
 	snapshot := map[string]any{}
-	for _, key := range []string{"stdout", "stderr", "files", "question", "options", "phase", "error"} {
+	for _, key := range []string{"stdout", "stderr", "files", "question", "options", "phase", "error", "started_at", "finished_at"} {
 		if value, ok := status[key]; ok {
 			snapshot[key] = value
 		}
@@ -605,7 +651,7 @@ func (s *Studio) ResumeAIVideoReplica(id, answer, instruction string) (map[strin
 	if err = s.db.QueryRow("select status from video_replica_jobs where id=? and task_type='ai_replica'", id).Scan(&localStatus); err != nil {
 		return nil, err
 	}
-	if localStatus != "waiting_for_input" && !aiVideoReplicaResumableStatus(localStatus) {
+	if localStatus != "ready" && localStatus != "waiting_for_input" && !aiVideoReplicaResumableStatus(localStatus) {
 		return nil, errors.New("当前任务不能恢复")
 	}
 	remoteStatus, err := s.skill2APIStatus(user.ID, rid)
@@ -619,7 +665,7 @@ func (s *Studio) ResumeAIVideoReplica(id, answer, instruction string) (map[strin
 			remoteStatus["status"] = reconciledStatus
 			remoteStatus["remote_status"] = "not_found"
 			remoteStatus["request_id"] = rid
-			return remoteStatus, nil
+			return remoteStatus, errors.New("远端任务已过期或不可用")
 		}
 		return nil, err
 	}
@@ -628,7 +674,7 @@ func (s *Studio) ResumeAIVideoReplica(id, answer, instruction string) (map[strin
 	if err != nil {
 		return nil, err
 	}
-	if remoteState == "terminated" || remoteState == "failed" || remoteState == "succeeded" || remoteState == "not_found" {
+	if !(remoteState == "succeeded" && localStatus == "ready") && (remoteState == "terminated" || remoteState == "failed" || remoteState == "succeeded" || remoteState == "not_found") {
 		remoteStatus["status"] = reconciledStatus
 		remoteStatus["remote_status"] = remoteState
 		remoteStatus["request_id"] = rid
@@ -656,7 +702,7 @@ func (s *Studio) ResumeAIVideoReplica(id, answer, instruction string) (map[strin
 		remoteStatus["request_id"] = rid
 		return remoteStatus, nil
 	}
-	if remoteState != "waiting_for_input" && remoteState != "interrupted" {
+	if remoteState != "waiting_for_input" && remoteState != "interrupted" && !(remoteState == "succeeded" && localStatus == "ready") {
 		return nil, errors.New("远端任务当前不能恢复")
 	}
 	if localStatus == "waiting_for_input" {
@@ -681,7 +727,7 @@ func (s *Studio) ResumeAIVideoReplica(id, answer, instruction string) (map[strin
 		return result, err
 	}
 	if err = s.writeTransaction(func(tx *sql.Tx) error {
-		updated, queryErr := tx.Exec("update video_replica_jobs set status='generating',generation_started_at=coalesce(generation_started_at,?) where id=? and task_type='ai_replica' and status=?", time.Now().Unix(), id, localStatus)
+		updated, queryErr := tx.Exec("update video_replica_jobs set status='generating',generation_started_at=null,completed_at=null where id=? and task_type='ai_replica' and status=?", id, localStatus)
 		if queryErr != nil {
 			return queryErr
 		}
@@ -810,6 +856,16 @@ func (s *Studio) AIVideoReplicaDelivery(id, deliveryID string) (map[string]any, 
 }
 
 func (s *Studio) DownloadAIVideoReplicaFile(id, filePath string) (bool, error) {
+	rid, user, err := s.skill2APIRequest(id)
+	if err != nil {
+		return false, err
+	}
+	if _, err = s.skill2APIStatus(user.ID, rid); err != nil {
+		if isSkill2APIStatusNotFound(err) {
+			return false, errors.New("远端任务已过期或不可用")
+		}
+		return false, err
+	}
 	delivery, err := s.DeliverAIVideoReplicaFile(id, filePath)
 	if err != nil {
 		return false, err
@@ -875,6 +931,13 @@ func (s *Studio) PullAIVideoReplicaResult(id string) (bool, error) {
 	}
 	status, err := s.skill2APIStatus(user.ID, rid)
 	if err != nil {
+		if isSkill2APIStatusNotFound(err) {
+			return false, errors.New("远端结果已过期或不可用")
+		}
+		return false, err
+	}
+	timing, err := aiVideoReplicaTimingFromStatus(status)
+	if err != nil {
 		return false, err
 	}
 	filePath, err := aiVideoReplicaMP4Path(status)
@@ -889,7 +952,7 @@ func (s *Studio) PullAIVideoReplicaResult(id string) (bool, error) {
 					switch stringValue(result["status"]) {
 					case "succeeded":
 						if rawURL := stringValue(result["url"]); rawURL != "" {
-							if err = s.downloadAIVideo(id, user.ID, rawURL); err == nil {
+							if err = s.downloadAIVideo(id, user.ID, rawURL, timing); err == nil {
 								return true, nil
 							}
 						}
@@ -928,7 +991,7 @@ func (s *Studio) PullAIVideoReplicaResult(id string) (bool, error) {
 	if fileResult.URL == "" {
 		return false, errors.New("远程未返回结果文件地址")
 	}
-	if err = s.downloadAIVideo(id, user.ID, fileResult.URL); err != nil {
+	if err = s.downloadAIVideo(id, user.ID, fileResult.URL, timing); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -1052,7 +1115,7 @@ func (s *Studio) uploadSkill2APIMedia(userID, baseURL, localPath string) (string
 	return baseURL + "/upload/" + key[:2] + "/" + key[2:4] + "/" + key + "." + ext, nil
 }
 
-func (s *Studio) downloadAIVideo(id, userID, rawURL string) error {
+func (s *Studio) downloadAIVideo(id, userID, rawURL string, timing aiVideoReplicaTiming) error {
 	config := s.huabotConfig()
 	downloadURL := rawURL
 	if strings.HasPrefix(rawURL, "/") {
@@ -1064,7 +1127,8 @@ func (s *Studio) downloadAIVideo(id, userID, rawURL string) error {
 			return errors.New("Skill2API 下载地址无效")
 		}
 	}
-	path := filepath.ToSlash(filepath.Join("generated", "video-replica", id+".mp4"))
+	versionID := newID("video-version")
+	path := filepath.ToSlash(filepath.Join("generated", "video-replica", id, versionID+".mp4"))
 	full, err := s.generatedAssetOutputPath(path)
 	if err != nil {
 		return err
@@ -1103,11 +1167,13 @@ func (s *Studio) downloadAIVideo(id, userID, rawURL string) error {
 		log.Printf("video replica %s: preview generation failed: %v", id, previewErr)
 	}
 	return s.writeTransaction(func(tx *sql.Tx) error {
-		_, e := tx.Exec("insert into video_replica_versions(id,job_id,source_version_id,file_path,created_at) values(?,?,?,?,?)", newID("video-version"), id, nil, path, time.Now().Unix())
+		var previous sql.NullString
+		_ = tx.QueryRow("select id from video_replica_versions where job_id=? order by created_at desc,id desc limit 1", id).Scan(&previous)
+		_, e := tx.Exec("insert into video_replica_versions(id,job_id,source_version_id,file_path,generation_started_at,completed_at,generation_duration_seconds,created_at) values(?,?,?,?,?,?,?,?)", versionID, id, nullableString(previous), path, timing.startedAt, timing.completedAt, timing.completedAt-timing.startedAt, time.Now().Unix())
 		if e != nil {
 			return e
 		}
-		_, e = tx.Exec("update video_replica_jobs set status='ready',file_path=? where id=? and status <> 'terminated'", path, id)
+		_, e = tx.Exec("update video_replica_jobs set status='ready',file_path=?,generation_started_at=?,completed_at=? where id=? and status <> 'terminated'", path, timing.startedAt, timing.completedAt, id)
 		return e
 	})
 }

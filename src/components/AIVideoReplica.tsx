@@ -217,7 +217,7 @@ export function AIVideoReplica() {
     return () => window.clearInterval(timer);
   }, [jobs.map((job) => `${job.id}:${job.status}`).join("|")]);
   useEffect(() => {
-    if (selected?.skill2api_request_id) void refreshTask(selected.id);
+    if (selected?.skill2api_request_id) void refreshTask(selected.id, true);
   }, [selected?.id]);
   useEffect(() => {
     if (!logsOpen) return;
@@ -231,7 +231,7 @@ export function AIVideoReplica() {
       documentElement.style.overflow = rootOverflow;
     };
   }, [logsOpen]);
-  async function refreshTask(id: string) {
+  async function refreshTask(id: string, silent = false) {
     try {
       const remote = await client.refreshAIVideoReplica(id);
       const update = (job: VideoReplicaJob) =>
@@ -245,7 +245,8 @@ export function AIVideoReplica() {
       setSelected((current) => (current ? update(current) : current));
       setJobs((items) => items.map(update));
     } catch (reason) {
-      setError(operationError(reason, "远程记录已过期或不可用"));
+      if (!silent)
+        setError(operationError(reason, "远程记录已过期或不可用"));
     }
   }
   async function uploadVideo(file: File) {
@@ -1157,6 +1158,17 @@ export function AIVideoReplica() {
                   <small>商品参考图</small>
                   <b>{p.replaceReady ? "已添加" : "未添加"}</b>
                 </span>
+                {p.selected?.versions[0]?.generation_duration_seconds !==
+                  null &&
+                  p.selected?.versions[0]?.generation_duration_seconds !==
+                    undefined && (
+                    <span>
+                      <small>本版本生成耗时</small>
+                      <b>
+                        {p.selected.versions[0].generation_duration_seconds} 秒
+                      </b>
+                    </span>
+                  )}
               </>
             }
             actions={
@@ -1234,7 +1246,6 @@ export function AIVideoReplica() {
             jobs={p.jobs}
             tab="ai-video-replica"
             selectedID={p.selected?.id}
-            disabled={controls.draftLocked}
             empty={
               <div className="video-history-empty">
                 还没有 AI 复刻作品，完成一次生成后会自动保存在这里。

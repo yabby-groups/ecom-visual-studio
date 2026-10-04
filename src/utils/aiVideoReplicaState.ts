@@ -62,7 +62,9 @@ export function aiVideoReplicaControls({
     draftLocked,
     canAnswer: waitingForInput && hasRequest && !taskOperation,
     canResume:
-      (status === "interrupted" || status === "terminated") &&
+      (status === "interrupted" ||
+        status === "terminated" ||
+        status === "ready") &&
       hasRequest &&
       !taskOperation,
     canTerminate:
