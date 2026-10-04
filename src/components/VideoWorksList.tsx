@@ -22,6 +22,7 @@ type VideoWorksTab = Extract<
 type Props = {
   jobs: VideoReplicaJob[];
   tab: VideoWorksTab;
+  limit?: number;
   disabled?: boolean;
   empty: ReactNode;
   onSelect: (job: VideoReplicaJob) => void;
@@ -35,13 +36,14 @@ type Props = {
 export function VideoWorksList({
   jobs,
   tab,
+  limit,
   disabled = false,
   empty,
   onSelect,
   renderActions,
   management,
 }: Props) {
-  const works = filterVideoWorks(jobs, tab);
+  const works = filterVideoWorks(jobs, tab).slice(0, limit);
   const type = tab === "ai-video-replica" ? "AI 复刻视频" : "普通复刻视频";
   const [preview, setPreview] = useState<VideoReplicaJob | null>(null);
   const [renaming, setRenaming] = useState<LibraryRename | null>(null);
@@ -78,7 +80,8 @@ export function VideoWorksList({
         <div className="art-grid library-art-grid">
           {works.map((job) => {
             const title = job.title || job.model;
-            const latestGenerationDuration = job.versions[0]?.generation_duration_seconds;
+            const latestGenerationDuration =
+              job.versions[0]?.generation_duration_seconds;
             const durationDetail = `${statusText(job.status)} · 视频时长 ${job.duration} 秒${latestGenerationDuration != null ? ` · 生成耗时 ${latestGenerationDuration} 秒` : ""}`;
             return (
               <LibraryWorkCard
@@ -92,10 +95,10 @@ export function VideoWorksList({
                   kind: "video",
                   title,
                   detail: `${type} · ${durationDetail}`,
-            path: job.status === "ready" ? job.file_path : null,
-            editPath: "",
-            duration: job.duration,
-            versions: job.versions,
+                  path: job.status === "ready" ? job.file_path : null,
+                  editPath: "",
+                  duration: job.duration,
+                  versions: job.versions,
                 }}
                 onPreview={() => !disabled && setPreview(job)}
               >

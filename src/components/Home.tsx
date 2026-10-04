@@ -5,8 +5,8 @@ import { useAppStore } from "../store";
 import { useAiInteraction } from "../aiInteraction";
 import type { LatestCreation } from "../types";
 import { fileUrl } from "../utils/assets";
-import { ProjectCard } from "./ProjectCard";
 import { Shell } from "./Shell";
+import { WorksLibraryView } from "./WorksLibraryView";
 import "./Home.css";
 
 export function Home() {
@@ -141,31 +141,11 @@ export function Home() {
               <span className="eyebrow">最近作品</span>
               <h2>继续上次的创作</h2>
             </div>
-            {projects.length > 0 && (
-              <Link className="text-link" to="/library">
-                查看作品库
-              </Link>
-            )}
+            <Link className="text-link" to="/library">
+              查看作品库
+            </Link>
           </div>
-          {projects.length ? (
-            <div className="project-grid">
-              {projects.slice(0, 6).map((project) => (
-                <ProjectCard project={project} key={project.id} />
-              ))}
-            </div>
-          ) : (
-            <div className="first-empty empty-state">
-              <div>+</div>
-              <h3>还没有项目</h3>
-              <p>创建项目后，可在这里继续编辑和生成画面。</p>
-              <button
-                className="create-button"
-                onClick={() => navigate("/new")}
-              >
-                创建项目
-              </button>
-            </div>
-          )}
+          <WorksLibraryView limit={4} />
         </section>
       </div>
     </Shell>
