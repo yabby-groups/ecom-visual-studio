@@ -56,30 +56,6 @@
   height: 100%;
   background: var(--surface-muted);
 }
-.avatar-chip {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  padding: 4px 6px;
-  font-size: 12px;
-}
-.avatar-chip img,
-.avatar-chip > span {
-  width: 26px;
-  height: 26px;
-  object-fit: cover;
-  background: var(--panel);
-}
-.avatar-chip button {
-  display: grid;
-  place-items: center;
-  border: 0;
-  background: transparent;
-  color: var(--muted);
-  padding: 3px;
-}
 .avatar-dialog-backdrop {
   position: fixed;
   inset: 0;
@@ -415,8 +391,7 @@
 }
 .avatar-tabs button:focus-visible,
 .avatar-back:focus-visible,
-.avatar-card-main:focus-visible,
-.avatar-chip button:focus-visible {
+.avatar-card-main:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }

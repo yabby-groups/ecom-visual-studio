@@ -759,7 +759,6 @@ export function VideoReplica() {
           <VideoWorksList
             jobs={jobs}
             tab="video-replica"
-            selectedID={selected?.id}
             empty={
               <div className="video-history-empty">
                 还没有视频作品，完成一次生成后会自动保存在这里。

@@ -88,7 +88,6 @@ export const client = {
       templateId,
       overwrite,
     ),
-  resetPrompt: (id: string) => call<{ prompt: string }>("ResetPrompt", id),
   downloadAsset: (path: string) => call<boolean>("DownloadAsset", path),
   generateAsset: (id: string) => call("GenerateAsset", id),
   generatePack: (id: string) => call<{ queued: number }>("GeneratePack", id),
@@ -152,12 +151,6 @@ export const client = {
       mode,
       prompt,
     ),
-  updateVideoReplicaStoryboard: (
-    id: string,
-    storyboard: VideoReplicaJob["storyboard"],
-  ) => call("UpdateVideoReplicaStoryboard", id, storyboard),
-  confirmVideoReplicaStoryboard: (id: string) =>
-    call("ConfirmVideoReplicaStoryboard", id),
   videoReplicaJobs: (limit = 12, offset = 0) =>
     call<VideoReplicaPage>("VideoReplicaJobs", limit, offset),
   prepareVideoReplicaPreview: (id: string) =>

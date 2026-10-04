@@ -38,10 +38,6 @@ export function ChooseStorageDirectory() {
   return window['go']['main']['Studio']['ChooseStorageDirectory']();
 }
 
-export function ConfirmVideoReplicaStoryboard(arg1) {
-  return window['go']['main']['Studio']['ConfirmVideoReplicaStoryboard'](arg1);
-}
-
 export function CreateAIVideoReplica(arg1) {
   return window['go']['main']['Studio']['CreateAIVideoReplica'](arg1);
 }
@@ -170,10 +166,6 @@ export function RegenerateVideoReplica(arg1) {
   return window['go']['main']['Studio']['RegenerateVideoReplica'](arg1);
 }
 
-export function ResetPrompt(arg1) {
-  return window['go']['main']['Studio']['ResetPrompt'](arg1);
-}
-
 export function ResumeAIVideoReplica(arg1, arg2, arg3) {
   return window['go']['main']['Studio']['ResumeAIVideoReplica'](arg1, arg2, arg3);
 }
@@ -224,10 +216,6 @@ export function UpdateAsset(arg1, arg2) {
 
 export function UpdateTemplate(arg1, arg2) {
   return window['go']['main']['Studio']['UpdateTemplate'](arg1, arg2);
-}
-
-export function UpdateVideoReplicaStoryboard(arg1, arg2) {
-  return window['go']['main']['Studio']['UpdateVideoReplicaStoryboard'](arg1, arg2);
 }
 
 export function UpdateWorkTitle(arg1) {

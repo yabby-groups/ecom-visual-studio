@@ -97,8 +97,7 @@ a {
   background: #fff;
   color: var(--muted);
 }
-.icon-button.destructive,
-.destructive-link {
+.icon-button.destructive {
   color: #b42318;
 }
 .eyebrow {
@@ -108,10 +107,6 @@ a {
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 1.4px;
-}
-.muted,
-.page-lead {
-  color: var(--muted);
 }
 .text-link {
   display: inline-flex;
@@ -124,14 +119,9 @@ a {
 .text-link:hover {
   color: var(--accent-dark);
 }
-.rotate-180 {
-  transform: rotate(180deg);
-}
 .form-stack label,
-.create-form label,
 .controls label,
-.settings-form label,
-.modal label {
+.settings-form label {
   display: grid;
   gap: 7px;
   color: #344347;
@@ -170,14 +160,8 @@ select:focus {
   font-size: 20px;
   line-height: 1.2;
 }
-.page-lead {
-  max-width: 620px;
-  margin: -17px 0 28px;
-  line-height: 1.7;
-}
 .studio-hero h1,
-.studio-hero h2,
-.create-intro h2 {
+.studio-hero h2 {
   margin: 0;
   font-size: 46px;
   line-height: 1.13;
@@ -192,27 +176,6 @@ select:focus {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 13px;
-}
-.span-full {
-  grid-column: 1 / -1;
-}
-.template-chip {
-  display: inline-flex !important;
-  align-items: center;
-  border: 1px solid var(--line);
-  border-radius: 20px;
-  padding: 6px 8px;
-  color: var(--muted) !important;
-  font-size: 10px !important;
-  cursor: pointer;
-}
-.template-chip.selected {
-  border-color: var(--accent);
-  color: var(--accent-dark) !important;
-}
-.template-chip input {
-  width: auto;
-  margin: 0 5px 0 0;
 }
 .back-link {
   display: inline-flex;
@@ -233,35 +196,6 @@ select:focus {
 .page {
   max-width: 1560px;
   padding: 0 34px 44px;
-}
-.destructive-link {
-  margin-top: auto;
-}
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 20;
-  display: grid;
-  place-items: center;
-  padding: 20px;
-  background: #17222980;
-}
-.modal {
-  width: min(500px, 100%);
-  display: grid;
-  gap: 16px;
-  padding: 25px;
-  border-radius: 7px;
-  background: #fff;
-  box-shadow: 0 20px 25px #0004;
-}
-.modal header {
-  display: flex;
-  justify-content: space-between;
-}
-.modal h2 {
-  margin: 0;
-  font-size: 28px;
 }
 .loading-page,
 .boot {
@@ -297,9 +231,6 @@ select:focus {
   }
   .controls label:last-child {
     grid-column: span 2;
-  }
-  .template-grid {
-    grid-template-columns: repeat(2, 1fr);
   }
 }
 @media (max-width: 720px) {
@@ -358,8 +289,7 @@ select:focus {
     padding: 40px 16px 32px;
   }
   .studio-hero h1,
-  .studio-hero h2,
-  .create-intro h2 {
+  .studio-hero h2 {
     font-size: 35px;
   }
   .hero-visual {
@@ -382,15 +312,6 @@ select:focus {
   }
   .workspace-header > .button {
     grid-column: 2;
-  }
-  .create-layout {
-    grid-template-columns: 1fr;
-    gap: 28px;
-    padding: 32px 16px;
-  }
-  .form-step {
-    grid-template-columns: 32px 1fr;
-    gap: 9px;
   }
   .page {
     padding-right: 16px;
@@ -437,14 +358,9 @@ select:focus {
   .controls label:last-child {
     grid-column: 1 / -1;
   }
-  .library-grid,
-  .template-grid,
   .settings-form {
     margin-right: 16px;
     margin-left: 16px;
-  }
-  .chat-fab {
-    display: none;
   }
   .chat-panel {
     right: 15px;
@@ -486,13 +402,11 @@ select:focus {
 }
 :root[data-theme="light"] .topbar,
 :root[data-theme="light"] .shortcut-card,
-:root[data-theme="light"] .template-card,
 :root[data-theme="light"] .project-preview,
 :root[data-theme="light"] .library-art-grid .project-preview {
   background: #fff;
 }
 :root[data-theme="light"] .library-heading h1,
-:root[data-theme="light"] .library-empty b,
 :root[data-theme="light"] .settings-intro h1,
 :root[data-theme="light"] .settings-card h2,
 :root[data-theme="light"] .settings-form label,
@@ -501,7 +415,6 @@ select:focus {
   color: var(--ink);
 }
 :root[data-theme="light"] .library-heading p:last-child,
-:root[data-theme="light"] .library-empty,
 :root[data-theme="light"] .settings-intro p,
 :root[data-theme="light"] .settings-card p,
 :root[data-theme="light"] .creation-form .pack-composer-head small,
@@ -517,7 +430,6 @@ select:focus {
   background: var(--soft);
   color: var(--accent-dark);
 }
-:root[data-theme="light"] .library-empty,
 :root[data-theme="light"] .settings-card {
   border-color: var(--line);
   background: #fff;
@@ -613,7 +525,6 @@ select:focus {
   .goal-grid,
   .form-grid,
   .reference-picker,
-  .template-grid,
   .two-col {
     grid-template-columns: 1fr;
   }
@@ -624,13 +535,10 @@ select:focus {
   .shortcut-card {
     min-height: 120px;
   }
-  .create-footer,
-  .custom-scenes,
   .creation-footer {
     align-items: stretch;
     flex-direction: column;
   }
-  .form-step,
   .creation-form .step {
     grid-template-columns: 1fr;
   }
@@ -852,9 +760,6 @@ button:active {
   }
   .library-heading h1 {
     font-size: 36px;
-  }
-  .filter-row {
-    overflow: auto;
   }
   .filter {
     white-space: nowrap;
@@ -1133,8 +1038,6 @@ button:active {
 :root[data-theme="light"]
   main
   :is(
-    .muted,
-    .page-lead,
     .settings-card p,
     .settings-intro p,
     .library-heading p:last-child,
@@ -1334,9 +1237,7 @@ button:active {
 :root[data-theme="light"]
   :is(
     .shortcut-card,
-    .template-card,
     .project-preview,
-    .library-empty,
     .settings-card,
     .creation-form .step
   ) {
@@ -1346,7 +1247,7 @@ button:active {
 }
 
 :root[data-theme="light"]
-  :is(.shortcut-card:hover, .template-card:hover, .project-card:hover) {
+  :is(.shortcut-card:hover, .project-card:hover) {
   border-color: #c7a76d;
   background: #fff8eb;
 }
@@ -2074,12 +1975,12 @@ button:active {
   color: var(--ink);
 }
 
-:root[data-theme="light"] :is(.template-tile i, .template-card > span) {
+:root[data-theme="light"] :is(.template-tile i) {
   color: var(--accent-text);
 }
 
 :root[data-theme="light"]
-  :is(.template-tile small, .template-tile span, .template-card p) {
+  :is(.template-tile small, .template-tile span) {
   color: var(--muted);
 }
 
@@ -2161,15 +2062,4 @@ button:active {
   border-color: var(--accent);
   background: var(--soft);
   box-shadow: 0 0 0 3px rgba(164, 100, 22, 0.1);
-}
-
-:root[data-theme="light"] .creation-form .analysis-row,
-:root[data-theme="light"] .creation-form .analysis-row .button {
-  border-color: #d6bb86;
-  background: var(--warning-soft);
-  color: var(--ink);
-}
-
-:root[data-theme="light"] .creation-form .analysis-row > span {
-  color: var(--muted);
 }

@@ -214,7 +214,6 @@ export type VideoReplicaJob = {
   model: string;
   prompt: string;
   storyboard: VideoReplicaStoryboardItem[];
-  storyboard_confirmed: boolean;
   duration: number;
   resolution: string;
   ratio: string;

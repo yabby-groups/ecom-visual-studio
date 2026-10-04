@@ -406,28 +406,6 @@ func TestCreatePackMatchesPythonPackageConstruction(t *testing.T) {
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("CreatePack() assets = %#v, want %#v", got, want)
 	}
-	var h4ID string
-	if err := db.QueryRow("select id from assets where project_id=? and template='multi-angle-grid'", "project-1").Scan(&h4ID); err != nil {
-		t.Fatal(err)
-	}
-	reset, err := studio.ResetPrompt(h4ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(reset["prompt"], "Art direction: An orderly product grid showing useful angles and silhouette.") {
-		t.Fatalf("ResetPrompt() H4 prompt = %q", reset["prompt"])
-	}
-	var customID string
-	if err := db.QueryRow("select id from assets where project_id=? and template='scene-1'", "project-1").Scan(&customID); err != nil {
-		t.Fatal(err)
-	}
-	customReset, err := studio.ResetPrompt(customID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(customReset["prompt"], "Art direction: Custom direction.") {
-		t.Fatalf("ResetPrompt() custom prompt = %q", customReset["prompt"])
-	}
 	if _, err := studio.CreatePack("project-1", PackInput{Kind: "amazon", TemplateID: "scene-1", SceneTemplateIDs: []string{"scene-1"}}); err != nil {
 		t.Fatal(err)
 	}

@@ -149,7 +149,7 @@ func (s *Studio) CreateAIVideoReplica(input AIVideoReplicaInput) (map[string]str
 	refs, _ := json.Marshal(productPaths)
 	avatarAssets, _ := json.Marshal(input.AvatarAssets)
 	if err = s.writeTransaction(func(tx *sql.Tx) error {
-		_, e := tx.Exec("insert into video_replica_jobs(id,user_id,source_video_path,reference_paths,product_reference_path,task_type,model,prompt,storyboard,storyboard_confirmed,duration,resolution,ratio,status,current_run_id,created_at,ai_budget,avatar_assets) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", id, localWorkspaceID, input.SourceVideoPath, string(refs), input.ProductPath, "ai_replica", input.Model, input.Prompt, "[]", 1, int(math.Ceil(seconds)), input.Resolution, input.Ratio, "queued", "", time.Now().Unix(), input.Budget, string(avatarAssets))
+		_, e := tx.Exec("insert into video_replica_jobs(id,user_id,source_video_path,reference_paths,product_reference_path,task_type,model,prompt,storyboard,duration,resolution,ratio,status,current_run_id,created_at,ai_budget,avatar_assets) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", id, localWorkspaceID, input.SourceVideoPath, string(refs), input.ProductPath, "ai_replica", input.Model, input.Prompt, "[]", int(math.Ceil(seconds)), input.Resolution, input.Ratio, "queued", "", time.Now().Unix(), input.Budget, string(avatarAssets))
 		return e
 	}); err != nil {
 		return nil, err

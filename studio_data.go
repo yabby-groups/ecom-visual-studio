@@ -437,39 +437,6 @@ func (s *Studio) AddAsset(projectID, templateID string) (map[string]string, erro
 	return map[string]string{"id": id}, nil
 }
 
-func (s *Studio) ResetPrompt(id string) (map[string]string, error) {
-	var projectID, title, template string
-	err := s.db.QueryRow("select a.project_id,a.title,a.template from assets a join projects p on p.id=a.project_id where a.id=?", id).Scan(&projectID, &title, &template)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, errors.New("画面不存在")
-	}
-	if err != nil {
-		return nil, err
-	}
-	project, err := s.localProject(projectID)
-	if err != nil {
-		return nil, err
-	}
-	direction := ""
-	templates, err := s.Templates()
-	if err != nil {
-		return nil, err
-	}
-	for _, item := range templates {
-		if item["id"] == template {
-			direction = item["direction"].(string)
-		}
-	}
-	if direction == "" {
-		return nil, errors.New("模板已删除，无法重置提示词")
-	}
-	prompt := makePrompt(project, title, direction)
-	_, err = s.execDataWrite("update assets set prompt=? where id=?", prompt, id)
-	if err != nil {
-		return nil, err
-	}
-	return map[string]string{"prompt": prompt}, nil
-}
 func makePrompt(project map[string]any, title, direction string) string {
 	return fmt.Sprintf("E-commerce commercial image. Purpose: %s. Art direction: %s. Product: %v. Description: %v. Benefits: %v. Campaign Style Lock: brand accent %v, premium commercial lighting, clean composition and conversion focus. Preserve exact product identity from the supplied reference. Leave intentional whitespace. No watermark, unrelated products, fake logo or unreadable extra text.", title, direction, project["product"], project["description"], project["benefits"], project["color"])
 }

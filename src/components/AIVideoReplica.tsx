@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { createPortal } from "react-dom";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useLocation, useParams } from "react-router-dom";
 import type { AvatarAssetSelection, VideoReplicaJob } from "../types";
 import {
   fileUrl,
@@ -51,7 +51,6 @@ type Props = {
   scriptReady: boolean;
   busy: string;
   videoReadProgress: number | null;
-  sourceDuration: number | null;
   productReferencePaths: string[];
   avatarAssets: AvatarAssetSelection[];
   prompt: string;
@@ -61,10 +60,8 @@ type Props = {
   resolution: string;
   review: Review | null;
   selected: VideoReplicaJob | null;
-  displayed: string;
   error: string;
   jobs: VideoReplicaJob[];
-  openReplica: () => void;
   setPrompt: Dispatch<SetStateAction<string>>;
   setReview: Dispatch<SetStateAction<Review | null>>;
   setBudget: Dispatch<SetStateAction<number>>;
@@ -81,7 +78,6 @@ type Props = {
   regenerate: (id: string) => void;
   exportVideo: (path: string) => void;
   selectJob: (job: VideoReplicaJob) => void;
-  refreshTask: (id: string) => Promise<void>;
   resumeTask: (
     id: string,
     answer: string,
@@ -98,7 +94,6 @@ type Props = {
 
 export function AIVideoReplica() {
   const location = useLocation();
-  const navigate = useNavigate();
   const { id: routeJobID } = useParams<{ id: string }>();
   const requireAiAuth = useRequireAiAuth();
   const [sourcePath, setSourcePath] = useState("");
@@ -110,7 +105,6 @@ export function AIVideoReplica() {
   const [aiModel, setAiModel] = useState("qwen3.8-flash");
   const [ratio, setRatio] = useState("16:9");
   const [resolution, setResolution] = useState("480p");
-  const [sourceDuration, setSourceDuration] = useState<number | null>(null);
   const [jobs, setJobs] = useState<VideoReplicaJob[]>([]);
   const [selected, setSelected] = useState<VideoReplicaJob | null>(null);
   const [busy, setBusy] = useState("");
@@ -174,7 +168,6 @@ export function AIVideoReplica() {
     setAiModel(job.model);
     setRatio(job.ratio);
     setResolution(job.resolution);
-    setSourceDuration(job.duration || null);
     setReview(null);
   }
   function clearDeletedJob(job: VideoReplicaJob) {
@@ -252,7 +245,6 @@ export function AIVideoReplica() {
   async function uploadVideo(file: File) {
     setBusy("upload");
     setVideoReadProgress(0);
-    setSourceDuration(null);
     setError("");
     try {
       const buffer = await new Promise<ArrayBuffer>((resolve, reject) => {
@@ -275,7 +267,6 @@ export function AIVideoReplica() {
       );
       setSourcePath(result.path);
       setSourcePreview(fileUrl(result.path));
-      setSourceDuration(Number(result.duration_seconds));
     } catch (reason) {
       setError(operationError(reason, "添加视频失败"));
     } finally {
@@ -466,7 +457,6 @@ export function AIVideoReplica() {
     scriptReady: Boolean(prompt.trim()),
     busy,
     videoReadProgress,
-    sourceDuration,
     productReferencePaths: referencePaths,
     avatarAssets,
     prompt,
@@ -476,12 +466,8 @@ export function AIVideoReplica() {
     resolution,
     review,
     selected,
-    displayed: selected?.file_path
-      ? `${fileUrl(selected.file_path)}?refresh=${mediaRefreshToken}`
-      : "",
     error,
     jobs,
-    openReplica: () => navigate("/video-replica"),
     setPrompt,
     setReview,
     setBudget,
@@ -498,7 +484,6 @@ export function AIVideoReplica() {
     regenerate,
     exportVideo,
     selectJob,
-    refreshTask,
     resumeTask,
     terminateTask,
     pullResult,
@@ -1249,7 +1234,6 @@ export function AIVideoReplica() {
           <VideoWorksList
             jobs={p.jobs}
             tab="ai-video-replica"
-            selectedID={p.selected?.id}
             empty={
               <div className="video-history-empty">
                 还没有 AI 复刻作品，完成一次生成后会自动保存在这里。

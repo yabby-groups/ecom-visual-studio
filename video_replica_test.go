@@ -32,10 +32,52 @@ func newAIVideoReplicaTestStudio(t *testing.T) *Studio {
 func insertAIVideoReplicaTestJob(t *testing.T, studio *Studio, id, status, requestID string) {
 	t.Helper()
 	_, err := studio.db.Exec(`insert into video_replica_jobs
-		(id,user_id,source_video_path,reference_paths,product_reference_path,task_type,model,prompt,storyboard,storyboard_confirmed,duration,resolution,ratio,status,created_at,skill2api_request_id)
-		values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, id, localWorkspaceID, "uploads/source.mp4", "[]", "uploads/product.png", "ai_replica", "qwen3.8-flash", "replace", "[]", 1, 0, "480p", "9:16", status, time.Now().Unix(), requestID)
+		(id,user_id,source_video_path,reference_paths,product_reference_path,task_type,model,prompt,storyboard,duration,resolution,ratio,status,created_at,skill2api_request_id)
+		values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, id, localWorkspaceID, "uploads/source.mp4", "[]", "uploads/product.png", "ai_replica", "qwen3.8-flash", "replace", "[]", 0, "480p", "9:16", status, time.Now().Unix(), requestID)
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestMigrateDropsStoryboardConfirmedWithoutLosingVideoJobs(t *testing.T) {
+	studio := newAIVideoReplicaTestStudio(t)
+	if _, err := studio.db.Exec("alter table video_replica_jobs add column storyboard_confirmed integer not null default 0"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := studio.db.Exec(`insert into video_replica_jobs
+		(id,user_id,source_video_path,task_type,model,duration,resolution,ratio,status,created_at)
+		values(?,?,?,?,?,?,?,?,?,?)`, "job-migrate-storyboard", localWorkspaceID, "uploads/source.mp4", "reference", "seedance-2.5", 30, "480p", "16:9", "ready", 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := studio.migrate(); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := studio.db.Query("pragma table_info(video_replica_jobs)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid int
+		var name, columnType string
+		var notNull, primaryKey int
+		var defaultValue any
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+			t.Fatal(err)
+		}
+		if name == "storyboard_confirmed" {
+			t.Fatal("obsolete storyboard_confirmed column still exists")
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	var status string
+	if err := studio.db.QueryRow("select status from video_replica_jobs where id=?", "job-migrate-storyboard").Scan(&status); err != nil {
+		t.Fatal(err)
+	}
+	if status != "ready" {
+		t.Fatalf("job status = %q, want ready", status)
 	}
 }
 

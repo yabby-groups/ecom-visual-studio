@@ -5,9 +5,6 @@
   padding: 24px;
   background: #090d20;
 }
-.auth-art {
-  display: none;
-}
 .auth-panel {
   width: min(440px, 100%);
   padding: 32px;

@@ -13,7 +13,6 @@ import {
   WorkRenameDialog,
   type LibraryRename,
 } from "./WorksLibrary";
-import "./VideoWorksList.css";
 
 type VideoWorksTab = Extract<
   LibraryTabID,
@@ -23,7 +22,6 @@ type VideoWorksTab = Extract<
 type Props = {
   jobs: VideoReplicaJob[];
   tab: VideoWorksTab;
-  selectedID?: string;
   disabled?: boolean;
   empty: ReactNode;
   onSelect: (job: VideoReplicaJob) => void;

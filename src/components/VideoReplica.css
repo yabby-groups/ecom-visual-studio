@@ -1,32 +1,3 @@
-.video-mode-switch {
-  display: inline-flex;
-  gap: 4px;
-  width: fit-content;
-  padding: 4px;
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  background: var(--surface);
-}
-.video-mode-switch button {
-  min-height: 34px;
-  padding: 7px 14px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-}
-.video-mode-switch button:hover,
-.video-mode-switch button:focus-visible {
-  color: var(--ink);
-  background: var(--soft);
-}
-.video-mode-switch button.active {
-  background: var(--accent);
-  color: var(--accent-contrast, #fff);
-}
 .reference-row {
   display: grid;
   gap: 9px;

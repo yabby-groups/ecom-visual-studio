@@ -20,8 +20,6 @@ export function Chat(arg1:string,arg2:Array<Record<string, string>>,arg3:Record<
 
 export function ChooseStorageDirectory():Promise<Record<string, any>>;
 
-export function ConfirmVideoReplicaStoryboard(arg1:string):Promise<Record<string, boolean>>;
-
 export function CreateAIVideoReplica(arg1:main.AIVideoReplicaInput):Promise<Record<string, string>>;
 
 export function CreatePack(arg1:string,arg2:main.PackInput):Promise<Record<string, boolean>>;
@@ -86,8 +84,6 @@ export function RegenerateTryOn(arg1:string):Promise<Record<string, boolean>>;
 
 export function RegenerateVideoReplica(arg1:string):Promise<Record<string, boolean>>;
 
-export function ResetPrompt(arg1:string):Promise<Record<string, string>>;
-
 export function ResumeAIVideoReplica(arg1:string,arg2:string,arg3:string):Promise<Record<string, any>>;
 
 export function ReviewVideoReplicaPrompt(arg1:string,arg2:string):Promise<Record<string, any>>;
@@ -113,8 +109,6 @@ export function TryOnJobs(arg1:number,arg2:number):Promise<Record<string, any>>;
 export function UpdateAsset(arg1:string,arg2:main.AssetPatch):Promise<Record<string, boolean>>;
 
 export function UpdateTemplate(arg1:string,arg2:main.TemplateInput):Promise<Record<string, boolean>>;
-
-export function UpdateVideoReplicaStoryboard(arg1:string,arg2:Array<Record<string, any>>):Promise<Record<string, boolean>>;
 
 export function UpdateWorkTitle(arg1:main.workTitleInput):Promise<Record<string, string>>;
 
