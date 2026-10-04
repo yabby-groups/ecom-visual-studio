@@ -949,9 +949,41 @@ func TestNormalizeVideoReplicaStoryboardFillsMissingEndTimes(t *testing.T) {
 func TestNormalizeVideoReplicaStoryboardRejectsInvalidEndTime(t *testing.T) {
 	_, err := normalizeVideoReplicaStoryboard([]any{
 		map[string]any{"start": float64(8), "end": float64(8)},
+		map[string]any{"start": float64(8), "end": float64(12)},
 	}, 20)
 	if err == nil || !strings.Contains(err.Error(), "结束时间无效") {
 		t.Fatalf("error = %v, want invalid end time", err)
+	}
+}
+
+func TestNormalizeVideoReplicaStoryboardReplacesInvalidEndTimes(t *testing.T) {
+	storyboard, err := normalizeVideoReplicaStoryboard([]any{
+		map[string]any{"start": float64(0), "end": float64(5)},
+		map[string]any{"start": float64(5), "end": float64(5)},
+		map[string]any{"start": float64(10), "end": float64(15)},
+	}, 15)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := storyboard[1]["end"]; got != float64(10) {
+		t.Fatalf("second shot end = %v, want 10", got)
+	}
+}
+
+func TestNormalizeVideoReplicaStoryboardClampsInvalidFinalShotEnd(t *testing.T) {
+	storyboard, err := normalizeVideoReplicaStoryboard([]any{
+		map[string]any{"start": float64(0), "end": float64(5)},
+		map[string]any{"start": float64(5), "end": float64(10)},
+		map[string]any{"start": float64(10), "end": float64(15)},
+		map[string]any{"start": float64(15), "end": float64(20)},
+		map[string]any{"start": float64(20), "end": float64(25)},
+		map[string]any{"start": float64(25), "end": float64(32)},
+	}, 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := storyboard[5]["end"]; got != float64(30) {
+		t.Fatalf("sixth shot end = %v, want 30", got)
 	}
 }
 

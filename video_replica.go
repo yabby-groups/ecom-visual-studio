@@ -72,7 +72,6 @@ var seedanceMaxDuration = map[string]int{
 	"seedance-2.5": 30,
 }
 
-const videoDurationTolerance = 0.5
 const maxVideoReplicaReviewPromptRunes = 2000
 
 func segmentVideo(duration, maxDuration int, storyboard []map[string]any, prompt string) ([]videoSegmentPlan, error) {
@@ -143,14 +142,14 @@ func normalizeVideoReplicaStoryboard(raw []any, duration float64) ([]map[string]
 		}
 	}
 	for index := range storyboard {
-		if !hasEnd[index] {
+		if !hasEnd[index] || ends[index] <= starts[index] || ends[index] > duration {
 			if index+1 < len(storyboard) {
 				ends[index] = starts[index+1]
 			} else {
 				ends[index] = duration
 			}
 		}
-		if ends[index] <= starts[index] || ends[index] > duration+videoDurationTolerance {
+		if ends[index] <= starts[index] || ends[index] > duration {
 			return nil, fmt.Errorf("视频分析结果第 %d 个分镜结束时间无效", index+1)
 		}
 		storyboard[index]["start"] = starts[index]
