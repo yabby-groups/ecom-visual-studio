@@ -29,7 +29,10 @@ export type LibraryPreview = {
   versions?: VideoReplicaVersion[];
 };
 
-function formatHumanDuration(seconds: number) {
+function formatHumanDuration(seconds: number | null) {
+  if (seconds === null) {
+    return "未知";
+  }
   const rounded = Math.max(0, Math.round(seconds));
   if (rounded < 60) return `${rounded} 秒`;
   const minutes = Math.floor(rounded / 60);
@@ -37,7 +40,10 @@ function formatHumanDuration(seconds: number) {
   return remainder ? `${minutes} 分 ${remainder} 秒` : `${minutes} 分钟`;
 }
 
-function versionGenerationDuration(version: VideoReplicaVersion) {
+function versionGenerationDuration(version?: VideoReplicaVersion) {
+  if (!version) {
+    return null;
+  }
   if (version.generation_duration_seconds != null) {
     return version.generation_duration_seconds;
   }
@@ -84,7 +90,7 @@ export function LibraryWorkCard({
           {imagePath ? <img src={fileUrl(imagePath)} alt="" /> : icon}
         </div>
         <div>
-          <span>{detail}</span>
+          <span>{formatDetailDuration(detail)}</span>
           <h3>{title}</h3>
           <p>{type}</p>
         </div>
@@ -265,6 +271,34 @@ export function WorkRenameDialog({
   );
 }
 
+function formatDetailDuration(detail: string) {
+  return detail.replace(/(\d+) 秒/g, (_match, seconds) =>
+    formatHumanDuration(Number(seconds)),
+  );
+}
+
+function getDisplayedDetail(
+  preview: LibraryPreview,
+  version?: VideoReplicaVersion,
+) {
+  version =
+    version ??
+    preview.versions?.find((version) => version.file_path === preview.path);
+
+  if (!version) {
+    return formatDetailDuration(preview.detail);
+  }
+
+  const generationDuration = versionGenerationDuration(version);
+
+  const detail = preview.detail.replace(
+    /生成耗时 \d+ 秒$/,
+    `生成耗时 ${formatHumanDuration(generationDuration)}`,
+  );
+
+  return formatDetailDuration(detail);
+}
+
 export function LibraryPreview({
   preview,
   onClose,
@@ -288,12 +322,7 @@ export function LibraryPreview({
       index,
   );
   const displayedPath = displayedVersion?.file_path ?? preview.path;
-  const displayedDetail = displayedVersion
-    ? preview.detail.replace(
-        /生成耗时 .+$/,
-        `生成耗时 ${versionGenerationDuration(displayedVersion) != null ? formatHumanDuration(versionGenerationDuration(displayedVersion)!) : "未知"}`,
-      )
-    : preview.detail;
+  const displayedDetail = getDisplayedDetail(preview, displayedVersion);
 
   useEffect(() => {
     setSelectedVersionId(null);
