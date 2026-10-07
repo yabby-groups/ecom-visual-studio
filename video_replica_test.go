@@ -372,6 +372,38 @@ func TestRefreshAIVideoReplicaDoesNotLetRemoteRunningReplaceLocalPhase(t *testin
 	}
 }
 
+func TestRefreshAIVideoReplicaAdoptsRemoteRunningAfterLocalTimeout(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/skill2api/status/" {
+			t.Fatalf("path = %q", r.URL.Path)
+		}
+		_, _ = w.Write([]byte(`{"status":"running","stdout":"still working"}`))
+	}))
+	defer server.Close()
+	t.Setenv("HUABOT_WEB_BASE_URL", server.URL)
+
+	studio := newAIVideoReplicaTestStudio(t)
+	studio.httpClient = server.Client()
+	studio.huabotBearer = "test-token"
+	studio.huabotBearerExpiry = time.Now().Add(time.Hour)
+	insertAIVideoReplicaTestJob(t, studio, "job-timeout", skill2APIGenerationTimeoutStatus, "remote-request")
+
+	result, err := studio.RefreshAIVideoReplica("job-timeout")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result["status"]; got != "generating" {
+		t.Fatalf("display status = %v, want generating", got)
+	}
+	var status string
+	if err := studio.db.QueryRow("select status from video_replica_jobs where id=?", "job-timeout").Scan(&status); err != nil {
+		t.Fatal(err)
+	}
+	if status != "generating" {
+		t.Fatalf("stored status = %q, want generating", status)
+	}
+}
+
 func TestRefreshAIVideoReplicaRefreshesBearerAfterForbidden(t *testing.T) {
 	statusRequests := 0
 	refreshes := 0

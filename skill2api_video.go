@@ -45,6 +45,13 @@ const maxAIVideoReplicaProductImages = 4
 
 const defaultAIVideoReplicaSeedanceModel = "doubao-seedance-2.0-mini"
 
+// Skill2API keeps generation requests alive for up to six hours. Keep the
+// desktop monitor aligned with that server-side limit so it does not mark a
+// still-running request as failed early.
+const skill2APIGenerationTimeout = 6 * time.Hour
+
+const skill2APIGenerationTimeoutStatus = "failed: Skill2API 生成超时"
+
 var aiVideoReplicaSeedanceModels = map[string]struct{}{
 	"doubao-seedance-2.0-mini": {},
 	"doubao-seedance-2.0":      {},
@@ -367,7 +374,7 @@ func (s *Studio) runAIVideoReplica(id, userID string, input AIVideoReplicaInput)
 			return
 		}
 	}
-	deadline := time.Now().Add(45 * time.Minute)
+	deadline := time.Now().Add(skill2APIGenerationTimeout)
 	for time.Now().Before(deadline) {
 		if isTerminated() {
 			return
@@ -588,6 +595,18 @@ func (s *Studio) reconcileAIVideoReplicaRemoteStatus(id string, remote map[strin
 	case "not_found":
 		desired = "not_found"
 	}
+	if desired == "" && isAIVideoReplicaRemoteActive(remoteState) {
+		// A status refresh is the explicit recovery action after the local
+		// monitor reached its deadline. It must not overwrite an earlier local
+		// preparation phase or an explicit termination.
+		if err := s.writeTransaction(func(tx *sql.Tx) error {
+			_, err := tx.Exec(`update video_replica_jobs set status='generating'
+				where id=? and task_type='ai_replica' and status=?`, id, skill2APIGenerationTimeoutStatus)
+			return err
+		}); err != nil {
+			return "", err
+		}
+	}
 	if desired != "" {
 		if err := s.writeTransaction(func(tx *sql.Tx) error {
 			_, err := tx.Exec("update video_replica_jobs set status=? where id=? and task_type='ai_replica' and status not in ('terminated','ready')", desired, id)
@@ -601,6 +620,15 @@ func (s *Studio) reconcileAIVideoReplicaRemoteStatus(id string, remote map[strin
 		return "", err
 	}
 	return localStatus, nil
+}
+
+func isAIVideoReplicaRemoteActive(state string) bool {
+	switch state {
+	case "queued", "pending", "preparing", "submitting", "prompting", "generating", "running", "processing", "in_progress", "in-progress":
+		return true
+	default:
+		return false
+	}
 }
 
 func decodeSkill2APIStatusSnapshot(raw string) map[string]any {

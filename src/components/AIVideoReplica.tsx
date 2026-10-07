@@ -88,11 +88,13 @@ type Props = {
   ) => Promise<boolean>;
   terminateTask: (id: string) => Promise<void>;
   pullResult: (id: string) => Promise<boolean>;
+  refreshRemoteStatus: (id: string) => Promise<void>;
   refreshJobs: () => Promise<void>;
   clearDeletedJob: (job: VideoReplicaJob) => void;
   pullingResult: boolean;
   terminating: boolean;
   resuming: boolean;
+  refreshingRemoteStatus: boolean;
 };
 
 export function AIVideoReplica() {
@@ -127,6 +129,7 @@ export function AIVideoReplica() {
   const [instruction, setInstruction] = useState("");
   const [logsOpen, setLogsOpen] = useState(false);
   const [logsLoading, setLogsLoading] = useState(false);
+  const [refreshingRemoteStatusID, setRefreshingRemoteStatusID] = useState("");
   const [logTab, setLogTab] = useState<"stdout" | "stderr" | "files">("stdout");
   const [fileBusy, setFileBusy] = useState("");
   const [fileError, setFileError] = useState("");
@@ -466,6 +469,15 @@ export function AIVideoReplica() {
       setLogsLoading(false);
     }
   }
+  async function refreshRemoteStatus(id: string) {
+    setRefreshingRemoteStatusID(id);
+    setError("");
+    try {
+      await refreshTask(id);
+    } finally {
+      setRefreshingRemoteStatusID("");
+    }
+  }
   const p: Props = {
     sourceReady: Boolean(sourcePath),
     sourcePreview,
@@ -505,11 +517,13 @@ export function AIVideoReplica() {
     resumeTask,
     terminateTask,
     pullResult,
+    refreshRemoteStatus,
     refreshJobs: load,
     clearDeletedJob,
     pullingResult: pullingResultID === selected?.id,
     terminating: terminatingID === selected?.id,
     resuming: resumingID === selected?.id,
+    refreshingRemoteStatus: refreshingRemoteStatusID === selected?.id,
   };
   const phases = [
     ["queued", "等待提交"],
@@ -683,6 +697,15 @@ export function AIVideoReplica() {
             </button>
           )}
         </div>
+        <button
+          className="button secondary"
+          type="button"
+          disabled={p.refreshingRemoteStatus || !controls.canOpenLogs}
+          onClick={() => void p.refreshRemoteStatus(p.selected!.id)}
+        >
+          <RefreshCw size={16} />
+          {p.refreshingRemoteStatus ? "正在刷新远端状态" : "刷新远端状态"}
+        </button>
         <button
           className="button secondary"
           type="button"
