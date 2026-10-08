@@ -310,7 +310,10 @@ func (s *Studio) ChooseStorageDirectory() (map[string]any, error) {
 	if s.ctx == nil {
 		return nil, errors.New("桌面窗口尚未就绪")
 	}
-	dir, err := runtime.OpenDirectoryDialog(s.ctx, runtime.OpenDialogOptions{Title: "选择本地存储目录"})
+	dir, err := runtime.OpenDirectoryDialog(s.ctx, runtime.OpenDialogOptions{
+		Title:                "选择本地存储目录",
+		CanCreateDirectories: true,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("打开目录选择器失败: %w", err)
 	}
