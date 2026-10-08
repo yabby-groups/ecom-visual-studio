@@ -108,6 +108,44 @@ describe("client settings refresh", () => {
   });
 });
 
+describe("client batch image conversion", () => {
+  it("forwards the selected compression mode and custom quality", async () => {
+    const batchConvertImages = vi.fn(async () => ({
+      total: 1,
+      converted: 1,
+      skipped: 0,
+      failed: 0,
+      failures: [],
+    }));
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: { go: { main: { Studio: { BatchConvertImages: batchConvertImages } } } },
+    });
+
+    await client.batchConvertImages({
+      source_path: "/tmp/source",
+      source_type: "directory",
+      output_directory: "/tmp/output",
+      width: 1080,
+      format: "webp",
+      quality_mode: "custom",
+      custom_quality: 75,
+      request_id: "batch-test",
+    });
+
+    expect(batchConvertImages).toHaveBeenCalledWith({
+      source_path: "/tmp/source",
+      source_type: "directory",
+      output_directory: "/tmp/output",
+      width: 1080,
+      format: "webp",
+      quality_mode: "custom",
+      custom_quality: 75,
+      request_id: "batch-test",
+    });
+  });
+});
+
 describe("client work naming", () => {
   it("forwards title saves and AI suggestions through Wails", async () => {
     const updateWorkTitle = vi.fn(async () => ({ title: "秋日通勤穿搭" }));

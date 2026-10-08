@@ -22,6 +22,8 @@ type BatchImageInput struct {
 	OutputDirectory string `json:"output_directory"`
 	Width           int    `json:"width"`
 	Format          string `json:"format"`
+	QualityMode     string `json:"quality_mode"`
+	CustomQuality   int    `json:"custom_quality"`
 	RequestID       string `json:"request_id"`
 }
 
@@ -137,7 +139,7 @@ func (s *Studio) BatchConvertImages(input BatchImageInput) (BatchImageResult, er
 			s.emitBatchImageProgress(input.RequestID, result, source.relative)
 			continue
 		}
-		if err := convertBatchImage(source.path, target, input.Width, input.Format); err != nil {
+		if err := convertBatchImage(source.path, target, input.Width, input.Format, input.QualityMode, input.CustomQuality); err != nil {
 			result.Failed++
 			result.Failures = append(result.Failures, BatchImageFailure{Path: source.relative, Reason: err.Error()})
 		} else {
@@ -158,6 +160,13 @@ func (s *Studio) validateBatchImageInput(input *BatchImageInput) (string, error)
 	input.Format = strings.ToLower(strings.TrimSpace(input.Format))
 	if input.Format != "jpg" && input.Format != "png" && input.Format != "webp" && input.Format != "gif" {
 		return "", errors.New("输出格式仅支持 JPG、PNG、WebP、GIF")
+	}
+	input.QualityMode = strings.ToLower(strings.TrimSpace(input.QualityMode))
+	if input.QualityMode != "size" && input.QualityMode != "balanced" && input.QualityMode != "quality" && input.QualityMode != "custom" {
+		return "", errors.New("压缩模式仅支持优先体积、平衡、优先画质或自定义")
+	}
+	if input.QualityMode == "custom" && (input.CustomQuality < 1 || input.CustomQuality > 100) {
+		return "", errors.New("自定义压缩质量必须在 1 到 100 之间")
 	}
 	if strings.TrimSpace(input.RequestID) == "" {
 		return "", errors.New("批处理请求标识不能为空")
@@ -238,7 +247,7 @@ func replaceImageExtension(path, format string) string {
 	return strings.TrimSuffix(path, filepath.Ext(path)) + "." + format
 }
 
-func convertBatchImage(source, target string, width int, format string) error {
+func convertBatchImage(source, target string, width int, format, qualityMode string, customQuality int) error {
 	if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
 		return fmt.Errorf("无法创建输出目录: %w", err)
 	}
@@ -259,7 +268,7 @@ func convertBatchImage(source, target string, width int, format string) error {
 	_ = os.Remove(temporaryPath)
 	defer os.Remove(temporaryPath)
 
-	args := batchImageFFmpegArgs(source, temporaryPath, width, format)
+	args := batchImageFFmpegArgs(source, temporaryPath, width, format, qualityMode, customQuality)
 	command := exec.Command(mediaToolPath("ffmpeg"), args...)
 	if output, err := command.CombinedOutput(); err != nil {
 		detail := strings.TrimSpace(string(output))
@@ -277,21 +286,51 @@ func convertBatchImage(source, target string, width int, format string) error {
 	return nil
 }
 
-func batchImageFFmpegArgs(source, target string, width int, format string) []string {
+func batchImageFFmpegArgs(source, target string, width int, format, qualityMode string, customQuality int) []string {
 	scale := fmt.Sprintf("scale='min(iw\\,%d)':-2", width)
 	args := []string{"-y", "-i", source, "-frames:v", "1"}
 	switch format {
 	case "jpg":
 		filter := "[0:v]" + scale + ",format=rgba[image];color=c=white:s=1x1[white];[white][image]scale2ref[background][image];[background][image]overlay=shortest=1,format=yuvj420p"
-		args = append(args, "-filter_complex", filter, "-c:v", "mjpeg", "-q:v", "2")
+		args = append(args, "-filter_complex", filter, "-c:v", "mjpeg", "-q:v", fmt.Sprintf("%d", batchImageJPEGQuality(qualityMode, customQuality)))
 	case "png":
 		args = append(args, "-vf", scale, "-c:v", "png")
 	case "webp":
-		args = append(args, "-vf", scale, "-c:v", "libwebp", "-q:v", "90")
+		args = append(args, "-vf", scale, "-c:v", "libwebp", "-q:v", fmt.Sprintf("%d", batchImageWebPQuality(qualityMode, customQuality)))
 	case "gif":
 		args = append(args, "-vf", scale, "-c:v", "gif")
 	}
 	return append(args, target)
+}
+
+func batchImageJPEGQuality(mode string, customQuality int) int {
+	switch mode {
+	case "size":
+		return 12
+	case "balanced":
+		return 7
+	case "quality":
+		return 2
+	case "custom":
+		return 2 + (100-customQuality)*29/99
+	default:
+		return 7
+	}
+}
+
+func batchImageWebPQuality(mode string, customQuality int) int {
+	switch mode {
+	case "size":
+		return 60
+	case "balanced":
+		return 75
+	case "quality":
+		return 90
+	case "custom":
+		return customQuality
+	default:
+		return 75
+	}
 }
 
 func (s *Studio) emitBatchImageProgress(requestID string, result BatchImageResult, current string) {

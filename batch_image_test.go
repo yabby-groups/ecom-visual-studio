@@ -59,6 +59,7 @@ func TestValidateBatchImageInputAllowsExternalOutputDirectory(t *testing.T) {
 		OutputDirectory: output,
 		Width:           1080,
 		Format:          "jpg",
+		QualityMode:     "balanced",
 		RequestID:       "test-request",
 	})
 	if err != nil {
@@ -70,17 +71,76 @@ func TestValidateBatchImageInputAllowsExternalOutputDirectory(t *testing.T) {
 }
 
 func TestBatchImageFFmpegArgs(t *testing.T) {
-	args := strings.Join(batchImageFFmpegArgs("input.png", "output.jpg", 1200, "jpg"), " ")
-	if !strings.Contains(args, "min(iw\\,1200)") || !strings.Contains(args, "color=c=white") || !strings.Contains(args, "mjpeg") {
+	args := strings.Join(batchImageFFmpegArgs("input.png", "output.jpg", 1200, "jpg", "balanced", 0), " ")
+	if !strings.Contains(args, "min(iw\\,1200)") || !strings.Contains(args, "color=c=white") || !strings.Contains(args, "mjpeg") || !strings.Contains(args, "-q:v 7") {
 		t.Fatalf("unexpected JPEG arguments: %s", args)
 	}
-	webp := strings.Join(batchImageFFmpegArgs("input.png", "output.webp", 800, "webp"), " ")
-	if !strings.Contains(webp, "libwebp") || !strings.Contains(webp, "-q:v 90") {
+	webp := strings.Join(batchImageFFmpegArgs("input.png", "output.webp", 800, "webp", "size", 0), " ")
+	if !strings.Contains(webp, "libwebp") || !strings.Contains(webp, "-q:v 60") {
 		t.Fatalf("unexpected WebP arguments: %s", webp)
 	}
-	gif := strings.Join(batchImageFFmpegArgs("input.png", "output.gif", 800, "gif"), " ")
+	gif := strings.Join(batchImageFFmpegArgs("input.png", "output.gif", 800, "gif", "quality", 0), " ")
 	if !strings.Contains(gif, "-c:v gif") {
 		t.Fatalf("unexpected GIF arguments: %s", gif)
+	}
+	png := strings.Join(batchImageFFmpegArgs("input.png", "output.png", 800, "png", "custom", 1), " ")
+	if strings.Contains(png, "-q:v") {
+		t.Fatalf("PNG should not receive a lossy quality argument: %s", png)
+	}
+}
+
+func TestBatchImageCustomQualityFFmpegArgs(t *testing.T) {
+	jpg := strings.Join(batchImageFFmpegArgs("input.png", "output.jpg", 800, "jpg", "custom", 1), " ")
+	if !strings.Contains(jpg, "-q:v 31") {
+		t.Fatalf("unexpected custom JPEG arguments: %s", jpg)
+	}
+	webp := strings.Join(batchImageFFmpegArgs("input.png", "output.webp", 800, "webp", "custom", 100), " ")
+	if !strings.Contains(webp, "-q:v 100") {
+		t.Fatalf("unexpected custom WebP arguments: %s", webp)
+	}
+}
+
+func TestValidateBatchImageInputQualityMode(t *testing.T) {
+	root := t.TempDir()
+	input := filepath.Join(root, "input.jpg")
+	output := filepath.Join(root, "output")
+	if err := os.WriteFile(input, []byte("fixture"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(output, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	studio := &Studio{}
+	base := BatchImageInput{SourcePath: input, SourceType: "file", OutputDirectory: output, Width: 1080, Format: "webp", RequestID: "test-request"}
+	for _, mode := range []string{"size", "balanced", "quality"} {
+		candidate := base
+		candidate.QualityMode = mode
+		if _, err := studio.validateBatchImageInput(&candidate); err != nil {
+			t.Fatalf("mode %q should be valid: %v", mode, err)
+		}
+	}
+	for _, quality := range []int{1, 100} {
+		candidate := base
+		candidate.QualityMode = "custom"
+		candidate.CustomQuality = quality
+		if _, err := studio.validateBatchImageInput(&candidate); err != nil {
+			t.Fatalf("custom quality %d should be valid: %v", quality, err)
+		}
+	}
+	for _, candidate := range []BatchImageInput{
+		base,
+		func() BatchImageInput { value := base; value.QualityMode = "unknown"; return value }(),
+		func() BatchImageInput { value := base; value.QualityMode = "custom"; return value }(),
+		func() BatchImageInput {
+			value := base
+			value.QualityMode = "custom"
+			value.CustomQuality = 101
+			return value
+		}(),
+	} {
+		if _, err := studio.validateBatchImageInput(&candidate); err == nil {
+			t.Fatalf("input %#v should be rejected", candidate)
+		}
 	}
 }
 
@@ -100,7 +160,7 @@ func TestConvertBatchImageWithFFmpeg(t *testing.T) {
 		t.Fatalf("create fixture: %v: %s", err, output)
 	}
 	target := filepath.Join(dir, "output.jpg")
-	if err := convertBatchImage(source, target, 4, "jpg"); err != nil {
+	if err := convertBatchImage(source, target, 4, "jpg", "balanced", 0); err != nil {
 		t.Fatal(err)
 	}
 	info, err := os.Stat(target)

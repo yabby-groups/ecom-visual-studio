@@ -101,6 +101,8 @@ export namespace main {
 	    output_directory: string;
 	    width: number;
 	    format: string;
+	    quality_mode: string;
+	    custom_quality: number;
 	    request_id: string;
 
 	    static createFrom(source: any = {}) {
@@ -114,6 +116,8 @@ export namespace main {
 	        this.output_directory = source["output_directory"];
 	        this.width = source["width"];
 	        this.format = source["format"];
+	        this.quality_mode = source["quality_mode"];
+	        this.custom_quality = source["custom_quality"];
 	        this.request_id = source["request_id"];
 	    }
 	}

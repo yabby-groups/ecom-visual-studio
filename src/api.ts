@@ -263,6 +263,8 @@ export const client = {
     output_directory: string;
     width: number;
     format: "jpg" | "png" | "webp" | "gif";
+    quality_mode: "size" | "balanced" | "quality" | "custom";
+    custom_quality: number;
     request_id: string;
   }) => call<BatchImageResult>("BatchConvertImages", body),
 };
