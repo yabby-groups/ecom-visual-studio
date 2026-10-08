@@ -360,9 +360,7 @@ export function VideoReplica() {
         <div className="video-replica-title">
           <span className="eyebrow">AI VIDEO STUDIO</span>
           <h1>视频复刻</h1>
-          <p>
-            可选参考视频复刻节奏、镜头和动作，或直接按描述生成新版本。
-          </p>
+          <p>可选参考视频复刻节奏、镜头和动作，或直接按描述生成新版本。</p>
         </div>
       </header>
       <main className="video-replica">
@@ -415,10 +413,7 @@ export function VideoReplica() {
                   </div>
                 ) : sourcePreview ? (
                   <>
-                    <video
-                      src={sourcePreview}
-                      controls
-                    />
+                    <video src={sourcePreview} controls />
                     <label className="video-reselect-action">
                       <Upload size={15} />
                       重新选择
@@ -453,7 +448,9 @@ export function VideoReplica() {
               <div className="reference-row">
                 <div>
                   <strong>参考素材</strong>
-                  <span>可选：选择主产品图；其余图片只补充人物、场景或风格</span>
+                  <span>
+                    可选：选择主产品图；其余图片只补充人物、场景或风格
+                  </span>
                 </div>
                 <div className="reference-thumbs">
                   {referencePaths.map((path) => {
@@ -653,7 +650,9 @@ export function VideoReplica() {
                   <h2>选择视频参数</h2>
                   <p>选择画幅、时长、模型和清晰度。</p>
                 </div>
-                <span className="step-state">单段上限 {maxSegmentDuration} 秒</span>
+                <span className="step-state">
+                  单段上限 {maxSegmentDuration} 秒
+                </span>
               </div>
               <div className="video-controls">
                 <label>
@@ -664,7 +663,10 @@ export function VideoReplica() {
                     options={[
                       { value: "doubao-seedance-2.5", label: "Seedance 2.5" },
                       { value: "doubao-seedance-2.0", label: "Seedance 2.0" },
-                      { value: "doubao-seedance-2.0-mini", label: "Seedance 2.0 Mini" },
+                      {
+                        value: "doubao-seedance-2.0-mini",
+                        label: "Seedance 2.0 Mini",
+                      },
                     ]}
                     onChange={setModel}
                   />
@@ -712,10 +714,7 @@ export function VideoReplica() {
               <button
                 className="button primary workflow-action"
                 type="button"
-                disabled={
-                  !!busy ||
-                  !prompt.trim()
-                }
+                disabled={!!busy || !prompt.trim()}
                 onClick={() => void create()}
               >
                 {busy === "create" ? (

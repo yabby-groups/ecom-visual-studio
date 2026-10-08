@@ -285,8 +285,7 @@ export function Templates() {
         heights[column] += tile.offsetHeight + gap;
       }
 
-      const height =
-        Math.max(0, ...heights) - (pageTemplates.length ? gap : 0);
+      const height = Math.max(0, ...heights) - (pageTemplates.length ? gap : 0);
       setMasonry((current) => {
         const unchanged =
           current.height === height &&

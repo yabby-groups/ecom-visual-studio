@@ -40,7 +40,9 @@ function formatHumanDuration(seconds: number) {
   return remainder ? `${minutes} 分 ${remainder} 秒` : `${minutes} 分钟`;
 }
 
-function versionGenerationDuration(version: VideoReplicaJob["versions"][number]) {
+function versionGenerationDuration(
+  version: VideoReplicaJob["versions"][number],
+) {
   if (version.generation_duration_seconds != null) {
     return version.generation_duration_seconds;
   }
@@ -71,13 +73,17 @@ export function VideoReplicaPreview({
   const [previewScale, setPreviewScale] = useState(16 / 9);
   const displayedVersion =
     selected?.versions.find((version) => version.id === selectedVersionId) ??
-    selected?.versions.find((version) => version.file_path === selected.file_path);
+    selected?.versions.find(
+      (version) => version.file_path === selected.file_path,
+    );
   const versions = selected?.versions.filter(
     (version, index, all) =>
-      all.findIndex((candidate) => candidate.file_path === version.file_path) ===
-      index,
+      all.findIndex(
+        (candidate) => candidate.file_path === version.file_path,
+      ) === index,
   );
-  const displayedPath = displayedVersion?.file_path ?? selected?.file_path ?? null;
+  const displayedPath =
+    displayedVersion?.file_path ?? selected?.file_path ?? null;
   const displayed = displayedPath
     ? `${fileUrl(displayedPath)}?refresh=${mediaRefreshToken}`
     : "";
@@ -182,12 +188,17 @@ export function VideoReplicaPreview({
         <small>视频时长</small>
         <b>{formatHumanDuration(duration ?? 0)}</b>
       </span>
-      {displayedVersion && versionGenerationDuration(displayedVersion) != null && (
-        <span>
-          <small>生成耗时</small>
-          <b>{formatHumanDuration(versionGenerationDuration(displayedVersion)!)}</b>
-        </span>
-      )}
+      {displayedVersion &&
+        versionGenerationDuration(displayedVersion) != null && (
+          <span>
+            <small>生成耗时</small>
+            <b>
+              {formatHumanDuration(
+                versionGenerationDuration(displayedVersion)!,
+              )}
+            </b>
+          </span>
+        )}
     </>
   );
   const defaultActions = selected && regenerate && (

@@ -356,15 +356,13 @@ export function AvatarPicker({
                           (asset) => (
                             <button
                               type="button"
-                              className={
-                                [
-                                  asset.id === detail.asset.id && "active",
-                                  isSelected(detail.source, asset.id) &&
-                                    "selected",
-                                ]
-                                  .filter(Boolean)
-                                  .join(" ")
-                              }
+                              className={[
+                                asset.id === detail.asset.id && "active",
+                                isSelected(detail.source, asset.id) &&
+                                  "selected",
+                              ]
+                                .filter(Boolean)
+                                .join(" ")}
                               key={asset.id}
                               aria-pressed={isSelected(detail.source, asset.id)}
                               onClick={() => {

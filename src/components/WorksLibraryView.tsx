@@ -73,7 +73,9 @@ export function WorksLibraryView({ limit }: { limit?: number }) {
             : await client.videoReplicaJobs(
                 WORKS_PAGE_SIZE,
                 offset,
-                requestedTab === "ai-video-replica" ? "ai_replica" : "reference",
+                requestedTab === "ai-video-replica"
+                  ? "ai_replica"
+                  : "reference",
               );
       if (requestedPage > 1 && result.items.length === 0) {
         setPage(Math.max(1, Math.ceil(result.total / WORKS_PAGE_SIZE)));
@@ -81,9 +83,13 @@ export function WorksLibraryView({ limit }: { limit?: number }) {
       }
       setTotal(result.total);
       if (requestedTab === "images") setProjects(result.items as Project[]);
-      else if (requestedTab === "try-on") setTryOnJobs(result.items as TryOnJob[]);
+      else if (requestedTab === "try-on")
+        setTryOnJobs(result.items as TryOnJob[]);
       else setVideoJobs(result.items as VideoReplicaJob[]);
-      if (requestedTab !== "video-replica" && requestedTab !== "ai-video-replica")
+      if (
+        requestedTab !== "video-replica" &&
+        requestedTab !== "ai-video-replica"
+      )
         return;
       const videos = result as import("../types").VideoReplicaPage;
       const results = await Promise.all(

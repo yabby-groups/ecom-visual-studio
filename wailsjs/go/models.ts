@@ -311,5 +311,4 @@ export namespace main {
 	        this.title = source["title"];
 	    }
 	}
-
 }

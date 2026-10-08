@@ -108,7 +108,9 @@ export function AIVideoReplica() {
   const [prompt, setPrompt] = useState("");
   const [budget, setBudget] = useState(2);
   const [aiModel, setAiModel] = useState("qwen3.8-flash");
-  const [seedanceModel, setSeedanceModel] = useState("doubao-seedance-2.0-mini");
+  const [seedanceModel, setSeedanceModel] = useState(
+    "doubao-seedance-2.0-mini",
+  );
   const [ratio, setRatio] = useState("16:9");
   const [resolution, setResolution] = useState("480p");
   const [jobs, setJobs] = useState<VideoReplicaJob[]>([]);
@@ -255,8 +257,7 @@ export function AIVideoReplica() {
       setSelected((current) => (current ? update(current) : current));
       setJobs((items) => items.map(update));
     } catch (reason) {
-      if (!silent)
-        setError(operationError(reason, "远程记录已过期或不可用"));
+      if (!silent) setError(operationError(reason, "远程记录已过期或不可用"));
     }
   }
   async function uploadVideo(file: File) {
@@ -545,9 +546,7 @@ export function AIVideoReplica() {
   });
   const invalidBudget = !Number.isFinite(p.budget) || p.budget <= 0;
   const createDisabled =
-    controls.draftLocked ||
-    !p.scriptReady ||
-    invalidBudget;
+    controls.draftLocked || !p.scriptReady || invalidBudget;
   const aiProgress = p.selected && (
     <div className="video-generation-progress ai-progress" aria-live="polite">
       <div className="generation-progress-head">
@@ -1096,7 +1095,10 @@ export function AIVideoReplica() {
                       name="ai-video-seedance-model"
                       value={p.seedanceModel}
                       options={[
-                        { value: "doubao-seedance-2.0-mini", label: "Seedance 2.0 Mini" },
+                        {
+                          value: "doubao-seedance-2.0-mini",
+                          label: "Seedance 2.0 Mini",
+                        },
                         { value: "doubao-seedance-2.0", label: "Seedance 2.0" },
                         { value: "doubao-seedance-2.5", label: "Seedance 2.5" },
                       ]}
@@ -1198,7 +1200,11 @@ export function AIVideoReplica() {
                 </span>
                 <span>
                   <small>视频时长</small>
-                  <b>{p.sourceReady ? `${p.selected?.duration ?? 0} 秒` : "未指定"}</b>
+                  <b>
+                    {p.sourceReady
+                      ? `${p.selected?.duration ?? 0} 秒`
+                      : "未指定"}
+                  </b>
                 </span>
                 {p.selected?.versions[0]?.generation_duration_seconds !==
                   null &&
@@ -1280,9 +1286,7 @@ export function AIVideoReplica() {
         <section className="video-replica-history">
           <div className="video-replica-panel-head">
             <h2>AI 复刻历史</h2>
-            <span>
-              {historyTotal} 条
-            </span>
+            <span>{historyTotal} 条</span>
           </div>
           <VideoWorksList
             jobs={p.jobs}

@@ -318,8 +318,9 @@ export function LibraryPreview({
     preview.versions?.find((version) => version.file_path === preview.path);
   const versions = preview.versions?.filter(
     (version, index, all) =>
-      all.findIndex((candidate) => candidate.file_path === version.file_path) ===
-      index,
+      all.findIndex(
+        (candidate) => candidate.file_path === version.file_path,
+      ) === index,
   );
   const displayedPath = displayedVersion?.file_path ?? preview.path;
   const displayedDetail = getDisplayedDetail(preview, displayedVersion);
@@ -398,21 +399,21 @@ export function LibraryPreview({
           <div className="library-preview-version-area">
             <div className="library-preview-versions" aria-label="视频版本">
               <span>版本</span>
-            {versions.map((version, index) => {
-              const active = version.id === displayedVersion?.id;
-              const current = index === 0;
-              return (
-                <button
-                  className={`video-version ${active ? "active" : ""}`}
-                  key={version.id}
-                  type="button"
-                  onClick={() => setSelectedVersionId(version.id)}
-                  aria-label={`查看${current ? "当前" : `历史 ${versions.length - index}`}版本`}
-                >
-                  {current ? "当前" : `v${versions.length - index}`}
-                </button>
-              );
-            })}
+              {versions.map((version, index) => {
+                const active = version.id === displayedVersion?.id;
+                const current = index === 0;
+                return (
+                  <button
+                    className={`video-version ${active ? "active" : ""}`}
+                    key={version.id}
+                    type="button"
+                    onClick={() => setSelectedVersionId(version.id)}
+                    aria-label={`查看${current ? "当前" : `历史 ${versions.length - index}`}版本`}
+                  >
+                    {current ? "当前" : `v${versions.length - index}`}
+                  </button>
+                );
+              })}
             </div>
           </div>
         ) : null}
