@@ -18,6 +18,7 @@ import { TryOn } from "./components/TryOn";
 import { Workspace } from "./components/Workspace";
 import { VideoReplica } from "./components/VideoReplica";
 import { AIVideoReplica } from "./components/AIVideoReplica";
+import { BatchImageProcessing } from "./components/BatchImageProcessing";
 import { useAppStore } from "./store";
 import { AiInteractionProvider } from "./aiInteraction";
 
@@ -44,6 +45,7 @@ export function App() {
         <Route path="/video-replica/:id" element={<VideoReplica />} />
         <Route path="/ai-video-replica" element={<AIVideoReplica />} />
         <Route path="/ai-video-replica/:id" element={<AIVideoReplica />} />
+        <Route path="/batch-image-processing" element={<BatchImageProcessing />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/login" element={<Login />} />
         <Route path="*" element={<Navigate to="/" replace />} />

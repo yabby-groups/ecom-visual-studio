@@ -81,6 +81,80 @@ export namespace main {
 	    }
 	}
 
+	export class BatchImageFailure {
+	    path: string;
+	    reason: string;
+
+	    static createFrom(source: any = {}) {
+	        return new BatchImageFailure(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.reason = source["reason"];
+	    }
+	}
+	export class BatchImageInput {
+	    source_path: string;
+	    source_type: string;
+	    output_directory: string;
+	    width: number;
+	    format: string;
+	    request_id: string;
+
+	    static createFrom(source: any = {}) {
+	        return new BatchImageInput(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.source_path = source["source_path"];
+	        this.source_type = source["source_type"];
+	        this.output_directory = source["output_directory"];
+	        this.width = source["width"];
+	        this.format = source["format"];
+	        this.request_id = source["request_id"];
+	    }
+	}
+	export class BatchImageResult {
+	    total: number;
+	    converted: number;
+	    skipped: number;
+	    failed: number;
+	    failures: BatchImageFailure[];
+
+	    static createFrom(source: any = {}) {
+	        return new BatchImageResult(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.total = source["total"];
+	        this.converted = source["converted"];
+	        this.skipped = source["skipped"];
+	        this.failed = source["failed"];
+	        this.failures = this.convertValues(source["failures"], BatchImageFailure);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class PackInput {
 	    kind: string;
 	    scene_template_ids: string[];
@@ -311,4 +385,6 @@ export namespace main {
 	        this.title = source["title"];
 	    }
 	}
+
 }
+

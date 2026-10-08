@@ -1,6 +1,7 @@
 import { useState, useSyncExternalStore } from "react";
 import {
   FolderOpen,
+  Images,
   LayoutGrid,
   Moon,
   Shirt,
@@ -54,6 +55,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           <Nav to="/try-on" icon={<Shirt />} label="AI 换装" />
           <Nav to="/video-replica" icon={<Video />} label="视频复刻" />
           <Nav to="/ai-video-replica" icon={<Sparkles />} label="AI 复刻" />
+          <Nav to="/batch-image-processing" icon={<Images />} label="批量处理" />
         </nav>
         <div className="rail-bottom sidebar-bottom">
           <Nav to="/settings" icon={<Settings />} label="设置" />
@@ -83,6 +85,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         <Nav to="/try-on" icon={<Shirt />} label="换装" />
         <Nav to="/video-replica" icon={<Video />} label="视频" />
         <Nav to="/ai-video-replica" icon={<Sparkles />} label="AI 复刻" />
+        <Nav to="/batch-image-processing" icon={<Images />} label="批处理" />
         <Nav to="/settings" icon={<Settings />} label="设置" />
       </nav>
       <div className="shell-actions">

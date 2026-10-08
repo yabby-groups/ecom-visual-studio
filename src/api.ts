@@ -1,5 +1,6 @@
 import type {
   Asset,
+  BatchImageResult,
   AiChatContext,
   AiChatResult,
   DeviceAuthorization,
@@ -251,4 +252,17 @@ export const client = {
   }) => call("SaveSettings", body),
   storageLocation: () => call<StorageLocation>("StorageLocation"),
   chooseStorageDirectory: () => call<StorageLocation>("ChooseStorageDirectory"),
+  chooseBatchImageFile: () => call<{ path?: string; cancelled?: boolean }>("ChooseBatchImageFile"),
+  chooseBatchImageDirectory: (title: "选择输入图片目录" | "选择输出目录") =>
+    call<{ path?: string; cancelled?: boolean }>("ChooseBatchImageDirectory", title),
+  batchImageSourceType: (path: string) =>
+    call<{ path: string; source_type: "file" | "directory" }>("BatchImageSourceType", path),
+  batchConvertImages: (body: {
+    source_path: string;
+    source_type: "file" | "directory";
+    output_directory: string;
+    width: number;
+    format: "jpg" | "png" | "webp" | "gif";
+    request_id: string;
+  }) => call<BatchImageResult>("BatchConvertImages", body),
 };

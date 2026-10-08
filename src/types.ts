@@ -117,6 +117,22 @@ export type StorageLocation = {
   restart_required: boolean;
   cancelled?: boolean;
 };
+export type BatchImageProgress = {
+  total: number;
+  completed: number;
+  converted: number;
+  skipped: number;
+  failed: number;
+  current: string;
+};
+export type BatchImageFailure = { path: string; reason: string };
+export type BatchImageResult = {
+  total: number;
+  converted: number;
+  skipped: number;
+  failed: number;
+  failures: BatchImageFailure[];
+};
 export type TryOnJob = {
   id: string;
   title: string;

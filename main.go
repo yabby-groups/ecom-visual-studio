@@ -30,6 +30,9 @@ func main() {
 			Handler: http.HandlerFunc(studio.serveFile),
 		},
 		BackgroundColour: &options.RGBA{R: 250, G: 248, B: 242, A: 1},
+		DragAndDrop: &options.DragAndDrop{
+			EnableFileDrop: true,
+		},
 		OnStartup:        studio.startup,
 		OnShutdown:       studio.shutdown,
 		Bind:             []interface{}{studio},

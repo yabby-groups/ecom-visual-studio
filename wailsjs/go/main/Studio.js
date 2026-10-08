@@ -26,12 +26,28 @@ export function AvatarAssets() {
   return window['go']['main']['Studio']['AvatarAssets']();
 }
 
+export function BatchConvertImages(arg1) {
+  return window['go']['main']['Studio']['BatchConvertImages'](arg1);
+}
+
+export function BatchImageSourceType(arg1) {
+  return window['go']['main']['Studio']['BatchImageSourceType'](arg1);
+}
+
 export function ChangeAssetTemplate(arg1, arg2, arg3) {
   return window['go']['main']['Studio']['ChangeAssetTemplate'](arg1, arg2, arg3);
 }
 
 export function Chat(arg1, arg2, arg3) {
   return window['go']['main']['Studio']['Chat'](arg1, arg2, arg3);
+}
+
+export function ChooseBatchImageDirectory(arg1) {
+  return window['go']['main']['Studio']['ChooseBatchImageDirectory'](arg1);
+}
+
+export function ChooseBatchImageFile() {
+  return window['go']['main']['Studio']['ChooseBatchImageFile']();
 }
 
 export function ChooseStorageDirectory() {
